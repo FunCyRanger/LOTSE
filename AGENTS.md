@@ -20,7 +20,14 @@ Everything references German energy law: §14a EnWG (grid-serving control), EEG 
 
 ## Household types (section 2b)
 
-Nine types defined with distinct pricing models (fixed/EPEX Spot/§14a/dynamic/mixed) and optimization goals. Each household must break even or benefit — optimization cannot cause financial loss relative to baseline.
+Ten types defined with distinct pricing models (fixed/EPEX Spot/§14a/dynamic/mixed) and optimization goals. Each household must break even or benefit — optimization cannot cause financial loss relative to baseline.
+
+## Communication constraints (section 4)
+
+- **No incoming ports**: All household communication must be outbound-only or via dedicated local medium.
+- **Range**: ≥100m through walls/cellars between any two households (within-household communication is unconstrained).
+- **Ease**: No port forwarding, DDNS, or VPN setup — layperson-installable.
+- Internet connections can be used if these constraints are met.
 
 ## Phases
 
