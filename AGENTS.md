@@ -42,7 +42,7 @@ Per `Brainstorming.md` §6.1–§6.3 and §3.1–§3.2, §5.5.
 
 | Category | Target | Composition |
 |----------|--------|-------------|
-| Per-household hardware (one-time) | €100–200 | **Recommended (prototype→production):** LilyGO T3 S3 SX1262 €22–28 + bitShake SmartMeterReader-UART €14–16 = €38–47. **Fallback:** ESP32 €5–15 + SX1276 €3–5 + BPW40 €0.50–2 = ~€25. Headroom €53–162 for enclosure/antenna/installation. |
+| Per-household hardware (one-time) | €100–200 | **Recommended (prototype→production):** LilyGO T3 S3 SX1262/SX1276 €22–28 + WattWächter TTL IR head €24 = €46–52. **Fallback:** ESP32 €5–15 + SX1276 €3–5 + BPW40 €0.50–2 = ~€25. Headroom €48–154 for enclosure/antenna/installation. |
 | Central infrastructure (one-time) | ≤€300 | RPi 3B+ €35–40 (or RPi 4 €45–55) + LoRa hat €20–30 + SD card €8–10 + power/case €10–15 = €70–105. VPS alternative: ~€0–48/yr. |
 | Recurring costs | €0 | LoRa: no subscriptions. MQTT-VPS: ~€3–4/month (violates target). All software OSS, EPEX Spot data free. |
 
@@ -85,7 +85,7 @@ Key OSS: **ESPHome** and **Tasmota** have built-in SML parsing. **RadioLib** and
 
 ## Recommended next step (Brainstorming §10)
 
-Build one agent prototype (LilyGO T3 S3 SX1262 + bitShake SmartMeterReader-UART + SML parsing on real or simulated meter — see prototype-build.md), build coordinator prototype (second T3 S3 or RPi + LoRa hat), test range in a real neighborhood.
+Build one agent prototype (LilyGO T3 S3 SX1262/SX1276 + WattWächter TTL IR head + SML parsing on real or simulated meter — see prototype-build.md), build coordinator prototype (second T3 S3 or RPi + LoRa hat), test range in a real neighborhood.
 
 ## Household types (§2b)
 

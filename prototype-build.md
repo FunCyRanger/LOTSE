@@ -15,42 +15,48 @@ Goal: A working ESP32 that reads a German smart meter via its optical IR interfa
 
 | Item | Part | Est. cost | German source |
 |------|------|-----------|---------------|
-| Agent MCU + LoRa + display | LilyGO T3 S3 SX1262 868MHz (H595) | €22-28 | [tinytronics.nl](https://www.tinytronics.nl) (NL, ships DE), [openelab.de](https://www.openelab.de) (Munich, ships DE) |
-| IR head | bitShake SmartMeterReader-UART | €14-16 | [bitshake.de](https://bitshake.de) |
+| Agent MCU + LoRa + display | LilyGO T3 S3 SX1262 868MHz (H595) or SX1276 868MHz (H596) | €22-28 | [tinytronics.nl](https://www.tinytronics.nl) (NL, ships DE), [openelab.de](https://www.openelab.de) (Munich, ships DE), [Amazon.de](https://www.amazon.de/LILYGO-T3S3-V1-3-ESP32-S3-Entwicklungsboard/dp/B0GQSKYYN1) (DE warehouse) |
+| IR head | WattWächter TTL (WS-IR-UART/TTL) | €24 | [SmartCircuits / WattWächter](https://www.xn--wattwchter-u5a.de/products/wattwaechter-ttl) |
 | USB-C cable | USB-C data cable | €2-3 | Conrad, Reichelt |
 | USB power supply | 5V 1A (phone charger) | €0 (likely owned) | — |
-| **Total** | | **€38-47** | |
+| **Total** | | **€48-55** | |
 
 **Why this hardware?** See Brainstorming §3.2 and §5.5 for full hardware evaluation.
 
-**LilyGO T3 S3 SX1262** (€22): ESP32-S3 dual-core 240MHz, onboard SX1262 LoRa 868MHz (ETSI RED compliant), 0.96" OLED (SSD1306) for local status display, SD card slot for data retention (Q7), USB-C, LiPo charger. Production-close: same MCU and LoRa chip used in Phase 2 can run the full agent state machine.
+**LilyGO T3 S3** (€22-28, SX1262 or SX1276 variant): ESP32-S3 dual-core 240MHz, onboard LoRa 868MHz (ETSI RED compliant), 0.96" OLED (SSD1306) for local status display, SD card slot for data retention (Q7), USB-C, LiPo charger. Both SX1262 and SX1276 variants work for LEM — SX1276 is older but equally capable for this use case. The Amazon.de listing (SX1276 868MHz) ships from a German warehouse for fast delivery.
 
-**bitShake SmartMeterReader-UART** (~€15): professional IR head with magnetic mount, integrated level shifter, TTL UART output (9600 baud, 3.3V), 4-wire interface (VCC/GND/TX/RX). No soldering, no breadboard — connects directly to T3 S3 GPIO. German seller, CE compliant.
+**WattWächter TTL** (~€24, smartcircuits.de): professional IR head with screw terminals — no soldering required. Pre-wired 1m cable with 4 color-coded wires (braun=VCC, grün=RX, gelb=TX, weiß=GND). TTL UART output (9600 baud, 3.3V), magnetic mount (8.5kg holding force), built-in reverse polarity protection, CE certified, made in Germany. Connects to T3 S3 GPIO in seconds with Dupont jumper wires.
 
 **What we rejected** (and why):
 | Device | Price | Problem |
 |--------|-------|---------|
 | bitShake Air | ~€35 | ESP32-C3, no SPI bus exposed — cannot add LoRa. Locked Tasmota firmware cannot run agent state machine. |
+| bitShake SmartMeterReader-UART | ~€25-27 | Requires soldering to pads — violates "layperson-installable" (NFR C3). WattWächter TTL is cheaper and truly no-solder. |
 | IMST iOKE868 | ~€126 | LoRaWAN-only bridge with closed firmware. Cannot run agent logic. No WiFi/MQTT for local EMS. Budget exhaustion. |
 | WiFi IR SMI V32 | ~€45 | ESP32-C3, no LoRa SPI. Limited to meter reading only, no agent. |
 | Breadboard + BPW40 + SX1276 | ~€22 | Valid proof-of-concept but not production-close. Soldering required, fragile, no display, no SD card. T3 S3 costs barely more and is production-ready. |
 
-**Budget note:** €38-47 per household leaves €53-162 headroom within the €100-200 target (AGENTS.md cost breakdown) for enclosure, antenna upgrade, and installation.
+**Budget note:** €48-55 per household leaves €45-152 headroom within the €100-200 target (AGENTS.md cost breakdown) for enclosure, antenna upgrade, and installation. Savings possible: use the eBay WattWächter listing (~€14 from dtb-systeme, Bösel) instead of the official store.
 
-### P1.2 Circuit: bitShake SmartMeterReader-UART → T3 S3 UART
+### P1.2 Circuit: WattWächter TTL → T3 S3 UART
 
-No breadboard, no soldering. The bitShake UART head connects directly to the T3 S3 via 4 jumper wires:
+No breadboard, no soldering. The WattWächter TTL comes with a pre-wired 1m cable (4 color-coded wires) and connects to the T3 S3 via the built-in screw terminals:
 
-| bitShake wire | Color | → T3 S3 pin | Function |
-|---------------|-------|-------------|----------|
-| VCC | Red | 3.3V | Power (3.3V, the head has integrated level shifter) |
-| GND | Black | GND | Ground |
-| TX | Green | GPIO4 | UART RX: data from meter → ESP32 |
-| RX | Yellow | *(not connected)* | UART TX: optional — for PIN entry to meter in later iteration |
+| WattWächter wire | Color | → T3 S3 pin | Function |
+|------------------|-------|-------------|----------|
+| VCC | Braun (brown) | 3.3V | Power (3.3V, built-in reverse polarity protection) |
+| GND | Weiß (white) | GND | Ground |
+| RX | Grün (green) | GPIO4 | UART RX: data from meter → ESP32 |
+| TX | Gelb (yellow) | *(not connected)* | UART TX: optional — for PIN entry to meter in later iteration |
 
-**ESP32-S3 GPIO matrix note:** ESP32-S3 has a flexible GPIO matrix — any GPIO can serve as UART RX. We use GPIO4 (free on T3 S3, not used by PSRAM/FLASH/LoRa/display). The bitShake outputs 9600 baud 8N1 TTL which feeds directly into the ESP32-S3 UART.
+**Connection steps:**
+1. Strip the pre-wired cable ends ~5mm
+2. Insert each wire into the T3 S3 pin headers (use Dupont-to-Dupont jumper wires or bare wires directly)
+3. Tip: crimp Dupont female connectors onto the WattWächter cable ends for a plug-and-play connection to the T3 S3
 
-**For PIN entry (future):** To unlock 16.7.0 (current power), connect bitShake RX (yellow) to T3 S3 GPIO5 (UART TX). The agent can send flashlight pulse sequences through the IR head to the meter. This is optional — many meters display 16.7.0 via a physical button.
+**ESP32-S3 GPIO matrix note:** ESP32-S3 has a flexible GPIO matrix — any GPIO can serve as UART RX. We use GPIO4 (free on T3 S3, not used by PSRAM/FLASH/LoRa/display). The WattWächter outputs 9600 baud 8N1 TTL which feeds directly into the ESP32-S3 UART.
+
+**For PIN entry (future):** To unlock 16.7.0 (current power), connect the yellow (TX) wire to T3 S3 GPIO5 (UART TX). The agent can send IR pulse sequences through the head to the meter. This is optional — many meters display 16.7.0 via a physical button.
 
 ### P1.3 Software Stack
 
@@ -127,7 +133,7 @@ Before touching a real meter, verify the circuit and software with a serial simu
 
 ### P1.6 Second Test: Real Smart Meter
 
-1. Attach the bitShake SmartMeterReader-UART magnetically over the meter's IR interface (round/rectangular window, usually bottom-left)
+1. Attach the WattWächter TTL magnetically over the meter's IR interface (round/rectangular window, usually bottom-left) — the 8.5kg neodym magnet holds it securely
 2. The magnetic mount holds it in place — no tape or alignment needed
 3. The meter LED inside the IR window should flash as data is transmitted
 4. On first reading without PIN: expect only total consumption (1.8.0) — no current power (16.7.0)
@@ -140,12 +146,12 @@ Many German meters lock 16.7.0 behind a 4-digit PIN:
 
 1. Request PIN from Messstellenbetreiber (may take 2-4 weeks)
 2. On the meter, enter PIN via the optical interface:
-   - With the bitShake UART head: connect the RX (yellow) wire to a T3 S3 GPIO (e.g., GPIO5 as UART TX). The agent can send IR pulse sequences through the bitShake head's IR LED to the meter's IR receiver.
+   - With the WattWächter TTL: connect the yellow (TX) wire to a T3 S3 GPIO (e.g., GPIO5 as UART TX). The agent can send IR pulse sequences through the head's IR LED to the meter's IR receiver.
    - Manually: use a flashlight to pulse the meter's IR receiver. Sequence: meter menu → PIN entry → confirm.
    - Or: use the meter's physical button if available
 3. Alternative: many meters have a "display mode" button that cycles through screens including current power — read the value visually
 
-> **Note:** The bitShake RX wire enables programmatic PIN entry. This is a future enhancement — for the initial prototype, manual PIN entry (option 2 or 3) is sufficient.
+> **Note:** The WattWächter yellow (TX) wire enables programmatic PIN entry. This is a future enhancement — for the initial prototype, manual PIN entry (option 2 or 3) is sufficient.
 
 ---
 
