@@ -7,46 +7,61 @@
 
 ## 1. Architecture Overview
 
-The LEM is a **signaling and coordination layer** between autonomous household energy management systems. It does not control end devices. The topology has two tiers:
+The LEM is a **signaling and coordination layer** between autonomous household energy management systems. It does not control end devices. 
+
+**Phase 1 uses individual allocation:** Each household has a configured individual grid limit (based on its grid connection contract). The agent enforces this limit locally — no inter-household communication needed for grid protection. This avoids any dependency on transformer access or central infrastructure.
+
+**Phase 2 adds coordination between households:** Flexibility trading, load shedding coordination, and §14a signal forwarding require inter-household communication. The Phase 1 individual limits remain the hard ceiling.
+
+The topology has two tiers and evolves from Phase 1 to Phase 2:
 
 ```
+  PHASE 1 (Individual Allocation):
+    ┌──────────────┐   ┌──────────────┐   ┌──────────────┐
+    │ Agent HH-01  │   │ Agent HH-02  │   │ Agent HH-03  │
+    │ Limit: 5 kW  │   │ Limit: 3 kW  │   │ Limit: 4 kW  │
+    │ Meter reading│   │ Meter reading│   │ Meter reading│
+    └──────┬───────┘   └──────┬───────┘   └──────┬───────┘
+           │ local            │ local            │ local
+           │ MQTT/REST        │ MQTT/REST        │ MQTT/REST
+    ┌──────┴───────┐   ┌──────┴───────┐   ┌──────┴───────┐
+    │ Home EMS     │   │ Home EMS     │   │ Home EMS     │
+    │ self-regulates│  │ within limit │   │ within limit │
+    │ within limit │   │              │   │              │
+    └──────────────┘   └──────────────┘   └──────────────┘
+    No inter-household communication needed.
+
+  PHASE 2 (adds Coordination):
                      ┌─────────────────────────┐
-                     │  Neighborhood            │
-                     │  Coordinator             │
-                     │  (grid limit, flex       │
-                     │   matching, §14a fwd)    │
+                     │ Optional: Coordinator   │
+                     │ (flex matching, §14a)   │
                      └────────────┬────────────┘
-                                  │ communication link
+                                  │ (or peer-to-peer)
                     ┌─────────────┼─────────────┐
                     │             │             │
              ┌──────┴──────┐ ┌───┴───────┐ ┌───┴───────┐
              │ Agent HH-01 │ │Agent HH-02│ │Agent HH-03│
-             │ (thin       │ │           │ │           │
-             │  bridge)    │ │           │ │           │
+             │ Limit: 5 kW │ │Limit: 3 kW│ │Limit: 4 kW│
+             │ + offers flex│ │+ buys flex│ │+ sells flex│
              └──────┬──────┘ └───┬───────┘ └───┬───────┘
                     │ local      │ local       │ local
-                    │ MQTT/REST  │ MQTT/REST   │ MQTT/REST
              ┌──────┴──────┐ ┌───┴───────┐ ┌───┴───────┐
              │ Home EMS    │ │ Home EMS  │ │ Home EMS  │
-             │ (OpenEMS/   │ │ (evcc/    │ │ (HA/       │
-             │  evcc/HA)   │ │  OpenEMS) │ │  none)     │
-             │ Controls:   │ │           │ │           │
-             │ PV, batt,   │ │ Wallbox,  │ │ Heat pump │
-             │ HP, EV      │ │ PV        │ │           │
+             │ + flex resp.│ │ + flex    │ │ + flex    │
              └─────────────┘ └───────────┘ └───────────┘
 ```
 
-**Signal types flowing across the link (transport-agnostic):**
+**Signal types (transport-agnostic). Phase 1 signals are local (agent ↔ home EMS). Phase 2 signals add the inter-household dimension:**
 
-| Priority | Signal | Direction | Binding? | Description |
-|----------|--------|-----------|----------|-------------|
-| 1 | Grid Limit | Coordinator → Agents | ✅ Yes | Max net import/export for the branch |
-| 2 | Load Shed | Coordinator → Agents | ⚠️ Hard recommendation | Shed order: wallbox → battery → heat pump |
-| 3 | §14a Signal | Coordinator → Agents | ✅ Yes if §14a active | Module 1/2/3 reduction signal |
-| 4 | Flex Offer | Agent → Coordinator | ❌ Voluntary | "I can shift 3 kW for 1h at 14:00" |
-| 5 | Flex Request | Coordinator → Agent | ❌ Voluntary | "Need 5 kW reduction, who can help?" |
-| 6 | Tariff/Price | Coordinator → Agents | ❌ Informational | EPEX Spot, TOU periods |
-| 7 | Health/Status | Bidirectional | ❌ Informational | Heartbeat, connection state |
+| Priority | Signal | Phase | Direction | Binding? | Description |
+|----------|--------|-------|-----------|----------|-------------|
+| 1 | Grid Limit | P1+P2 | Pre-configured locally | ✅ Yes | Per-household import/export limit from grid connection |
+| 2 | Load Shed | P2 | Agent ↔ Agent or via coordinator | ⚠️ Hard recommendation | Shed order: wallbox → battery → heat pump |
+| 3 | §14a Signal | P2 | Grid operator → Agents | ✅ Yes if §14a active | Module 1/2/3 reduction signal |
+| 4 | Flex Offer | P2 | Agent ↔ Agent or via coordinator | ❌ Voluntary | "I can shift 3 kW for 1h at 14:00" |
+| 5 | Flex Request | P2 | Agent ↔ Agent or via coordinator | ❌ Voluntary | "Need 5 kW reduction, who can help?" |
+| 6 | Tariff/Price | P1+P2 | Pre-configured or broadcast | ❌ Informational | EPEX Spot, TOU periods |
+| 7 | Health/Status | P1+P2 | Agent → neighbor | ❌ Informational | Heartbeat, connection state |
 
 ---
 
@@ -354,59 +369,53 @@ For LoRa specifically, a simple approach:
 
 ## 5. Coordinator Design
 
-### 5.1 What the Coordinator Does
+### 5.1 Phase 1: No Coordinator Needed
 
-| Function | Required for Phase 1? | Required for Phase 2? |
-|----------|----------------------|----------------------|
-| Determine & broadcast grid limit | ✅ Yes | ✅ Yes |
-| Accept agent registration | ✅ Yes | ✅ Yes |
-| Forward §14a signals from grid operator | ❌ Optional | ✅ Yes |
-| Store measurement data (for analysis) | ❌ Optional | ❌ Optional |
-| Match flexibility offers/requests | — | ✅ Yes |
-| Broadcast load shed signals | ✅ Yes (if limit breached) | ✅ Yes |
-| Broadcast tariff information | ❌ Optional | ❌ Optional |
+With **individual allocation**, each household's agent operates independently:
+- Limit is configured locally per household (from grid connection contract)
+- Agent reads smart meter, compares to limit
+- Signals the home EMS: "stay within your limit"
+- No inter-household communication, no central device, no coordinator
 
-### 5.2 Placement Options
+Grid protection works fully offline, fully locally, at every household.
+
+### 5.2 Phase 2: Optional Coordinator
+
+In Phase 2, a coordinator (or P2P coordination) is needed for functions that span households:
+
+| Function | Requires coordinator? | Alternative |
+|----------|----------------------|-------------|
+| Flex offer/request matching | ✅ Central matching simpler | P2P gossip (agents broadcast offers, respond directly) |
+| Load shed coordination | ✅ Central broadcast simpler | P2P flood (each agent propagates signal) |
+| §14a external signal ingress | ✅ Single entry point needed | Any agent with internet can receive and propagate |
+| Aggregate load monitoring | ✅ Central aggregation simpler | Gossip (each agent shares its load, peers sum locally) |
+| Tariff information | ❌ | Each agent can fetch EPEX Spot independently |
+
+### 5.3 Coordinator Options (Phase 2)
 
 | Location | Pros | Cons |
 |----------|------|------|
-| **One household** | No extra internet cost, easy access for maintenance | Single point of failure (power/internet at that house), trust issue (data passes through neighbor's network) |
-| **Transformer room / common space** | Neutral, may already have power, logical grid attachment point | Requires permission from grid operator or homeowners association |
-| **Cloud VPS** | Highest reliability, always reachable | Recurring cost (€3-4/mo), GDPR concerns for meter data |
+| **At one household** | No extra internet cost | Single point of failure, trust concern |
+| **Transformer room / common space** | Neutral location | Requires permission |
+| **Cloud VPS** | Always reachable | Recurring cost (€3-4/mo), GDPR |
+| **Software instance (any device)** | Runs on existing RPi at any household | Same as "at one household" |
+| **Fully P2P (no coordinator)** | Most robust, no central trust | More complex to implement |
 
-### 5.3 Graceful Degradation
+### 5.4 Graceful Degradation (Phase 2)
 
-Critical requirement: grid protection must work even if the coordinator fails.
+Phase 2 coordination depends on the coordinator or P2P network. If it fails, each agent falls back to its Phase 1 individual limit — grid protection is unaffected.
 
-**Approach A: Local fallback**
-- Each agent caches the last valid grid limit
-- If no heartbeat from coordinator for N seconds, agent uses cached limit
-- If cached limit expires, agent switches to conservative default (e.g., zero export, minimal import)
-- When coordinator recovers, agents sync
-
-**Approach B: Agent-to-agent mesh**
-- Agents can still communicate peer-to-peer if coordinator is offline
-- Flood-based gossip protocol for grid limit propagation
-- More complex but more robust
-
-**Approach C: Hot standby**
-- A second RPi acts as backup coordinator
-- Takes over if primary fails
-- Simple but doubles hardware cost (still within €300 budget for a pair of RPis)
-
-### 5.4 Coordinator Hardware
+### 5.5 Coordinator Hardware (if needed in Phase 2)
 
 | Component | Cost | Notes |
 |-----------|------|-------|
 | Raspberry Pi 3B+ | €35-40 | Sufficient for signaling |
 | Raspberry Pi 4 (2GB) | €45-55 | More headroom for data logging |
-| LoRa hat / HAT | €20-30 | For LoRa-based communication |
+| LoRa hat / HAT | €20-30 | If using LoRa for Phase 2 comms |
 | SD Card (32GB) | €8-10 | |
 | Power supply + case | €10-15 | |
 | **Total RPi 3B+ + LoRa** | **€70-85** | Within €300 budget |
 | **Total RPi 4 + LoRa** | **€85-105** | Still well within budget |
-
-For internet-based communication (no LoRa): subtract €20-30 for the LoRa hat, add €0 for VPS coordinator if using cloud.
 
 ---
 
@@ -457,28 +466,32 @@ With RPi 4: add €15.
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│ Phase 1                                               │
+│ Phase 1 — Individual Allocation                       │
 │                                                       │
-│ Coordinator:                                          │
-│  - Manually configured grid limit (set during setup)  │
-│  - Periodic broadcast of limit to all agents          │
-│  - Agent registration / heartbeat monitoring          │
+│ No coordinator needed.                                │
 │                                                       │
-│ Agent:                                                │
+│ Agent (per household):                                │
+│  - Configured with individual grid limit              │
+│    (from grid connection contract or neighborhood     │
+│     agreement)                                        │
 │  - Read smart meter (consumption, generation via SML) │
-│  - Receive and display grid limit                     │
-│  - Forward limit to home EMS (MQTT/REST)              │
-│  - Send heartbeat to coordinator                     │
-│  - Fall back to cached limit if coordinator lost      │
+│  - Compare current load to configured limit           │
+│  - Forward limit + current load to home EMS           │
+│    (MQTT/REST within the household)                   │
+│  - If limit is reached, signal the home EMS to shed   │
+│  - Each agent is fully independent — no               │
+│    inter-household communication needed               │
 │                                                       │
 │ Validation:                                           │
-│  - Can each agent receive the limit reliably?         │
-│  - Does the household EMS see and respect the limit?  │
-│  - How fast does the system react to limit changes?   │
+│  - Does the agent correctly read the smart meter?     │
+│  - Does the household EMS receive and respect the     │
+│    limit signal?                                      │
+│  - How does the household behave when the limit is    │
+│    approached or breached?                            │
 └──────────────────────────────────────────────────────┘
 ```
 
-**Deliverable**: A working neighborhood where each household sees the grid limit and can adjust behavior. No automated flexibility trading yet.
+**Deliverable**: Each household independently respects its grid limit. No flexibility trading yet. No inter-household communication. This is the foundation.
 
 ### Phase 2 (Full: Flexibility Coordination + §14a)
 
@@ -486,16 +499,20 @@ With RPi 4: add €15.
 ┌──────────────────────────────────────────────────────┐
 │ Phase 2 (adds to Phase 1)                             │
 │                                                       │
-│ Coordinator additions:                                │
-│  - Receive flexibility offers from agents             │
-│  - Match offers to requests                           │
-│  - §14a signal forwarding                             │
-│  - Tariff information broadcast                       │
-│  - Load shed signaling when limit is breached         │
+│ Adds inter-household communication layer:              │
+│  - Agents exchange flexibility offers and requests    │
+│  - Optional coordinator for offer matching (or P2P)   │
+│  - §14a signal ingress + distribution                 │
+│  - Collective load shed coordination                   │
+│                                                       │
+│ Individual limits from Phase 1 remain the hard        │
+│ ceiling — flex trading only uses headroom within      │
+│ those limits.                                         │
 │                                                       │
 │ Agent additions:                                      │
-│  - Calculate available flexibility                    │
-│  - Submit flex offers                                 │
+│  - Calculate available flexibility (headroom to       │
+│    individual limit)                                  │
+│  - Submit flex offers to peers or coordinator         │
 │  - Receive and forward §14a signals to home EMS       │
 │  - Track financial impact vs baseline                 │
 │  - Opt-out per household                              │
@@ -504,6 +521,11 @@ With RPi 4: add €15.
 │  - Each agent computes: would I have done better       │
 │    without LEM coordination?                          │
 │  - If any household loses, coordination is adjusted   │
+│                                                       │
+│ Graceful degradation:                                 │
+│  - If coordinator or P2P network fails, each agent    │
+│    falls back to Phase 1: self-regulate within        │
+│    individual limit. Grid protection is unaffected.   │
 └──────────────────────────────────────────────────────┘
 ```
 
@@ -536,7 +558,9 @@ These need decisions before implementation starts. Entries accumulate discussion
 - In a P2P system, each agent needs to know the total neighborhood load to self-regulate — approaches include individual allocation, gossip aggregation, or a soft witness
 - Fully decentralized avoids single point of failure and trust issues but adds complexity (discovery, consensus, eventual consistency)
 - Soft witness model (one agent at transformer publishes only aggregate load, no authority) is a middle ground — removes coordinator authority without full P2P complexity
-- **Status**: 🔄 Open — no decision made yet
+- **Phase 1: No coordinator needed at all** — each agent self-regulates within its configured individual limit
+- Phase 2: Coordinator or P2P coordination may be added for flexibility trading, but is not required for grid protection
+- **Status**: ⏳ Phase 1: no coordinator. Phase 2: to be decided.
 
 ### Q3: Does every household need a dedicated agent device?
 
@@ -554,10 +578,12 @@ These need decisions before implementation starts. Entries accumulate discussion
 **Options**: Manual config (transformer rating) / Supply contract capacity / Transformer meter reading / Aggregator data / Distributed estimation
 
 **Discussion notes**:
-- Phase 1: Use a configured value based on transformer rating or household supply contract capacity — simple, static, no dependencies
+- Phase 1: Use individual household limits configured from each household's grid connection contract or neighborhood agreement. Simple, static, no dependencies.
+  - Each agent knows its own limit, self-regulates locally
+  - No transformer meter needed, no grid operator permission required
+  - Possible to define via net provider (each household already has a contractual max. connection power)
 - Phase 2: Revisit this — could be upgraded to transformer meter reading or grid operator API for dynamic adaptation
-- A transformer meter (ESP32 + SML reader at the transformer, €20-30) gives real-time aggregate load knowledge but requires physical access and grid operator permission
-- **Status**: ⏳ Phase 1: manually configured value. Phase 2: to be clarified later.
+- **Status**: ✅ Phase 1: individual household limits (configured per agent). Phase 2: to be clarified later.
 
 ### Q5: What if a household has no home EMS?
 
@@ -612,82 +638,86 @@ These need decisions before implementation starts. Entries accumulate discussion
 
 ## 9. Decision Matrix
 
-The open questions (Q1, Q2) define coherent system architectures. This matrix evaluates the viable candidates against weighted criteria from the requirements.
+### 9.1 Phase 1: Already Decided
 
-### 9.1 Candidate Architectures
+Phase 1 uses **individual allocation**: each agent self-regulates within its configured household limit. No coordinator, no inter-household communication, no transformer access needed. This is the starting point.
 
-| ID | Communication (Q1) | Coordinator (Q2) | Description |
-|----|--------------------|-------------------|-------------|
-| **A** | LoRa 868 MHz | Soft witness | One device at transformer publishes aggregate load. Agents self-regulate. Fully local. |
-| **B** | LoRa 868 MHz | Fully decentralized (P2P) | No central node. Agents share load/flex via gossip protocol. |
-| **C** | MQTT over internet | Cloud VPS broker | All agents + cloud coordinator connect via outbound MQTT. Small recurring cost. |
-| **D** | MQTT over internet | Local coordinator | One household opens MQTTS port. Others connect via internet. |
-| **E** | Hybrid LoRa + MQTT | Soft witness (LoRa) + cloud (MQTT) | Critical signals via LoRa, non-critical via optional internet. |
+### 9.2 Phase 2: What Remains Open
 
-### 9.2 Evaluation Criteria
+Phase 2 adds flexibility coordination between households. The evaluation below compares architectures for this layer. Note that **grid protection does not depend on Phase 2** — individual limits from Phase 1 remain the hard ceiling and fallback.
 
-Weights 1-5, higher = more important. All traceable to requirements.
+| ID | Communication (Q1) | Coordination (Q2) | Description |
+|----|--------------------|--------------------|-------------|
+| **A** | LoRa 868 MHz | Lightweight coordinator | Agent-to-coordinator LoRa for flex offers, load shed, §14a |
+| **B** | LoRa 868 MHz | Fully P2P (gossip) | No central node. Agents exchange flex via gossip protocol |
+| **C** | MQTT over internet | Cloud coordinator | All agents connect via outbound MQTT to a broker on a VPS |
+| **D** | MQTT over internet | Local coordinator | One household hosts coordinator, others connect via internet |
+| **E** | None (local only) | None | Phase 1 only — no flexibility coordination between households |
+
+### 9.3 Evaluation Criteria
+
+Weights 1-5, higher = more important. Focused on Phase 2 requirements. Grid protection (W1) is inherently handled by Phase 1 fallback.
 
 | # | Criterion | Wt | Derived from | What a score of 5 means |
 |---|----------|----|-------------|----------------------|
-| W1 | Grid protection reliability | 5 | FR-01, §2a | Guaranteed delivery even with partial failures |
+| W1 | Grid protection unaffected | 5 | FR-01, §2a | Phase 2 failures don't impact grid protection (Phase 1 fallback) |
 | W2 | No incoming ports | 5 | NFR Secure Comm. | Every household: zero ports open |
 | W3 | Range through obstacles | 5 | NFR Comm. Range | Reliable 100m+ through walls/cellars |
-| W4 | Ease of installation | 4 | NFR, FR-05 | Layperson installs without network config |
+| W4 | Easy Phase 2 setup | 4 | NFR, FR-05 | Adding flexibility requires minimal config |
 | W5 | EUR 0 recurring cost | 4 | §4.1 | No subscriptions, no VPS |
-| W6 | Data privacy | 3 | §4 Data Sovereignty | Per-household data never leaves unencrypted |
+| W6 | Data privacy | 3 | §4 Data Sovereignty | Flex data stays in neighborhood if desired |
 | W7 | Maturity / OSS reuse | 3 | §4.1 (all OSS) | Amount of proven code we build on |
-| W8 | Phase 2 flexibility | 3 | FR-04, FR-07 | Can flex trading and §14a be added? |
-| W9 | Hardware cost within budget | 2 | §4.1 (EUR 100-200/hh) | Headroom available |
+| W8 | Flexibility bandwidth | 3 | FR-04 | Enough throughput for flex offers/matching |
+| W9 | Incremental from Phase 1 | 2 | §1 Introduction | Can add to existing Phase 1 agents without replacement |
 
-### 9.3 Scores (1-5 per architecture per criterion)
+### 9.4 Scores (1-5 per architecture per criterion)
 
-| # | Criterion | Wt | A: LoRa+Witness | B: LoRa+P2P | C: MQTT+Cloud | D: MQTT+Local | E: Hybrid |
-|---|-----------|----|----------------|-------------|---------------|---------------|-----------|
-| W1 | Grid protection | 5 | **5** no internet dependency | **4** gossip has delay | **3** depends on internet | **3** depends on one household | **5** LoRa guarantees |
-| W2 | No incoming ports | 5 | **5** radio, no IP | **5** radio, no IP | **5** all outbound | **2** one household opens port | **5** LoRa + outbound |
-| W3 | Range | 5 | **5** through buildings | **5** same LoRa | **4** WiFi must reach cellar | **4** same | **5** LoRa handles |
-| W4 | Easy install | 4 | **5** power on, attach, done | **4** P2P discovery adds steps | **3** WiFi config + credentials | **3** needs coordinator household config | **4** LoRa is zero-config |
-| W5 | EUR 0 recurring | 4 | **5** none | **5** none | **2** EUR 36-48/yr | **5** none | **5** if cloud optional |
-| W6 | Data privacy | 3 | **5** stays in neighborhood | **5** stays in neighborhood | **3** transits VPS | **4** passes through neighbor | **4** aggregate only leaves |
-| W7 | Maturity / OSS | 3 | **3** LoRa+SML mature | **2** gossip protocol new | **5** MQTT, evcc, OpenEMS | **4** same, but local hosting | **3** combines both |
-| W8 | Phase 2 flex | 3 | **4** LoRa enough for flex | **3** P2P on LoRa complex | **5** high bandwidth | **5** high bandwidth | **5** best of both |
-| W9 | Cost within budget | 2 | **5** EUR 25/hh + 90 central | **5** EUR 25/hh, no central | **4** EUR 16/hh + 48/yr | **4** EUR 16/hh + 90 central | **4** EUR 30/hh + 90 central |
+| # | Criterion | Wt | A: LoRa+Coord | B: LoRa+P2P | C: MQTT+Cloud | D: MQTT+Local | E: None |
+|---|-----------|----|---------------|-------------|---------------|---------------|---------|
+| W1 | Grid protection unaffected | 5 | **5** Phase 1 fallback | **5** Phase 1 fallback | **5** Phase 1 fallback | **5** Phase 1 fallback | **5** N/A |
+| W2 | No incoming ports | 5 | **5** radio, no IP | **5** radio, no IP | **5** all outbound | **2** coordinator opens port | **5** no comms |
+| W3 | Range | 5 | **5** through buildings | **5** through buildings | **4** WiFi must reach cellar | **4** same | **5** N/A |
+| W4 | Easy Phase 2 setup | 4 | **4** add LoRa module or new device | **4** same | **3** WiFi config + broker credentials | **3** coordinator household config | **5** nothing to add |
+| W5 | EUR 0 recurring | 4 | **5** none | **5** none | **2** EUR 36-48/yr | **5** none | **5** none |
+| W6 | Data privacy | 3 | **5** stays in neighborhood | **5** stays in neighborhood | **3** transits VPS | **4** passes through neighbor | **5** no data leaves |
+| W7 | Maturity / OSS | 3 | **3** LoRa+SML mature, flex protocol new | **2** gossip protocol new | **5** MQTT, evcc, OpenEMS mature | **4** same, local hosting | **5** nothing to build |
+| W8 | Flex bandwidth | 3 | **4** sufficient for flex offers | **3** P2P on LoRa complex | **5** high bandwidth | **5** high bandwidth | **1** no flex possible |
+| W9 | Incremental from P1 | 2 | **3** needs new hardware (LoRa) or agent upgrade | **3** same | **4** software-only upgrade if WiFi exists | **4** same | **5** already done |
 
-### 9.4 Weighted Totals
+### 9.5 Weighted Totals
 
 | Architecture | W1x5 | W2x5 | W3x5 | W4x4 | W5x4 | W6x3 | W7x3 | W8x3 | W9x2 | **Total** |
 |-------------|------|------|------|------|------|------|------|------|------|-----------|
-| **A: LoRa+Witness** | 25 | 25 | 25 | 20 | 20 | 15 | 9 | 12 | 10 | **161** |
-| **B: LoRa+P2P** | 20 | 25 | 25 | 16 | 20 | 15 | 6 | 9 | 10 | **146** |
-| **C: MQTT+Cloud** | 15 | 25 | 20 | 12 | 8 | 9 | 15 | 15 | 8 | **127** |
-| **D: MQTT+Local** | 15 | 10 | 20 | 12 | 20 | 12 | 12 | 15 | 8 | **124** |
-| **E: Hybrid** | 25 | 25 | 25 | 16 | 20 | 12 | 9 | 15 | 8 | **155** |
+| **A: LoRa+Coord** | 25 | 25 | 25 | 16 | 20 | 15 | 9 | 12 | 6 | **153** |
+| **B: LoRa+P2P** | 25 | 25 | 25 | 16 | 20 | 15 | 6 | 9 | 6 | **147** |
+| **C: MQTT+Cloud** | 25 | 25 | 20 | 12 | 8 | 9 | 15 | 15 | 8 | **137** |
+| **D: MQTT+Local** | 25 | 10 | 20 | 12 | 20 | 12 | 12 | 15 | 8 | **134** |
+| **E: None (P1 only)** | 25 | 25 | 25 | 20 | 20 | 15 | 15 | 3 | 10 | **158** |
 
-### 9.5 Interpretation
+### 9.6 Interpretation
 
-**Architecture A (LoRa + Soft Witness) ranks highest (161).**
-- Perfect scores on the three highest-weighted criteria (W1-W3)
-- No recurring cost, no internet dependency
-- Data never leaves the neighborhood
-- Soft witness is simpler than full P2P while avoiding central authority
+**Architecture E (Phase 1 only) scores highest (158)** — but this simply means "do nothing extra," which is correct for Phase 1. It validates that Phase 1 is solid on its own.
 
-**Architecture E (Hybrid) is close (155)** but adds complexity without improving the critical dimensions (both score 5 on W1-W3). Valid as a later upgrade: start with A, add internet overlay when needed.
+**For Phase 2**, Architecture A (LoRa + lightweight coordinator) leads at 153. Key drivers:
+- Perfect scores on the critical criteria (W1-W3)
+- No recurring cost
+- Data stays in the neighborhood
+- LoRa is sufficient bandwidth for flex offers (small messages, infrequent)
 
-**Architecture B (LoRa + P2P) scores well (146)** but P2P consensus over LoRa's low bandwidth introduces latency that hurts grid protection in edge cases. The soft witness is simpler and more reliable.
+**Architecture C (MQTT+Cloud) scores 137.** It wins on maturity and bandwidth but the recurring cost and internet dependency for Phase 2 services are drawbacks.
 
-**Architecture C (MQTT + Cloud) scores 127** — recurring cost and internet dependency for critical grid protection are the main drawbacks.
+**Architecture D (MQTT+Local) ranks lowest (134)** due to the coordinator household port requirement.
 
-**Architecture D (MQTT + Local) ranks lowest (124)** — the coordinator household must open a port (violates NFR), and grid protection depends on one household's internet.
+The gap between architectures is smaller than before because Phase 1's individual allocation ensures grid protection regardless of the Phase 2 choice.
 
-### 9.6 Wrong Directions
+### 9.7 Wrong Directions
 
 | Option | Why it leads wrong |
 |--------|-------------------|
-| WiFi mesh as sole medium | Range insufficient through German residential construction |
-| RS485 as sole medium | Cable across private property impractical |
+| WiFi mesh as sole Phase 2 medium | Range insufficient through German residential construction |
+| RS485 as sole Phase 2 medium | Cable across private property impractical |
 | Requiring EMS for participation | Excludes households without automation (contradicts FR-05) |
-| Cloud dependency for grid limit broadcast | Grid protection must work without internet (contradicts FR-01) |
+| Cloud dependency for grid protection | Grid protection is Phase 1, individual allocation — already solved |
 
 ---
 

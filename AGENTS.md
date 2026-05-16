@@ -14,6 +14,10 @@ Requirements-phase repository for a decentralized Local Energy Management System
 
 Everything references German energy law: §14a EnWG (grid-serving control), EEG (feed-in), MsbG (metering). The system deliberately avoids formal balancing-energy-sharing accounting.
 
+## Phase 1 architecture
+
+**Individual allocation** — each household's agent self-regulates within its configured grid limit (based on connection contract). No coordinator, no inter-household communication needed for grid protection. Phase 2 adds flexibility coordination between households but individual limits remain the hard ceiling.
+
 ## Priority invariant
 
 **Infrastructure Safety > Economic Fairness** — non-negotiable hard constraint. When grid limits are breached, controllable loads shed in this fixed order: EV wallbox → battery charging → heat pump. Balcony solar curtailed if reverse power flow limits exceeded.
