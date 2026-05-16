@@ -610,7 +610,88 @@ These need decisions before implementation starts. Entries accumulate discussion
 
 ---
 
-## 9. Recommendations for Next Step
+## 9. Decision Matrix
+
+The open questions (Q1, Q2) define coherent system architectures. This matrix evaluates the viable candidates against weighted criteria from the requirements.
+
+### 9.1 Candidate Architectures
+
+| ID | Communication (Q1) | Coordinator (Q2) | Description |
+|----|--------------------|-------------------|-------------|
+| **A** | LoRa 868 MHz | Soft witness | One device at transformer publishes aggregate load. Agents self-regulate. Fully local. |
+| **B** | LoRa 868 MHz | Fully decentralized (P2P) | No central node. Agents share load/flex via gossip protocol. |
+| **C** | MQTT over internet | Cloud VPS broker | All agents + cloud coordinator connect via outbound MQTT. Small recurring cost. |
+| **D** | MQTT over internet | Local coordinator | One household opens MQTTS port. Others connect via internet. |
+| **E** | Hybrid LoRa + MQTT | Soft witness (LoRa) + cloud (MQTT) | Critical signals via LoRa, non-critical via optional internet. |
+
+### 9.2 Evaluation Criteria
+
+Weights 1-5, higher = more important. All traceable to requirements.
+
+| # | Criterion | Wt | Derived from | What a score of 5 means |
+|---|----------|----|-------------|----------------------|
+| W1 | Grid protection reliability | 5 | FR-01, §2a | Guaranteed delivery even with partial failures |
+| W2 | No incoming ports | 5 | NFR Secure Comm. | Every household: zero ports open |
+| W3 | Range through obstacles | 5 | NFR Comm. Range | Reliable 100m+ through walls/cellars |
+| W4 | Ease of installation | 4 | NFR, FR-05 | Layperson installs without network config |
+| W5 | EUR 0 recurring cost | 4 | §4.1 | No subscriptions, no VPS |
+| W6 | Data privacy | 3 | §4 Data Sovereignty | Per-household data never leaves unencrypted |
+| W7 | Maturity / OSS reuse | 3 | §4.1 (all OSS) | Amount of proven code we build on |
+| W8 | Phase 2 flexibility | 3 | FR-04, FR-07 | Can flex trading and §14a be added? |
+| W9 | Hardware cost within budget | 2 | §4.1 (EUR 100-200/hh) | Headroom available |
+
+### 9.3 Scores (1-5 per architecture per criterion)
+
+| # | Criterion | Wt | A: LoRa+Witness | B: LoRa+P2P | C: MQTT+Cloud | D: MQTT+Local | E: Hybrid |
+|---|-----------|----|----------------|-------------|---------------|---------------|-----------|
+| W1 | Grid protection | 5 | **5** no internet dependency | **4** gossip has delay | **3** depends on internet | **3** depends on one household | **5** LoRa guarantees |
+| W2 | No incoming ports | 5 | **5** radio, no IP | **5** radio, no IP | **5** all outbound | **2** one household opens port | **5** LoRa + outbound |
+| W3 | Range | 5 | **5** through buildings | **5** same LoRa | **4** WiFi must reach cellar | **4** same | **5** LoRa handles |
+| W4 | Easy install | 4 | **5** power on, attach, done | **4** P2P discovery adds steps | **3** WiFi config + credentials | **3** needs coordinator household config | **4** LoRa is zero-config |
+| W5 | EUR 0 recurring | 4 | **5** none | **5** none | **2** EUR 36-48/yr | **5** none | **5** if cloud optional |
+| W6 | Data privacy | 3 | **5** stays in neighborhood | **5** stays in neighborhood | **3** transits VPS | **4** passes through neighbor | **4** aggregate only leaves |
+| W7 | Maturity / OSS | 3 | **3** LoRa+SML mature | **2** gossip protocol new | **5** MQTT, evcc, OpenEMS | **4** same, but local hosting | **3** combines both |
+| W8 | Phase 2 flex | 3 | **4** LoRa enough for flex | **3** P2P on LoRa complex | **5** high bandwidth | **5** high bandwidth | **5** best of both |
+| W9 | Cost within budget | 2 | **5** EUR 25/hh + 90 central | **5** EUR 25/hh, no central | **4** EUR 16/hh + 48/yr | **4** EUR 16/hh + 90 central | **4** EUR 30/hh + 90 central |
+
+### 9.4 Weighted Totals
+
+| Architecture | W1x5 | W2x5 | W3x5 | W4x4 | W5x4 | W6x3 | W7x3 | W8x3 | W9x2 | **Total** |
+|-------------|------|------|------|------|------|------|------|------|------|-----------|
+| **A: LoRa+Witness** | 25 | 25 | 25 | 20 | 20 | 15 | 9 | 12 | 10 | **161** |
+| **B: LoRa+P2P** | 20 | 25 | 25 | 16 | 20 | 15 | 6 | 9 | 10 | **146** |
+| **C: MQTT+Cloud** | 15 | 25 | 20 | 12 | 8 | 9 | 15 | 15 | 8 | **127** |
+| **D: MQTT+Local** | 15 | 10 | 20 | 12 | 20 | 12 | 12 | 15 | 8 | **124** |
+| **E: Hybrid** | 25 | 25 | 25 | 16 | 20 | 12 | 9 | 15 | 8 | **155** |
+
+### 9.5 Interpretation
+
+**Architecture A (LoRa + Soft Witness) ranks highest (161).**
+- Perfect scores on the three highest-weighted criteria (W1-W3)
+- No recurring cost, no internet dependency
+- Data never leaves the neighborhood
+- Soft witness is simpler than full P2P while avoiding central authority
+
+**Architecture E (Hybrid) is close (155)** but adds complexity without improving the critical dimensions (both score 5 on W1-W3). Valid as a later upgrade: start with A, add internet overlay when needed.
+
+**Architecture B (LoRa + P2P) scores well (146)** but P2P consensus over LoRa's low bandwidth introduces latency that hurts grid protection in edge cases. The soft witness is simpler and more reliable.
+
+**Architecture C (MQTT + Cloud) scores 127** — recurring cost and internet dependency for critical grid protection are the main drawbacks.
+
+**Architecture D (MQTT + Local) ranks lowest (124)** — the coordinator household must open a port (violates NFR), and grid protection depends on one household's internet.
+
+### 9.6 Wrong Directions
+
+| Option | Why it leads wrong |
+|--------|-------------------|
+| WiFi mesh as sole medium | Range insufficient through German residential construction |
+| RS485 as sole medium | Cable across private property impractical |
+| Requiring EMS for participation | Excludes households without automation (contradicts FR-05) |
+| Cloud dependency for grid limit broadcast | Grid protection must work without internet (contradicts FR-01) |
+
+---
+
+## 10. Recommendations for Next Step
 
 Regardless of which communication medium is chosen, the next concrete step could be:
 
