@@ -265,6 +265,28 @@ If no home EMS exists, the agent can still:
 - Participate in grid protection at a basic level
 - But cannot influence device behavior (since there's no EMS to coordinate with)
 
+### 3.4 German Compliance & Availability
+
+All referenced hardware components must be CE-certified and available through German distributors. The table below summarizes compliance status and typical German sources:
+
+| Component | CE/RED | ETSI | German distributors |
+|-----------|--------|------|---------------------|
+| ESP32-WROOM (Espressif) | ✅ CE certified | ✅ EN 300.328 (WiFi) | Conrad, Reichelt, RS Components, Mouser DE |
+| SX1276 (Semtech) | ✅ CE certified | ✅ EN 300.220 (868 MHz) | RS Components DE, Mouser DE, Farnell DE |
+| BPW40 / TEKT5400S | ✅ Passive component | N/A | Conrad, Reichelt |
+| Raspberry Pi (any) | ✅ CE certified | ✅ EN 55032/55035 | Conrad, Reichelt, RS Components |
+
+**LoRa 868 MHz**: The 868 MHz band is license-free in the EU. Semtech SX1276/SX1262 transceivers are designed for ETSI EN 300.220 compliance (1% duty cycle, +14/+20 dBm output power limits). The radio equipment directive 2014/53/EU (RED) applies.
+
+**Smart meter IR reading**: Reading one's own meter data via the optical IR interface is permitted under German metering law (MsbG). Conditions:
+- Read-only access via the IR/D0 interface (DIN EN 62056-21)
+- No removal of tamper seals
+- No opening of the meter housing
+- No modification to the metering equipment
+- The PIN for enhanced data (current power, historic values) can be requested from the meter operator (Messstellenbetreiber)
+
+**Data protection**: Local data processing is preferred over cloud transmission to comply with GDPR data minimization principles and MsbG data processing rules (§§ 49–70 MsbG). The system's outbound-only communication constraint (§4 NFRs, constraint C1) inherently reduces the attack surface for personal data.
+
 ---
 
 ## 4. Message Protocol Design (Transport-Agnostic)

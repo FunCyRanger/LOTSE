@@ -80,6 +80,7 @@ Provision of mechanisms for forwarding § 14a-compliant grid-serving signals (mo
 - **Secure Communication**: The system must not require opening incoming ports on household internet connections. All communication between participants must use outbound connections only, or a dedicated local medium. Authentication and encryption must be provided for all data exchange.
 - **Communication Range**: Reliable data exchange between any two **households** must be possible over distances of at least 100 meters through walls, cellars, and other typical residential obstacles. Communication within a household (e.g., agent to smart meter or agent to home EMS) is not subject to this range constraint.
 - **Ease of Installation**: Network configuration must not require technical networking expertise — no port forwarding, no DDNS, no VPN setup. Participation must be achievable by a layperson.
+- **German Regulatory Compliance**: All hardware components must be CE-certified and available through German distributors. Radio modules (e.g., LoRa 868 MHz) must comply with EU radio equipment directive (2014/53/EU) and ETSI EN 300.220. Smart meter data reading via the optical IR interface is permitted only in read-only mode without tampering with seals or opening the meter housing (§§ MsbG). Data processing must comply with GDPR and MsbG data protection rules; local processing is preferred over cloud transmission.
 
 ### 5. System Overview
 
