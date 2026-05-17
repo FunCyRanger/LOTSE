@@ -14,17 +14,66 @@ More PV + EV chargers + heat pumps = synchronized peaks that low-voltage network
 
 ## Architecture
 
+### Physical Topology
+
 ```mermaid
-flowchart LR
-    SM[Smart Meter] <-->|IR UART| A[System Agent]
-    A <-->|MQTT/REST| EMS[Home EMS]
-    EMS --- D[PV / Battery / EV / HP]
-    A -.->|LoRa 868 MHz| N[Neighborhood]
+flowchart TB
+    TS["🔋 Transformer Station"]
+    MV["⚡ Medium-Voltage Grid"]
+    MV --> TS
+
+    subgraph NH["🏘️ Neighborhood"]
+        HA["🏠 Home A"]
+        HB["🏠 Home B"]
+        HC["🏠 Home C"]
+        HN["🏠 ... N"]
+
+        TS --- HA & HB & HC & HN
+    end
+
+    HA <-.->|LoRa / MQTT<br/>Phase 2 only| HB
+    HB <-.-> HC
+    HC <-.-> HN
+
+    subgraph HH["🏠 Inside a Household"]
+        direction LR
+        SM["📊 Smart Meter"] --> AGT["🤖 Agent"]
+        AGT --> EMS["⚙️ Home EMS"]
+        EMS --> DEV["☀️🔋⚡🔥 Loads"]
+    end
+
+    HA -.- AGT
 ```
 
-**Phase 1** — Individual grid limits enforced locally. No inter-household communication needed.  
-**Phase 2** — Optional neighborhood coordination (flex offers, load shedding). Phase 1 limits remain the hard ceiling.  
-**Invariant:** Infrastructure safety > economic fairness. Load shed order: wallbox → battery charging → heat pump.  
+### Software Architecture
+
+```mermaid
+flowchart LR
+    SM["📊 Smart Meter"]
+
+    subgraph AG["🤖 Household Agent"]
+        direction TB
+        COMM["📡 Communication Layer"]
+        LIMIT["⚠️ Limit Enforcer"]
+        COORD["🔄 Coordination Logic"]
+        LIMIT -->|status| COMM
+        COORD -->|offers| COMM
+    end
+
+    EMS["⚙️ Home EMS"]
+    DEV["☀️🔋⚡🔥 Loads & Generation"]
+    NEIGH["🏘️ Neighbor Agents"]
+
+    SM -->|SML / OBIS| LIMIT
+    AG -->|MQTT / REST| EMS
+    EMS -->|control| DEV
+
+    COMM <-->|Phase 2| NEIGH
+```
+
+**Phase 1** — Individual grid limits enforced locally (Limit Enforcer). No inter-household communication needed.  
+**Phase 2** — Optional neighborhood coordination (flex offers, load shedding) via the Communication Layer. Phase 1 limits remain the hard ceiling.  
+**Invariant:** Infrastructure safety > economic fairness. Load shed order: wallbox → battery charging → heat pump. The Limit Enforcer is always active, independent of Phase 2.  
 **Regulatory context:** German §14a EnWG (grid-serving control) — the system coexists with it but is not in the signal path and requires no certification. Formal §14a integration is a long-term option dependent on grid operator cooperation, not current scope. See [Brainstorming.md](Brainstorming.md).
 
 ---
