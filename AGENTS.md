@@ -6,6 +6,7 @@ Requirements-phase repository for a decentralized Local Energy Management System
 
 - `LEM-Requirements.md` — single source of truth (Draft)
 - `Brainstorming.md` — technical pre-design (architecture options, protocol design, hardware)
+- `prototype-build.md` — hardware build plan with PlatformIO commands and flashing instructions
 
 ## Architecture invariant
 
@@ -36,21 +37,13 @@ German energy law: §14a EnWG (grid-serving control), EEG (feed-in), MsbG (meter
 - **Ease**: No port forwarding, DDNS, or VPN — layperson-installable.
 - Internet connections allowed if these constraints are met.
 
-## Cost targets & breakdown
+## Cost targets (Brainstorming §6)
 
-Per `Brainstorming.md` §6.1–§6.3 and §3.1–§3.2, §5.5.
+Per-household hardware: €100–200 one-time (LilyGO T3 S3 + WattWächter TTL ~€46–52, fallback ESP32+SX1276+BPW40 ~€25). Central infrastructure: ≤€300 one-time (RPi + LoRa hat ~€70–105). Recurring: €0.
 
-| Category | Target | Composition |
-|----------|--------|-------------|
-| Per-household hardware (one-time) | €100–200 | **Recommended (prototype→production):** LilyGO T3 S3 SX1262/SX1276 €22–28 + WattWächter TTL IR head €24 = €46–52. **Fallback:** ESP32 €5–15 + SX1276 €3–5 + BPW40 €0.50–2 = ~€25. Headroom €48–154 for enclosure/antenna/installation. |
-| Central infrastructure (one-time) | ≤€300 | RPi 3B+ €35–40 (or RPi 4 €45–55) + LoRa hat €20–30 + SD card €8–10 + power/case €10–15 = €70–105. VPS alternative: ~€0–48/yr. |
-| Recurring costs | €0 | LoRa: no subscriptions. MQTT-VPS: ~€3–4/month (violates target). All software OSS, EPEX Spot data free. |
+## Communication medium evaluation (Brainstorming §2, §9)
 
-## Communication medium options
-
-Brainstorming.md §2 evaluates six options (LoRa 868 MHz, MQTT over internet, WiFi mesh, Powerline, Thread, RS485) against six hard constraints (C1–C6). **LoRa 868 MHz** ticks all boxes but has very low throughput (~50 bytes every ~50s, 1% duty cycle). **MQTT over internet** is mature but incurs recurring VPS cost (~€3–4/mo). A hybrid (LoRa for critical signals + MQTT for analytics) is also considered at +~€5/hh (§2.4).
-
-**Architecture evaluation (Brainstorming §9):** For Phase 2, Architecture A (LoRa + lightweight coordinator) leads the weighted decision matrix at 153 points. Architecture E (Phase 1 only) scores 158 — validating Phase 1 is sufficient on its own. Wrong directions: WiFi mesh (range), RS485 (cabling across properties), requiring EMS for participation (excludes passive households), cloud dependency for grid protection (Phase 1 already solves it locally).
+Six options evaluated against six constraints (C1–C6). **LoRa 868 MHz** ticks all boxes (~50 bytes per ~50s, 1% duty cycle). **MQTT over internet** mature but ~€3–4/mo VPS recurring. Architecture A (LoRa + coordinator) leads Phase 2 weighted matrix (153 pts); Architecture E (Phase 1 only) scores 158, validating Phase 1 suffices alone. Wrong directions: WiFi mesh (range), RS485 (cabling across properties), requiring EMS for participation, cloud dependency for grid protection.
 
 ## Protocol design (Brainstorming §4)
 
@@ -65,10 +58,10 @@ These are documented in Brainstorming.md §8 and remain unresolved:
 
 | # | Question | Status |
 |---|----------|--------|
-| Q1 | Communication medium (LoRa vs MQTT vs hybrid) | 🔄 Open |
-| Q2 | Coordinator placement (household / community / VPS / P2P / none) | Phase 1: none. Phase 2: 🔄 Open |
-| Q6 | Flex matching algorithm (FCFS / merit-order / proportional / priority / rotating) | 🔄 Open |
-| Q7 | Data retention (current only / local history / coordinator aggregate / opt-in) | 🔄 Open |
+| Q1 | Communication medium (LoRa vs MQTT vs hybrid) | Open |
+| Q2 | Coordinator placement (household / community / VPS / P2P / none) | Phase 1: none. Phase 2: Open |
+| Q6 | Flex matching algorithm (FCFS / merit-order / proportional / priority / rotating) | Open |
+| Q7 | Data retention (current only / local history / coordinator aggregate / opt-in) | Open |
 
 ## Referenced systems
 
@@ -83,23 +76,6 @@ These are documented in Brainstorming.md §8 and remain unresolved:
 
 Key OSS: **ESPHome** and **Tasmota** have built-in SML parsing. **RadioLib** and **Meshtastic** are mature LoRa stacks. **Common German smart meter brands** for testing: ISKRA, Landis+Gyr, Holley (Brainstorming §10).
 
-## Recommended next step (Brainstorming §10)
-
-Build one agent prototype (LilyGO T3 S3 SX1262/SX1276 + WattWächter TTL IR head + SML parsing on real or simulated meter — see prototype-build.md), build coordinator prototype (second T3 S3 or RPi + LoRa hat), test range in a real neighborhood.
-
 ## Household types (§2b)
 
-| Type | Pricing Model | Optimization Goal |
-|------|---------------|-------------------|
-| No PV | Fixed tariff | Minimize consumption cost |
-| PV only (EEG) | Fixed feed-in | Maximize self-consumption |
-| PV only (Dynamic) | EPEX Spot | Shift consumption to low-price periods |
-| PV + Battery | Dynamic | Arbitrage (charge low, discharge high) |
-| Battery only | Dynamic | Arbitrage (charge cheap, discharge expensive) |
-| Heat pump | §14a network charges | Shift to low-tariff periods |
-| EV + Wallbox | Dynamic | Coordinate charging with price signals |
-| EV + Wallbox + Heat pump + Battery | Mixed | Full optimization across all assets |
-| Balcony solar (Balkonkraftwerk) | Self-consumption | Maximize generation, curtail if grid export limit exceeded |
-| Balcony solar + Battery | Dynamic | Self-consumption + arbitrage |
-
-Each household must break even or benefit — optimization cannot cause financial loss relative to baseline (§2a, FR-06).
+See `LEM-Requirements.md` §2b for the full table (10 types from No PV to Balcony solar + Battery). Key constraint: each household must break even or benefit — optimization cannot cause financial loss relative to baseline (FR-06).
