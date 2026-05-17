@@ -9,7 +9,7 @@
 
 Goal: A working ESP32 that reads a German smart meter via its optical IR interface and outputs parsed OBIS values.
 
-**Validates:** UC-02 (Record consumption & generation data) from LEM-Requirements.md §6.
+**Validates:** UC-02 (Record consumption & generation data) from LOTSE-Requirements.md §6.
 
 ### P1.1 Bill of Materials
 
@@ -23,7 +23,7 @@ Goal: A working ESP32 that reads a German smart meter via its optical IR interfa
 
 **Why this hardware?** See Brainstorming §3.2 and §5.5 for full hardware evaluation.
 
-**LilyGO T3 S3** (€22-28, SX1262 or SX1276 variant): ESP32-S3 dual-core 240MHz, onboard LoRa 868MHz (ETSI RED compliant), 0.96" OLED (SSD1306) for local status display, SD card slot for data retention (Q7), USB-C, LiPo charger. Both SX1262 and SX1276 variants work for LEM — SX1276 is older but equally capable for this use case. The Amazon.de listing (SX1276 868MHz) ships from a German warehouse for fast delivery.
+**LilyGO T3 S3** (€22-28, SX1262 or SX1276 variant): ESP32-S3 dual-core 240MHz, onboard LoRa 868MHz (ETSI RED compliant), 0.96" OLED (SSD1306) for local status display, SD card slot for data retention (Q7), USB-C, LiPo charger. Both SX1262 and SX1276 variants work for LOTSE — SX1276 is older but equally capable for this use case. The Amazon.de listing (SX1276 868MHz) ships from a German warehouse for fast delivery.
 
 **WattWächter TTL** (~€24, smartcircuits.de): professional IR head with screw terminals — no soldering required. Pre-wired 1m cable with 4 color-coded wires (braun=VCC, grün=RX, gelb=TX, weiß=GND). TTL UART output (9600 baud, 3.3V), magnetic mount (8.5kg holding force), built-in reverse polarity protection, CE certified, made in Germany. Connects to T3 S3 GPIO in seconds with Dupont jumper wires.
 
@@ -418,9 +418,9 @@ meshtastic-flasher --port /dev/ttyACM0 --board t3-s3 --region EU_868
 ### P7.2 Configuration
 
 ```bash
-# Set LEM channel (encrypted on radio, unencrypted Protobuf on MQTT bridge)
+# Set LOTSE channel (encrypted on radio, unencrypted Protobuf on MQTT bridge)
 meshtastic --set lora.region EU_868
-meshtastic --set channel.psk "LEM2-Neighborhood-Key"  # shared PSK for all agents
+meshtastic --set channel.psk "LOTSE-Neighborhood-Key"  # shared PSK for all agents
 meshtastic --set position.gps_mode 0  # disable GPS (not needed)
 
 # Configure MQTT bridge (if household has internet)
@@ -451,6 +451,6 @@ Repeat P4 (range test) and P5 (latency measurement) with Meshtastic firmware ins
 
 | If Meshtastic test result is... | Then... |
 |--------------------------------|---------|
-| ✅ All PASS | Adopt Meshtastic as Phase 2 transport layer. Build LEM app layer as Protobuf messages on top |
+| ✅ All PASS | Adopt Meshtastic as Phase 2 transport layer. Build LOTSE app layer as Protobuf messages on top |
 | ⚠️ Range or latency borderline | Tune spreading factor, antenna, or relay placement. Retest |
 | ❌ Range or duty cycle fails | Abandon Meshtastic path. Proceed with custom LoRa protocol (Architecture A in Brainstorming §9) |

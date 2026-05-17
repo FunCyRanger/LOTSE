@@ -2,7 +2,7 @@ I have read all four project files in full. Here is my structured review:
 
 ---
 
-## LEM2 – Project Review: Feasibility & Errors
+## LOTSE – Project Review: Feasibility & Errors
 
 ### Overall Assessment
 
@@ -54,7 +54,7 @@ The build guide shows comments about what should go in `platformio.ini`, but doe
 
 **§14a implementation is more complex than depicted:** The §14a signal path is treated as simple forwarding. However, the BNetzA ruling requires a registered interface, logging obligations, and possibly certification. This is significantly more than an MQTT topic.
 
-**Economic fairness check (FR-06) without algorithm:** The requirement that no household be worse off than without LEM is well-intentioned — but there is neither a data structure nor a calculation method for it. This needs to be defined before Phase 2 implementation.
+**Economic fairness check (FR-06) without algorithm:** The requirement that no household be worse off than without LOTSE is well-intentioned — but there is neither a data structure nor a calculation method for it. This needs to be defined before Phase 2 implementation.
 
 **Missing README.md:** The GitHub main page of the repo is empty. A visitor sees no description, no entry document. AGENTS.md fills this role but is not linked as a README.
 

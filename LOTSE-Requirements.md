@@ -1,10 +1,10 @@
-**Requirements Analysis and Use-Case Documentation: Decentralized LEM-Netz (Simplified Version)**
+**Requirements Analysis and Use-Case Documentation: Decentralized LOTSE (Simplified Version)**
 
 **Status:** Draft
 
 ### 1. Introduction and Purpose
 
-The decentralized Local Energy Management System (LEM-Netz) enables neighborhoods to robustly and cost-effectively coordinate generation and consumption. It acts as a coordination and signaling layer between autonomous household energy management systems — each household retains full control over its own devices. The system prioritizes the protection of grid infrastructure and realizes economic benefits primarily through § 14a EnWG and optimized self-consumption. Formal balancing energy-sharing accounting is deliberately avoided to minimize complexity and additional regulatory hurdles.
+The decentralized Local Energy Management System (LOTSE) enables neighborhoods to robustly and cost-effectively coordinate generation and consumption. It acts as a coordination and signaling layer between autonomous household energy management systems — each household retains full control over its own devices. The system prioritizes the protection of grid infrastructure and realizes economic benefits primarily through § 14a EnWG and optimized self-consumption. Formal balancing energy-sharing accounting is deliberately avoided to minimize complexity and additional regulatory hurdles.
 
 ### 2. Goals
 
@@ -47,7 +47,7 @@ The system must periodically determine the maximum permissible net export/import
 Provision of time-resolved consumption and generation data through a suitable, certified metering device. As a private individual, access to this measurement data must be possible.
 
 **FR-03 Decentralized Agents**  
-Each participant operates an autonomous agent that acts as a bridge between the neighborhood coordination layer and the household's existing energy management system (e.g., OpenEMS, evcc, Home Assistant). The agent processes local measurement data, offers or requests flexibility to the neighborhood, and forwards coordination signals (grid limits, flexibility requests, tariff or § 14a information) to the household's internal automation. Direct device control remains with the household's own EMS — the LEM agent never controls end devices such as inverters, heat pumps, or wallboxes directly.
+Each participant operates an autonomous agent that acts as a bridge between the neighborhood coordination layer and the household's existing energy management system (e.g., OpenEMS, evcc, Home Assistant). The agent processes local measurement data, offers or requests flexibility to the neighborhood, and forwards coordination signals (grid limits, flexibility requests, tariff or § 14a information) to the household's internal automation. Direct device control remains with the household's own EMS — the LOTSE agent never controls end devices such as inverters, heat pumps, or wallboxes directly.
 
 **FR-04 Local Coordination**  
 Support for coordinating local surplus and demand within applicable grid limits, mediated through household agents without direct device control. Coordination is achieved via signaling (grid limits, flexibility offers/requests, tariff information) — each household's EMS decides autonomously how to respond. No balancing accounting is performed.
@@ -61,7 +61,7 @@ The optimization logic MUST NOT apply strategies that result in financial loss t
 > **Open:** No comparison algorithm or data structure is defined yet (needed before Phase 2). Each household's baseline scenario and the calculation method for financial impact must be specified.
 
 **FR-07 §14a Compatibility**  
-LEM must coexist with §14a grid-serving control without interference. The grid operator's control path (smart meter gateway → Steuerbox → EEBUS/relay → device or household EMS) is independent and pre-existing for households with §14a-capable devices. LEM operates as a separate coordination layer above this: it may optionally receive §14a state information from the household EMS to inform coordination decisions, but it is never a §14a signal carrier. The household EMS reconciles both LEM coordination signals and §14a reduction commands autonomously. Formal §14a certification is not required for LEM because it is not in the signal path.
+LOTSE must coexist with §14a grid-serving control without interference. The grid operator's control path (smart meter gateway → Steuerbox → EEBUS/relay → device or household EMS) is independent and pre-existing for households with §14a-capable devices. LOTSE operates as a separate coordination layer above this: it may optionally receive §14a state information from the household EMS to inform coordination decisions, but it is never a §14a signal carrier. The household EMS reconciles both LOTSE coordination signals and §14a reduction commands autonomously. Formal §14a certification is not required for LOTSE because it is not in the signal path.
 
 ### 4. Non-Functional Requirements
 
@@ -89,7 +89,7 @@ LEM must coexist with §14a grid-serving control without interference. The grid 
 
 ```mermaid
 mindmap
-  root((LEM-Netz))
+  root((LOTSE))
     Phase 1 - Data Collection
       Determine & broadcast grid limit
       Record consumption & generation data
@@ -130,11 +130,11 @@ mindmap
 
 ---
 
-**Two-Pager: Decentralized LEM-Netz – Neighborhood Energy Management**
+**Two-Pager: Decentralized LOTSE – Neighborhood Energy Management**
 
 **Page 1 – System Description**
 
-The decentralized LEM-Netz is a simple, robust coordination and signaling layer for local coordination of electricity generation and consumption in residential neighborhoods. It connects autonomous household energy management systems, based on suitable metering devices, decentralized bridge agents, and clear priority rules. The LEM never controls end devices directly — each household retains full autonomy over its own installations.
+The decentralized LOTSE is a simple, robust coordination and signaling layer for local coordination of electricity generation and consumption in residential neighborhoods. It connects autonomous household energy management systems, based on suitable metering devices, decentralized bridge agents, and clear priority rules. The LOTSE never controls end devices directly — each household retains full autonomy over its own installations.
 
 **Core functions**:
 - Continuous monitoring and adherence to grid limits to protect local infrastructure.
@@ -161,7 +161,7 @@ The ongoing energy transition is leading to increasing decentralized generation 
 - Initial organizational effort within the neighborhood.
 
 **Overall assessment**:  
-The decentralized LEM-Netz represents a pragmatic and sensible approach. It addresses real physical and economic challenges of the energy transition at the neighborhood level, without requiring excessive complexity or high investment. In a phase of increasing grid load and grid fees, it offers a concrete contribution to local resilience, cost reduction, and efficient use of existing infrastructure.
+The decentralized LOTSE represents a pragmatic and sensible approach. It addresses real physical and economic challenges of the energy transition at the neighborhood level, without requiring excessive complexity or high investment. In a phase of increasing grid load and grid fees, it offers a concrete contribution to local resilience, cost reduction, and efficient use of existing infrastructure.
 
 **Recommendation**: Start with a small pilot project to validate the practical effectiveness of grid protection and flexibility coordination.
 

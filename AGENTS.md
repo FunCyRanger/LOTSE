@@ -1,16 +1,16 @@
-# LEM2
+# LOTSE
 
-Requirements-phase repository for a decentralized Local Energy Management System (LEM-Netz) for German residential neighborhoods. Target: **100+ households** per logical neighborhood. **Specification-only — no code, no build tooling, no CI, no test framework.** Implementation work must start from `LEM-Requirements.md`.
+Requirements-phase repository for a decentralized Local Energy Management System (LOTSE) for German residential neighborhoods. Target: **100+ households** per logical neighborhood. **Specification-only — no code, no build tooling, no CI, no test framework.** Implementation work must start from `LOTSE-Requirements.md`.
 
 ## Source documents
 
-- `LEM-Requirements.md` — single source of truth (Draft)
+- `LOTSE-Requirements.md` — single source of truth (Draft)
 - `Brainstorming.md` — technical pre-design (architecture options, protocol design, hardware)
 - `prototype-build.md` — hardware build plan with PlatformIO commands and flashing instructions
 
 ## Architecture invariant
 
-**LEM is a signaling/coordination layer, not a device controller.** The LEM agent is a thin bridge between the neighborhood and the household's existing EMS (OpenEMS, evcc, Home Assistant, etc.). It never controls inverters, heat pumps, or wallboxes directly — all device control stays with the household's own system.
+**LOTSE is a signaling/coordination layer, not a device controller.** The LOTSE agent is a thin bridge between the neighborhood and the household's existing EMS (OpenEMS, evcc, Home Assistant, etc.). It never controls inverters, heat pumps, or wallboxes directly — all device control stays with the household's own system.
 
 ## Priority invariant (non-negotiable)
 
@@ -78,4 +78,4 @@ Key OSS: **ESPHome** and **Tasmota** have built-in SML parsing. **RadioLib** and
 
 ## Household types (§2b)
 
-See `LEM-Requirements.md` §2b for the full table (10 types from No PV to Balcony solar + Battery). Key constraint: each household must break even or benefit — optimization cannot cause financial loss relative to baseline (FR-06).
+See `LOTSE-Requirements.md` §2b for the full table (10 types from No PV to Balcony solar + Battery). Key constraint: each household must break even or benefit — optimization cannot cause financial loss relative to baseline (FR-06).
