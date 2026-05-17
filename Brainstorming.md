@@ -107,6 +107,8 @@ Every option evaluated against the hard constraints from §4 NFRs.
 
 Not sufficient for: raw meter time series, large config transfers, firmware updates.
 
+**Scaling to 100+ households:** The duty cycle calculation changes per agent as the network grows. At 100 agents each sending one 100ms message per 5 minutes, aggregate airtime = 100 × 0.1s / 300s ≈ 3.3% — still over the 1% limit. **Broadcast messages** (coordinator → all agents, one transmission covers everyone) remain efficient at any scale. **Individual agent → coordinator messages** must be sparse: on a shared channel, each agent gets roughly 1/100th of the duty cycle budget, limiting individual transmissions to ~1 per 10 minutes per agent. This is acceptable for occasional flex offers and heartbeat, but not for frequent meter data streaming. For higher-frequency communication, the hybrid approach (§2.4) or MQTT-only (§2.3 MQTT) is more scalable.
+
 **Security**: AES-128 encryption at link layer. No IP-based attack surface (no TCP/IP stack). Physical range limits eavesdropping.
 
 **Cost**: SX1276 module €3-5, ESP32 €5-8, IR sensor €1-2 = **€10-15/hh**. Coordinator: RPi 3B €40 + LoRa hat €25 + SD card €10 = **€75**.
@@ -125,6 +127,8 @@ Not sufficient for: raw meter time series, large config transfers, firmware upda
 - **VPS** (€3-4/month on Hetzner/Hetzner): violates C4 (€0 recurring), but avoids any household needing ports
 - **Local RPi + DDNS**: requires opening one port (MQTTS 8883) on the coordinator's household — violates C1 for that household
 - **Community-hosted** (e.g., transformer room with LTE router): feasible but depends on finding suitable location
+
+**Scaling**: MQTT handles 100+ agents without protocol changes — the broker is the only scaling bottleneck. A single RPi running Mosquitto supports thousands of clients. Spreading agents across neighborhoods uses separate topic namespaces (`lem/{neighborhood_id}/`).
 
 **Range**: Depends on home WiFi coverage. If the agent is in a cellar next to the smart meter, a separate AP or powerline WiFi extender may be needed to reach the household's router — adds cost and complexity.
 
@@ -401,7 +405,7 @@ Instead of implementing a custom LoRa protocol stack, **Meshtastic** (open-sourc
 
 **Limitations (critical for LEM2):**
 - Chat-oriented design — not optimized for frequent small messages; duty cycle management is critical
-- Optimal up to ~30–40 nodes per mesh; larger networks need tuning (shorter range, fewer hops)
+- Optimal up to ~30–40 nodes per mesh; for 100+ households, Meshtastic would require multiple meshes interconnected by a gateway node (e.g., RPi bridging two LoRa channels), adding topology complexity and a potential single point of failure
 - PSK-based (no perfect forward secrecy); spoofing possible if key compromised
 - Relaying increases per-node power consumption vs star topology
 
@@ -439,7 +443,9 @@ In Phase 2, a coordinator (or P2P coordination) is needed for functions that spa
 | **Transformer room / common space** | Neutral location | Requires permission |
 | **Cloud VPS** | Always reachable | Recurring cost (€3-4/mo), GDPR |
 | **Software instance (any device)** | Runs on existing RPi at any household | Same as "at one household" |
-| **Fully P2P (no coordinator)** | Most robust, no central trust | More complex to implement |
+| **Fully P2P (no coordinator)** | Most robust, no central trust | More complex to implement; O(n²) message complexity scales poorly beyond ~30 nodes |
+
+**Coordinator scaling for 100+ households:** A coordinator for 100 agents must handle peak flex-offer bursts — e.g., 100 offers arriving within one tariff period. Merit-order matching (sort 100 offers by price) completes in milliseconds on any modern RPi. The CPU/memory bottleneck is not the matching algorithm but the network I/O: an MQTT-based coordinator handles 100 clients trivially; a LoRa-based coordinator needs a TDMA schedule where each agent gets a dedicated transmission slot, extending the round-robin cycle proportionally to agent count.
 
 ### 5.4 Graceful Degradation (Phase 2)
 
@@ -776,7 +782,16 @@ Weights 1-5, higher = more important. Focused on Phase 2 requirements. Grid prot
 
 The gap between architectures is smaller than before because Phase 1's individual allocation ensures grid protection regardless of the Phase 2 choice.
 
-**Practical implication:** The prototype should test standard Meshtastic firmware (P7 in prototype-build.md) alongside the custom LoRa path before committing to a protocol stack. If Meshtastic's range, latency, and duty cycle are adequate, it may eliminate the need for a custom protocol entirely.
+**Scaling to 100+ households:** The scores above assume typical neighborhood size (5–20 households). At 100+ households, the duty cycle and mesh-size constraints reshape the rankings:
+- **Architectures A and F (LoRa)** — scalable for broadcast messages only. Individual agent → coordinator messages require sparse transmission (≤1 per 10 min per agent) to stay within 1% duty cycle. Fine for occasional flex offers, not for frequent telemetry. F (Meshtastic) hits the ~40-node mesh ceiling and requires multi-mesh gateways at scale.
+- **Architecture B (LoRa P2P)** — O(n²) message complexity makes it impractical beyond ~30 nodes.
+- **Architecture D (MQTT+Local)** — coordinator port constraint affects that one household regardless of scale.
+- **Architectures C (MQTT+Cloud)** — no scaling concerns. MQTT brokers handle thousands of clients. This is the most future-proof option at scale, but carries the recurring cost.
+- **Hybrid approach (§2.4)** — LoRa for broadcast (grid limit, load shed) + MQTT for individual messages (flex offers) combines the scaling strengths of both mediums.
+
+For Phase 1 at any scale: all architectures score identically (no inter-household communication needed).
+
+**Practical implication:** The prototype should test standard Meshtastic firmware (P7 in prototype-build.md) alongside the custom LoRa path before committing to a protocol stack. If range and duty cycle are adequate for broadcast-only use, Meshtastic + MQTT hybrid (Architecture F variant) becomes the recommended path at scale.
 
 ### 9.7 Wrong Directions
 

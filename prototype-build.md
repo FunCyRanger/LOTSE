@@ -372,7 +372,7 @@ agent -> coord | seq=0042 | t_send=1715000000 | t_recv=1715000005 | latency=5000
 
 At SF7, the neighborhood receives a fresh limit update every ~5s. At SF12, every ~7.5s. Either timescale is acceptable for grid limit enforcement (load changes on the order of minutes, not seconds).
 
-> **⚠️ Duty cycle limitation:** This single-agent benchmark assumes one transmitter. With N households sharing the 1% ETSI duty cycle, each agent's airtime budget shrinks proportionally. At 10 agents each sending ~100ms frames every 5s, aggregate airtime ~20% — well over the limit. Phase 2 coordination (not Phase 1) will require a TDMA or CSMA/CA strategy to stay within regulatory bounds. Phase 1 is unaffected (no radio needed).
+> **⚠️ Duty cycle limitation:** This single-agent benchmark assumes one transmitter. With N households sharing the 1% ETSI duty cycle, each agent's airtime budget shrinks proportionally. At 10 agents each sending ~100ms frames every 5s, aggregate airtime ~20% — well over the limit. At 100+ agents, individual agent → coordinator messages must be limited to ≤1 per 10 minutes per agent to stay within 1% duty cycle. Broadcast messages (coordinator → all) remain efficient at any scale. Phase 2 coordination (not Phase 1) will require a TDMA or CSMA/CA strategy to stay within regulatory bounds, or a hybrid approach (LoRa for broadcast, MQTT for individual messages). Phase 1 is unaffected (no radio needed).
 
 > **Note:** Again, this GridLimit transmission is test-only. In Phase 1 production, no messages cross households — the limit lives locally on each agent.
 

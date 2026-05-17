@@ -1,6 +1,6 @@
 # LEM2
 
-Requirements-phase repository for a decentralized Local Energy Management System (LEM-Netz) for German residential neighborhoods. **Specification-only — no code, no build tooling, no CI, no test framework.** Implementation work must start from `LEM-Requirements.md`.
+Requirements-phase repository for a decentralized Local Energy Management System (LEM-Netz) for German residential neighborhoods. Target: **100+ households** per logical neighborhood. **Specification-only — no code, no build tooling, no CI, no test framework.** Implementation work must start from `LEM-Requirements.md`.
 
 ## Source documents
 

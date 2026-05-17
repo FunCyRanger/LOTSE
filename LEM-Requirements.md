@@ -66,6 +66,7 @@ LEM must coexist with §14a grid-serving control without interference. The grid 
 ### 4. Non-Functional Requirements
 
 - **Robustness**: The system must be able to continue operating with reduced functionality during partial failures. The grid protection function has absolute priority.
+- **Scalability**: The system must support at least 100 households within a single logical neighborhood without protocol redesign. Phase 1 (individual allocation) is inherently scalable; Phase 2 coordination mechanisms must not assume an upper bound below 100. Communication duty cycles, mesh size limits, and coordinator throughput must be dimensioned for 100+ participants.
 - **Economic Efficiency**: Low investment and no recurring costs — see §4.1.
 
 ### 4.1 Cost Requirements
