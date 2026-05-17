@@ -15,7 +15,7 @@ Goal: A working ESP32 that reads a German smart meter via its optical IR interfa
 
 | Item | Part | Est. cost | German source |
 |------|------|-----------|---------------|
-| Agent MCU + LoRa + display | LilyGO T3 S3 SX1262 868MHz (H595) or SX1276 868MHz (H596) | €22-28 | [tinytronics.nl](https://www.tinytronics.nl) (NL, ships DE), [openelab.de](https://www.openelab.de) (Munich, ships DE), [Amazon.de](https://www.amazon.de/LILYGO-T3S3-V1-3-ESP32-S3-Entwicklungsboard/dp/B0GQSKYYN1) (DE warehouse) |
+| Agent MCU + LoRa + display | LilyGO T3 S3 SX1262 868MHz (H595) or SX1276 868MHz (H596) | €22-28 | [openelab.de](https://www.openelab.de) (Munich, ships DE), [Amazon.de](https://www.amazon.de/LILYGO-T3S3-V1-3-ESP32-S3-Entwicklungsboard/dp/B0GQSKYYN1) (DE warehouse), [tinytronics.nl](https://www.tinytronics.nl) (NL, ships to DE) |
 | IR head | WattWächter TTL (WS-IR-UART/TTL) | €24 | [SmartCircuits / WattWächter](https://www.xn--wattwchter-u5a.de/products/wattwaechter-ttl) |
 | USB-C cable | USB-C data cable | €2-3 | Conrad, Reichelt |
 | USB power supply | 5V 1A (phone charger) | €0 (likely owned) | — |
@@ -64,9 +64,9 @@ No breadboard, no soldering. The WattWächter TTL comes with a pre-wired 1m cabl
 |-------|--------|-----------|
 | Framework | Arduino core for ESP32 (ESP32-S3 variant) | Largest ecosystem, most SML parsing examples, ESP32-S3 support via `esp32` platform |
 | Build system | PlatformIO | Cross-platform, library manager, simple CLI, `board = esp32-s3-devkitc-1` |
-| SML parser | `sml` library by m-, or `SmartMeter` library | Mature, handles German smart meter SML output |
+| SML parser | `sml` library by mzi (`mzi_/sml` in PlatformIO registry), or `SmartMeter` library | Mature, handles German smart meter SML output |
 | OBIS extraction | Manual OBIS code filter on parsed SML | Targeted parsing is simpler than full SML stack |
-| Serial (meter) | HardwareSerial on UART (GPIO4 RX) using ESP32-S3 GPIO matrix | UART1 or UART2 mapped to GPIO4 |
+| Serial (meter) | HardwareSerial on UART (GPIO4 RX) using ESP32-S3 GPIO matrix | UART1 or UART2 mapped to GPIO4. Define `METER_BAUD` as configurable constant (default 9600, override to 115200 for Holley DTZ541) |
 | LoRa driver | RadioLib (SX1262) | Mature OSS, supports SX1262, RadioLib handles SPI + IRQ + DIO + CAD |
 | Display | Adafruit SSD1306 + Adafruit GFX | 0.96" OLED for local status (grid limit, current power, agent state) |
 | SD card | SD_MMC or SD library (ESP32) | Data logging for validation and potential retention (Q7) |
@@ -85,17 +85,24 @@ pip install platformio
 # Create project (ESP32-S3 — T3 S3 uses S3 variant)
 pio init --board esp32-s3-devkitc-1
 
-# PlatformIO project configuration
-# Set the following in platformio.ini for T3 S3 SX1262:
-#   board_build.mcu = esp32s3
-#   board_build.f_cpu = 240000000L
-#   board_build.flash_mode = qio
-#   board_build.flash_size = 16MB
-#   board_build.psram = enable
-#   board_build.psram_mode = octal
+# Create platformio.ini with T3 S3 SX1262 overrides:
+# ```
+# [env:esp32-s3-devkitc-1]
+# platform = espressif32
+# board = esp32-s3-devkitc-1
+# board_build.mcu = esp32s3
+# board_build.f_cpu = 240000000L
+# board_build.flash_mode = qio
+# board_build.flash_size = 16MB
+# board_build.psram = enable
+# board_build.psram_mode = octal
+# monitor_speed = 115200
+# build_flags =
+#   -DMETER_BAUD=9600      ; default; override to 115200 for Holley DTZ541
+# ```
 
 # Install libraries
-pio pkg install --library "m-/SML"
+pio pkg install --library "mzi_/sml"        # SML parser
 pio pkg install --library "jgromes/RadioLib"       # SX1262 LoRa
 pio pkg install --library "adafruit/Adafruit SSD1306"  # OLED display
 pio pkg install --library "adafruit/Adafruit GFX Library"
@@ -144,7 +151,7 @@ Before touching a real meter, verify the circuit and software with a serial simu
 
 Many German meters lock 16.7.0 behind a 4-digit PIN:
 
-1. Request PIN from Messstellenbetreiber (may take 2-4 weeks)
+1. Request PIN from Messstellenbetreiber (may take 4–12 weeks; some operators reject requests for old Ferraris meters — consider this a blocker for FR-02)
 2. On the meter, enter PIN via the optical interface:
    - With the WattWächter TTL: connect the yellow (TX) wire to a T3 S3 GPIO (e.g., GPIO5 as UART TX). The agent can send IR pulse sequences through the head's IR LED to the meter's IR receiver.
    - Manually: use a flashlight to pulse the meter's IR receiver. Sequence: meter menu → PIN entry → confirm.
@@ -166,7 +173,7 @@ Many German meters lock 16.7.0 behind a 4-digit PIN:
 | 1.8.0 | Total consumption (Wirkarbeit Bezug) | kWh | ✅ Always |
 | 2.8.0 | Total feed-in (Wirkarbeit Lieferung) | kWh | ✅ Always (if PV) |
 | 16.7.0 | Current power (Wirkleistung Bezug) | W | ⚠️ Needs PIN |
-| 36.7.0 | Current power (Wirkleistung Lieferung) | W | ⚠️ Needs PIN |
+| -1:16.7.0 | Current power feed-in (Wirkleistung Lieferung, negative for bidirectional meters) | W | ⚠️ Needs PIN; manufacturer-specific |
 | 1.8.1 | Consumption HT (Hochtarif) | kWh | ✅ If TOU tariff |
 | 1.8.2 | Consumption NT (Niedertarif) | kWh | ✅ If TOU tariff |
 | 32.7.0 | Current voltage L1 | V | Sometimes |
@@ -188,7 +195,7 @@ Many German meters lock 16.7.0 behind a 4-digit PIN:
 | Symptom | Likely cause | Fix |
 |---------|-------------|-----|
 | No data from IR sensor | IR head alignment off | Adjust magnetic mount position/rotation |
-| Garbled output | Wrong baud rate | Try 9600 vs 115200 vs 38400 |
+| Garbled output | Wrong baud rate | Define `METER_BAUD` in firmware; try 9600 (default), 115200 (Holley DTZ541), or 38400 |
 | Only zeros | PIN not entered | Request PIN from Messstellenbetreiber |
 | Intermittent readout | Ambient light interference | Shroud the sensor with black tape |
 | No 2.8.0 value | No PV or meter doesn't measure feed-in | Check if meter is a two-way meter |
@@ -198,7 +205,7 @@ Many German meters lock 16.7.0 behind a 4-digit PIN:
 
 ## P3. Step 3 — Build Test Receiver
 
-**⚠️ This is test-only infrastructure.** Phase 1 has no production coordinator (Brainstorming §5.1, Q2). This receiver is only needed to validate range and latency in steps 4 and 5. In production, each agent operates independently with no inter-household communication.
+**⚠️ This is test-only infrastructure for validating the LoRa hardware layer (range, latency, penetration).** Phase 1 has no production coordinator (Brainstorming §5.1, Q2) and no inter-household communication for grid protection. The test uses a `GridLimit`-shaped payload as a convenient byte sequence — this is a hardware range test, not a Phase 2 protocol test. In production, each agent operates independently with no inter-household communication.
 
 The receiver can be as simple as a second ESP32+LoRa or an RPi.
 
@@ -361,6 +368,8 @@ agent -> coord | seq=0042 | t_send=1715000000 | t_recv=1715000005 | latency=5000
 
 At SF7, the neighborhood receives a fresh limit update every ~5s. At SF12, every ~7.5s. Either timescale is acceptable for grid limit enforcement (load changes on the order of minutes, not seconds).
 
+> **⚠️ Duty cycle limitation:** This single-agent benchmark assumes one transmitter. With N households sharing the 1% ETSI duty cycle, each agent's airtime budget shrinks proportionally. At 10 agents each sending ~100ms frames every 5s, aggregate airtime ~20% — well over the limit. Phase 2 coordination (not Phase 1) will require a TDMA or CSMA/CA strategy to stay within regulatory bounds. Phase 1 is unaffected (no radio needed).
+
 > **Note:** Again, this GridLimit transmission is test-only. In Phase 1 production, no messages cross households — the limit lives locally on each agent.
 
 ---
@@ -371,7 +380,7 @@ The prototype is a success when:
 
 1. ✅ ESP32 reads a real German smart meter and outputs correct 1.8.0, 2.8.0, and 16.7.0 values
 2. ✅ SML parsing validated against at least 2 brands (ISKRA + one other)
-3. ✅ LoRa (or MQTT) reliably transmits the GridLimit message from agent to coordinator at ≥100m through buildings
+3. ✅ LoRa hardware layer validated: reliable transmission of a test payload at ≥100m through buildings (this validates range, not the Phase 2 protocol — Phase 1 uses no radio)
 4. ✅ Latency from meter reading to coordinator receipt is <10s at worst case
 5. ✅ The prototype runs continuously for 24h without crash or data corruption
 

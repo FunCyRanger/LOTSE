@@ -35,7 +35,7 @@ The decentralized Local Energy Management System (LEM-Netz) enables neighborhood
 | Heat pump | §14a network charges | Shift to low-tariff periods |
 | EV + Wallbox | Dynamic | Coordinate charging with price signals |
 | EV + Wallbox + Heat pump + Battery | Mixed | Full optimization across all assets |
-| Balcony solar (Balkonkraftwerk) | Self-consumption | Maximize generation, curtail if grid export limit exceeded |
+| Balcony solar (Balkonkraftwerk) | Self-consumption | Maximize generation, curtail if grid export limit exceeded ⚠️ Note: most balcony solar systems lack a digital control interface — curtailment may not be programmatically achievable; treated as a known limitation |
 | Balcony solar + Battery | Dynamic | Self-consumption + arbitrage (charge from grid when cheap, discharge when expensive) |
 
 ### 3. Functional Requirements (FR)
@@ -58,8 +58,12 @@ New participants must be able to integrate into the system without extensive adm
 **FR-06 Economic Fairness**  
 The optimization logic MUST NOT apply strategies that result in financial loss to any household compared to their baseline pricing model. Each household must have visibility into the financial impact of coordination decisions and the ability to opt out of participation.
 
+> **Open:** No comparison algorithm or data structure is defined yet (needed before Phase 2). Each household's baseline scenario and the calculation method for financial impact must be specified.
+
 **FR-07 Support for Grid-Serving Control**  
 Provision of mechanisms for forwarding § 14a-compliant grid-serving signals (module 1/2/3) from the grid operator or neighborhood coordinator to each household's EMS. The household's own automation is responsible for implementing the control response.
+
+> **Note:** §14a signal distribution via LEM covers only the forwarding layer. BNetzA compliance (BK6-22-009) additionally requires a registered interface, logging obligations, and possibly certification of the control path. The household EMS must handle the certified §14a response; LEM is not a certified §14a gateway.
 
 ### 4. Non-Functional Requirements
 
