@@ -1,14 +1,14 @@
 # Local Energy Coordination
 
-> Grid-aware coordination for residential energy systems.
+> Reducing transformer peaks through local coordination — respecting each household's individual pricing model.
 
-An experimental open-source project exploring how residential loads — EV chargers, batteries, heat pumps, PV surplus — can be coordinated locally to reduce stress on low-voltage distribution grids. No energy trading, no cloud dependency, no billing.
+An experimental open-source project exploring how residential loads — EV chargers, batteries, heat pumps, PV surplus — can be coordinated locally to reduce stress on low-voltage distribution grids. No energy trading between households, no cloud dependency, no billing. Each household keeps full control over its own devices and pricing — coordination never forces an action that financially disadvantages a household relative to its baseline (FR-06).
 
 ---
 
 ## Why This Matters
 
-More PV + EV chargers + heat pumps = synchronized peaks that low-voltage networks weren't designed for. Overloaded transformers, voltage instability, expensive upgrades. Often the problem isn't total demand — it's lack of coordination.
+More PV + EV chargers + heat pumps = synchronized peaks that low-voltage networks weren't designed for. Overloaded transformers, voltage instability, expensive upgrades. Often the problem isn't total demand — it's lack of coordination. The goal isn't controlling when homes consume — it's preventing simultaneous peaks while keeping every household's economics whole.
 
 ---
 
@@ -75,6 +75,16 @@ flowchart LR
 **Phase 2** — Optional neighborhood coordination (flex offers, load shedding) via the Communication Layer. Phase 1 limits remain the hard ceiling.  
 **Invariant:** Infrastructure safety > economic fairness. Load shed order: wallbox → battery charging → heat pump. The Limit Enforcer is always active, independent of Phase 2.  
 **Regulatory context:** German §14a EnWG (grid-serving control) — the system coexists with it but is not in the signal path and requires no certification. Formal §14a integration is a long-term option dependent on grid operator cooperation, not current scope. See [Brainstorming.md](Brainstorming.md).
+
+---
+
+## Economic Constraint (FR-06)
+
+Every household must break even or benefit compared to its baseline without the system. Coordination signals (load shed, curtailment, shift requests) must never cause financial loss for any household.
+
+This is **unsolved** — no comparison algorithm or data structure is defined yet. See [Requirements.md §2b](Requirements.md#2b-supported-household-types) for the 10 supported household types and their distinct pricing models (fixed tariff, EEG feed-in, dynamic/EPEX Spot, §14a), each with different optimization goals.
+
+Designing the fairness mechanism is required before Phase 2 implementation.
 
 ---
 
