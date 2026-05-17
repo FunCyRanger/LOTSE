@@ -57,7 +57,7 @@ The topology has two tiers and evolves from Phase 1 to Phase 2:
 |----------|--------|-------|-----------|----------|-------------|
 | 1 | Grid Limit | P1+P2 | Pre-configured locally | ✅ Yes | Per-household import/export limit from grid connection |
 | 2 | Load Shed | P2 | Agent ↔ Agent or via coordinator | ⚠️ Hard recommendation | Shed order: wallbox → battery → heat pump |
-| 3 | §14a Signal | P2 | Grid operator → Agents | ✅ Yes if §14a active | Module 1/2/3 reduction signal |
+| 3 | §14a Signal | P2 | SMGW/Steuerbox → household EMS (independent of LEM) | ✅ Yes if §14a active | Module 1/2/3 reduction signal. LEM is not in this path — see §14a context in §7 |
 | 4 | Flex Offer | P2 | Agent ↔ Agent or via coordinator | ❌ Voluntary | "I can shift 3 kW for 1h at 14:00" |
 | 5 | Flex Request | P2 | Agent ↔ Agent or via coordinator | ❌ Voluntary | "Need 5 kW reduction, who can help?" |
 | 6 | Tariff/Price | P1+P2 | Pre-configured or broadcast | ❌ Informational | EPEX Spot, TOU periods |
@@ -309,7 +309,7 @@ Message
 │   ├── reduction_pct: int        // 0-100, how much to reduce
 │   └── duration_s: int
 │
-├── Par14aSignal       (coordinator → all agents, or grid_op → coordinator)
+├── Par14aSignal       (household-EMS → agent, informational — LEM never originates this)
 │   ├── module: enum              // 1 (flat reduction) | 2 (pct reduction) | 3 (time-variable)
 │   ├── reduction_pct: int        // for module 2
 │   ├── valid_from: timestamp
@@ -542,7 +542,8 @@ With RPi 4: add €15.
 │ Adds inter-household communication layer:              │
 │  - Agents exchange flexibility offers and requests    │
 │  - Optional coordinator for offer matching (or P2P)   │
-│  - §14a signal ingress + distribution                 │
+│  - §14a awareness: LEM may receive §14a state from     │
+│    household EMS (which gets it via SMGW/Steuerbox)    │
 │  - Collective load shed coordination                   │
 │                                                       │
 │ Individual limits from Phase 1 remain the hard        │
@@ -553,7 +554,8 @@ With RPi 4: add €15.
 │  - Calculate available flexibility (headroom to       │
 │    individual limit)                                  │
 │  - Submit flex offers to peers or coordinator         │
-│  - Receive and forward §14a signals to home EMS       │
+│  - Optionally read §14a state from home EMS for       │
+│    coordination optimization (informational only)      │
 │  - Track financial impact vs baseline                 │
 │  - Opt-out per household                              │
 │                                                       │
@@ -568,6 +570,26 @@ With RPi 4: add €15.
 │    individual limit. Grid protection is unaffected.   │
 └──────────────────────────────────────────────────────┘
 ```
+
+### 7.1 §14a Context — Where LEM Fits
+
+§14a EnWG (grid-serving control) is implemented through the smart meter infrastructure, independently of LEM:
+
+```
+Grid operator → SMGW (Smart Meter Gateway) → Steuerbox → EEBUS/relay → device or EMS
+```
+
+- The Steuerbox lives in the meter cabinet (Zählerschrank), installed by the Messstellenbetreiber.
+- For **direct control**: the Steuerbox switches a relay contact (230V) that reduces the device to 4.2 kW.
+- For **EMS-based control**: the Steuerbox sends the signal via EEBUS (VDE-AR-E 2829-6) to a certified household EMS (e.g. E3/DC, Loxone), which then distributes the reduction across its managed devices.
+
+LEM is **not in this signal path**. The household EMS receives §14a commands directly from the Steuerbox — LEM has no role in the certified control loop. However:
+
+1. **Coexistence is straightforward**: LEM signals the same EMS (via MQTT/REST) with coordination offers and grid limit info. The EMS reconciles both inputs autonomously — it decides how to split 4.2 kW across devices during a §14a event while respecting LEM's neighborhood coordination goals.
+2. **Optional LEM awareness**: The EMS can expose its current §14a state to the LEM agent (e.g. "§14a active, 4.2 kW limit"), allowing the coordinator to factor this into flex matching. This is informational only — LEM never originates or relays §14a commands.
+3. **No certification needed**: Because LEM is not in the §14a signal path, it does not require §14a certification per BK6-22-300.
+
+**Implication for protocol design (§4):** The `Par14aSignal` message is informational (household-EMS → agent), not a §14a distribution channel. No changes to the Phase 1 or Phase 2 grid protection model are needed — the Phase 1 individual limit already provides local grid protection independent of §14a.
 
 ---
 

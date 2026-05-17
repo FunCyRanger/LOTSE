@@ -60,10 +60,8 @@ The optimization logic MUST NOT apply strategies that result in financial loss t
 
 > **Open:** No comparison algorithm or data structure is defined yet (needed before Phase 2). Each household's baseline scenario and the calculation method for financial impact must be specified.
 
-**FR-07 Support for Grid-Serving Control**  
-Provision of mechanisms for forwarding § 14a-compliant grid-serving signals (module 1/2/3) from the grid operator or neighborhood coordinator to each household's EMS. The household's own automation is responsible for implementing the control response.
-
-> **Note:** §14a signal distribution via LEM covers only the forwarding layer. BNetzA compliance (BK6-22-009) additionally requires a registered interface, logging obligations, and possibly certification of the control path. The household EMS must handle the certified §14a response; LEM is not a certified §14a gateway.
+**FR-07 §14a Compatibility**  
+LEM must coexist with §14a grid-serving control without interference. The grid operator's control path (smart meter gateway → Steuerbox → EEBUS/relay → device or household EMS) is independent and pre-existing for households with §14a-capable devices. LEM operates as a separate coordination layer above this: it may optionally receive §14a state information from the household EMS to inform coordination decisions, but it is never a §14a signal carrier. The household EMS reconciles both LEM coordination signals and §14a reduction commands autonomously. Formal §14a certification is not required for LEM because it is not in the signal path.
 
 ### 4. Non-Functional Requirements
 
