@@ -387,7 +387,25 @@ For LoRa specifically, a simple approach:
 - Sequence number prevents replay
 - No key exchange needed over the air (reduces attack surface)
 
----
+### 4.4 Alternative: Meshtastic as Protocol Foundation
+
+Instead of implementing a custom LoRa protocol stack, **Meshtastic** (open-source LoRa mesh project) can serve as the transport and security layer. LEM would add its application messages on top.
+
+**Advantages:**
+- Mature mesh routing (flooding/rebroadcast) — no custom TDMA/CSMA/CA needed
+- AES-256 encryption, replay protection, PSK per channel
+- Native MQTT bridging (JSON/Protobuf) — enables hybrid LoRa+MQTT without custom gateway code
+- Official Home Assistant integration and Python libraries (`meshtastic`, `meshtastic-mqtt-json`)
+- Runs on LilyGO T3 S3 and Heltec boards with no custom firmware
+- Active German community and field-proven urban range
+
+**Limitations (critical for LEM2):**
+- Chat-oriented design — not optimized for frequent small messages; duty cycle management is critical
+- Optimal up to ~30–40 nodes per mesh; larger networks need tuning (shorter range, fewer hops)
+- PSK-based (no perfect forward secrecy); spoofing possible if key compromised
+- Relaying increases per-node power consumption vs star topology
+
+**Recommendation:** Test standard Meshtastic firmware on 3–5 LilyGO T3 S3 nodes as a Phase 1 proof-of-concept before committing to a custom protocol. If mesh routing and range are adequate, LEM application messages can use Meshtastic Protobuf channels. If airtime limits bite, fall back to a custom star-topology protocol (Architecture A in §9). See `20260517 AI review/Grok.md` for full implementation analysis.<｜end▁of▁thinking｜> was: ---
 
 ## 5. Coordinator Design
 
@@ -752,5 +770,6 @@ Regardless of which communication medium is chosen, the next concrete step could
 3. **Build coordinator prototype** (RPi + LoRa hat or MQTT broker)
 4. **Test range in a real neighborhood** — drive 100m with a LoRa node in a backpack through cellars
 5. **Measure latency and reliability** for grid limit broadcast under real conditions
+6. **Simulate before scaling:** Before deploying Phase 2 coordination, validate flex matching and fairness algorithms in a Python simulation (e.g. pandapower load flow or a simplified discrete-event model). This catches fairness violations (FR-06) and duty cycle issues without hardware iteration.
 
 This would prove the physical layer before investing in the full protocol stack.

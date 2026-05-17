@@ -201,6 +201,8 @@ Many German meters lock 16.7.0 behind a 4-digit PIN:
 | No 2.8.0 value | No PV or meter doesn't measure feed-in | Check if meter is a two-way meter |
 | CRC errors | Weak IR signal | Better alignment, clean meter window |
 
+> **Backup if IR fails:** If the IR interface cannot be read (PIN denied, alignment impossible, meter inaccessible), use non-invasive current transformer (CT) sensors as an alternative. A Shelly EM or similar CT clamp on the household main feed provides 16.7.0-equivalent current power data through WiFi/REST, at ~€30-40 additional cost. This bypasses SML parsing entirely but adds a dependency on WiFi coverage at the meter location and may require a separate bridge device.
+
 ---
 
 ## P3. Step 3 — Build Test Receiver
