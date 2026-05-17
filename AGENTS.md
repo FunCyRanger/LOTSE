@@ -1,6 +1,6 @@
 # Agent Instructions
 
-Specification-only repository for a decentralized neighborhood energy coordination system. **100+ households** per logical neighborhood. **No code, no build tooling, no CI, no test framework.** All work is in Markdown.
+Specification-only repository for a decentralized neighborhood energy coordination system. **100+ households** per logical neighborhood. **No code, no build tooling, no CI, no test framework.** All work is in Markdown. **Do not write code, generate build files, or add CI/CD configurations.**
 
 ## Source documents
 
@@ -9,6 +9,7 @@ Specification-only repository for a decentralized neighborhood energy coordinati
 | `Requirements.md` | Single source of truth — requirements, use cases, priority hierarchy (Draft) |
 | `Brainstorming.md` | Technical pre-design — architecture, protocol, hardware evaluation, open decisions (§8) |
 | `prototype-build.md` | Hardware build plan — BOM, circuit, PlatformIO commands, flashing guide |
+| `README.md` | Project overview, architecture diagrams, technical direction table |
 | `20260517 AI review/Claude.md` | AI review — concrete errors found in prototype-build.md (OBIS codes, library IDs, baud rate) |
 | `20260517 AI review/Grok.md` | AI review — feasibility assessment and recommendations |
 
@@ -31,12 +32,25 @@ Specification-only repository for a decentralized neighborhood energy coordinati
 |---|----------|--------|
 | Q1 | Communication medium (LoRa vs MQTT vs hybrid) | Open |
 | Q2 | Coordinator placement | Phase 1: none. Phase 2: Open |
+| Q3 | Dedicated agent device per household? | Both approaches valid — no single decision needed |
+| Q4 | How is grid limit determined? | Phase 1: individual household limits (configured per agent) |
+| Q5 | Household without home EMS? | Passive participation (meter reading + alerts, no auto-response) |
 | Q6 | Flex matching algorithm | Open |
 | Q7 | Data retention | Open |
+| Q8 | Physical security of coordinator | Depends on Q1/Q2 outcomes |
 
 ## Protocol (Brainstorming §4)
 
 7 message types: GridLimit, LoadShed, Par14aSignal, FlexOffer, FlexRequest, TariffInfo, Heartbeat. Transport-agnostic. JSON/CBOR for MQTT; CBOR/custom binary for LoRa. Security: TLS 1.3 (MQTT) or AES-128-CCM + per-household PSK + HMAC + sequence number (LoRa).
+
+## Known errors (from AI reviews)
+
+The `20260517 AI review/Claude.md` review found errors in `prototype-build.md`. These are verified fixes an agent should carry forward:
+- **Wrong PlatformIO library ID**: `m-/SML` is not a valid registry name. Use **`mzi_/sml`** instead.
+- **Baud rate mismatch**: Holley DTZ541 runs at **115200 baud** but firmware defaults to 9600. Handle per-meter baud config.
+- **Phase inconsistency**: Prototype steps P3–P5 test inter-household LoRa (Phase 2 infra) but are labeled Phase 1 validation. Phase 1 has no inter-household communication.
+
+OBIS codes in the current `prototype-build.md` §P2.1 have been corrected per review (code `36.7.0` replaced with `-1:16.7.0`).
 
 ## Regulatory cross-references
 
