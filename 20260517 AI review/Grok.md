@@ -1,8 +1,8 @@
-**Feasibility Assessment and Error Analysis of Project LOTSE (https://github.com/FunCyRanger/LOTSE).**
+**Feasibility Assessment and Error Analysis (https://github.com/FunCyRanger/LOTSE).**
 
 ### 1. Project Status and Structure
 The repository contains exclusively documentation (Markdown files):
-- **LOTSE-Requirements.md** (requirements analysis),
+- **Requirements.md** (requirements analysis),
 - **Brainstorming.md** (technical concept and variant evaluation),
 - **AGENTS.md** (summary and architecture invariants),
 - **prototype-build.md** (detailed prototype build plan).
@@ -98,11 +98,11 @@ If you would like to deepen specific components (e.g. firmware structure, simula
 
 ---
 
-### Meshtastic Mesh Implementation for LOTSE: In-Depth Analysis and Implementation Recommendations
+### Meshtastic Mesh Implementation: In-Depth Analysis and Implementation Recommendations
 
-Meshtastic is an open, decentralized LoRa-based mesh network designed for robust off-grid communication. It uses flooding routing (rebroadcasting), AES-256 encryption, and supports a variety of ESP32-based hardware platforms. Integration into LOTSE fits the defined NFRs (high range through walls, no recurring costs, CE compliance, data sovereignty), but carries specific technical limitations that must be considered.
+Meshtastic is an open, decentralized LoRa-based mesh network designed for robust off-grid communication. It uses flooding routing (rebroadcasting), AES-256 encryption, and supports a variety of ESP32-based hardware platforms. Integration into the system fits the defined NFRs (high range through walls, no recurring costs, CE compliance, data sovereignty), but carries specific technical limitations that must be considered.
 
-#### 1. Technical Suitability for LOTSE
+#### 1. Technical Suitability
 **Advantages:**
 - **Mesh robustness**: Automatic rebroadcasting improves coverage in irregular neighborhoods without a dedicated coordinator. Graceful degradation during node failures.
 - **Hardware compatibility**: Direct support for LilyGO T3 S3 (as in the Prototype Build). Good availability and low cost.
@@ -110,7 +110,7 @@ Meshtastic is an open, decentralized LoRa-based mesh network designed for robust
 - **Security**: AES-256 (PSK for channels, improved PKC for DMs since v2.5). Replay protection and admin key mechanisms present.
 - **Range**: In urban/German environments (868 MHz) typically several hundred meters, with optimal antenna and line-of-sight up to kilometers. Practical tests necessary.
 
-**Limitations (critical for LOTSE):**
+**Limitations (critical for the system):**
 - **Bandwidth & duty cycle**: In Europe (868 MHz) 1% (sometimes 10% in certain sub-bands) duty cycle applies. Meshtastic is chat-oriented; frequent or large packets (e.g. detailed load profiles) quickly lead to airtime constraints. Suitable for sporadic signals (grid limit, load shed), less for continuous telemetry streaming.
 - **Scalability**: Optimal up to approx. 30–40 nodes per mesh. Larger networks require adjusted settings (shorter range, fewer hops).
 - **Security details**: PSK-based (no perfect forward secrecy). Spoofing possible if key is compromised. Additional authentication layer recommended for regulatory applications (§14a).
@@ -129,7 +129,7 @@ Meshtastic is an open, decentralized LoRa-based mesh network designed for robust
   - Channel configuration: Own encrypted channel (exchange PSK during onboarding).
   - Telemetry: Enable for battery, air utilization, position (optional).
   - Module API: For custom modules (e.g. periodic sending of grid status).
-- **Custom firmware**: Possible via PlatformIO/ESP-IDF. Recommended for LOTSE-specific packets (e.g. standardized flex offer protobufs), but start with standard to maintain compatibility.
+- **Custom firmware**: Possible via PlatformIO/ESP-IDF. Recommended for system-specific packets (e.g. standardized flex offer protobufs), but start with standard to maintain compatibility.
 
 #### 4. Software Integration and Application Logic
 - **Communication flow**:

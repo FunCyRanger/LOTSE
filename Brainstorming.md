@@ -1,13 +1,13 @@
-# Technical Concept Brainstorming: LOTSE
+# Technical Concept Brainstorming
 
 **Status:** Brainstorming / Pre-design
-**Based on:** `LOTSE-Requirements.md` (Draft)
+**Based on:** `Requirements.md` (Draft)
 
 ---
 
 ## 1. Architecture Overview
 
-The LOTSE is a **signaling and coordination layer** between autonomous household energy management systems. It does not control end devices. 
+The system is a **signaling and coordination layer** between autonomous household energy management systems. It does not control end devices. 
 
 **Phase 1 uses individual allocation:** Each household has a configured individual grid limit (based on its grid connection contract). The agent enforces this limit locally — no inter-household communication needed for grid protection. This avoids any dependency on transformer access or central infrastructure.
 
@@ -57,7 +57,7 @@ The topology has two tiers and evolves from Phase 1 to Phase 2:
 |----------|--------|-------|-----------|----------|-------------|
 | 1 | Grid Limit | P1+P2 | Pre-configured locally | ✅ Yes | Per-household import/export limit from grid connection |
 | 2 | Load Shed | P2 | Agent ↔ Agent or via coordinator | ⚠️ Hard recommendation | Shed order: wallbox → battery → heat pump |
-| 3 | §14a Signal | P2 | SMGW/Steuerbox → household EMS (independent of LOTSE) | ✅ Yes if §14a active | Module 1/2/3 reduction signal. LOTSE is not in this path — see §14a context in §7 |
+| 3 | §14a Signal | P2 | SMGW/Steuerbox → household EMS (independent of the system) | ✅ Yes if §14a active | Module 1/2/3 reduction signal. The system is not in this path — see §14a context in §7 |
 | 4 | Flex Offer | P2 | Agent ↔ Agent or via coordinator | ❌ Voluntary | "I can shift 3 kW for 1h at 14:00" |
 | 5 | Flex Request | P2 | Agent ↔ Agent or via coordinator | ❌ Voluntary | "Need 5 kW reduction, who can help?" |
 | 6 | Tariff/Price | P1+P2 | Pre-configured or broadcast | ❌ Informational | EPEX Spot, TOU periods |
@@ -175,7 +175,7 @@ lem/{neighborhood_id}/household/{hh_id}/status    ← Health, connection state
 
 **Cost**: HomePlug adapters €20-50 each. Limited OSS ecosystem.
 
-**Key tradeoff**: German PV inverters and modern power electronics are known to inject noise on power lines, potentially degrading PLC performance. Modules are relatively expensive. No established OSS stack for LOTSE use.
+**Key tradeoff**: German PV inverters and modern power electronics are known to inject noise on power lines, potentially degrading PLC performance. Modules are relatively expensive. No established OSS stack exists for this use case.
 
 ---
 
@@ -313,7 +313,7 @@ Message
 │   ├── reduction_pct: int        // 0-100, how much to reduce
 │   └── duration_s: int
 │
-├── Par14aSignal       (household-EMS → agent, informational — LOTSE never originates this)
+├── Par14aSignal       (household-EMS → agent, informational — the system never originates this)
 │   ├── module: enum              // 1 (flat reduction) | 2 (pct reduction) | 3 (time-variable)
 │   ├── reduction_pct: int        // for module 2
 │   ├── valid_from: timestamp
@@ -393,7 +393,7 @@ For LoRa specifically, a simple approach:
 
 ### 4.4 Alternative: Meshtastic as Protocol Foundation
 
-Instead of implementing a custom LoRa protocol stack, **Meshtastic** (open-source LoRa mesh project) can serve as the transport and security layer. LOTSE would add its application messages on top.
+Instead of implementing a custom LoRa protocol stack, **Meshtastic** (open-source LoRa mesh project) can serve as the transport and security layer. The system would add its application messages on top.
 
 **Advantages:**
 - Mature mesh routing (flooding/rebroadcast) — no custom TDMA/CSMA/CA needed
@@ -403,13 +403,13 @@ Instead of implementing a custom LoRa protocol stack, **Meshtastic** (open-sourc
 - Runs on LilyGO T3 S3 and Heltec boards with no custom firmware
 - Active German community and field-proven urban range
 
-**Limitations (critical for LOTSE):**
+**Limitations (critical for the system):**
 - Chat-oriented design — not optimized for frequent small messages; duty cycle management is critical
 - Optimal up to ~30–40 nodes per mesh; for 100+ households, Meshtastic would require multiple meshes interconnected by a gateway node (e.g., RPi bridging two LoRa channels), adding topology complexity and a potential single point of failure
 - PSK-based (no perfect forward secrecy); spoofing possible if key compromised
 - Relaying increases per-node power consumption vs star topology
 
-**Recommendation:** Test standard Meshtastic firmware on 3–5 LilyGO T3 S3 nodes as a Phase 1 proof-of-concept before committing to a custom protocol. If mesh routing and range are adequate, LOTSE application messages can use Meshtastic Protobuf channels. If airtime limits bite, fall back to a custom star-topology protocol (Architecture A in §9). See `20260517 AI review/Grok.md` for full implementation analysis.<｜end▁of▁thinking｜> was: ---
+**Recommendation:** Test standard Meshtastic firmware on 3–5 LilyGO T3 S3 nodes as a Phase 1 proof-of-concept before committing to a custom protocol. If mesh routing and range are adequate, system application messages can use Meshtastic Protobuf channels. If airtime limits bite, fall back to a custom star-topology protocol (Architecture A in §9). See `20260517 AI review/Grok.md` for full implementation analysis.<｜end▁of▁thinking｜> was: ---
 
 ## 5. Coordinator Design
 
@@ -548,7 +548,7 @@ With RPi 4: add €15.
 │ Adds inter-household communication layer:              │
 │  - Agents exchange flexibility offers and requests    │
 │  - Optional coordinator for offer matching (or P2P)   │
-│  - §14a awareness: LOTSE may receive §14a state from     │
+ │  - §14a awareness: the system may receive §14a state from     │
 │    household EMS (which gets it via SMGW/Steuerbox)    │
 │  - Collective load shed coordination                   │
 │                                                       │
@@ -567,7 +567,7 @@ With RPi 4: add €15.
 │                                                       │
 │ Fairness validation:                                  │
 │  - Each agent computes: would I have done better       │
-│    without LOTSE coordination?                          │
+ │    without system coordination?                          │
 │  - If any household loses, coordination is adjusted   │
 │                                                       │
 │ Graceful degradation:                                 │
@@ -577,9 +577,9 @@ With RPi 4: add €15.
 └──────────────────────────────────────────────────────┘
 ```
 
-### 7.1 §14a Context — Where LOTSE Fits
+### 7.1 §14a Context — Where the System Fits
 
-§14a EnWG (grid-serving control) is implemented through the smart meter infrastructure, independently of LOTSE:
+§14a EnWG (grid-serving control) is implemented through the smart meter infrastructure, independently of the system:
 
 ```
 Grid operator → SMGW (Smart Meter Gateway) → Steuerbox → EEBUS/relay → device or EMS
@@ -589,11 +589,11 @@ Grid operator → SMGW (Smart Meter Gateway) → Steuerbox → EEBUS/relay → d
 - For **direct control**: the Steuerbox switches a relay contact (230V) that reduces the device to 4.2 kW.
 - For **EMS-based control**: the Steuerbox sends the signal via EEBUS (VDE-AR-E 2829-6) to a certified household EMS (e.g. E3/DC, Loxone), which then distributes the reduction across its managed devices.
 
-LOTSE is **not in this signal path**. The household EMS receives §14a commands directly from the Steuerbox — LOTSE has no role in the certified control loop. However:
+The system is **not in this signal path**. The household EMS receives §14a commands directly from the Steuerbox — it has no role in the certified control loop. However:
 
-1. **Coexistence is straightforward**: LOTSE signals the same EMS (via MQTT/REST) with coordination offers and grid limit info. The EMS reconciles both inputs autonomously — it decides how to split 4.2 kW across devices during a §14a event while respecting LOTSE's neighborhood coordination goals.
-2. **Optional LOTSE awareness**: The EMS can expose its current §14a state to the LOTSE agent (e.g. "§14a active, 4.2 kW limit"), allowing the coordinator to factor this into flex matching. This is informational only — LOTSE never originates or relays §14a commands.
-3. **No certification needed**: Because LOTSE is not in the §14a signal path, it does not require §14a certification per BK6-22-300.
+1. **Coexistence is straightforward**: the system signals the same EMS (via MQTT/REST) with coordination offers and grid limit info. The EMS reconciles both inputs autonomously — it decides how to split 4.2 kW across devices during a §14a event while respecting the system's neighborhood coordination goals.
+2. **Optional system awareness**: The EMS can expose its current §14a state to the system agent (e.g. "§14a active, 4.2 kW limit"), allowing the coordinator to factor this into flex matching. This is informational only — the system never originates or relays §14a commands.
+3. **No certification needed**: Because the system is not in the §14a signal path, it does not require §14a certification per BK6-22-300.
 
 **Implication for protocol design (§4):** The `Par14aSignal` message is informational (household-EMS → agent), not a §14a distribution channel. No changes to the Phase 1 or Phase 2 grid protection model are needed — the Phase 1 individual limit already provides local grid protection independent of §14a.
 
@@ -721,7 +721,7 @@ Phase 2 adds flexibility coordination between households. The evaluation below c
 | **C** | MQTT over internet | Cloud coordinator | All agents connect via outbound MQTT to a broker on a VPS |
 | **D** | MQTT over internet | Local coordinator | One household hosts coordinator, others connect via internet |
 | **E** | None (local only) | None | Phase 1 only — no flexibility coordination between households |
-| **F** | LoRa 868 MHz | Meshtastic mesh | Existing OSS LoRa mesh (Meshtastic) on same T3 S3 hardware; LOTSE app layer on top via Protobuf channels; MQTT bridge for hybrid fallback |
+| **F** | LoRa 868 MHz | Meshtastic mesh | Existing OSS LoRa mesh (Meshtastic) on same T3 S3 hardware; system app layer on top via Protobuf channels; MQTT bridge for hybrid fallback |
 
 ### 9.3 Evaluation Criteria
 
