@@ -19,7 +19,7 @@ def main():
                         help="Fairness approach to test (A-I). Overrides config.")
     parser.add_argument("--days", "-d", type=int, default=None,
                         help="Duration in days. Overrides config.")
-    parser.add_argument("--output", "-o", default="output",
+    parser.add_argument("--output", "-o", default="results",
                         help="Output directory")
     parser.add_argument("--verbose", "-v", action="store_true",
                         help="Print progress")
