@@ -74,6 +74,8 @@ No breadboard, no soldering. The WattWächter TTL comes with a pre-wired 1m cabl
 
 **Why Arduino over ESPHome:** ESPHome (listed in Brainstorming §3.2) is simpler (YAML-based) but limited for custom load-shed logic, flexible MQTT topic control, and the agent state machine to come. Arduino + PlatformIO gives full control over the agent behavior with minimal overhead.
 
+> **Alternative: Meshtastic firmware path** — Instead of a custom Arduino firmware, flash standard Meshtastic firmware on the T3 S3 (Brainstorming §4.4). This gives LoRa mesh, AES-256 encryption, MQTT bridging, and Home Assistant integration out of the box. The SML reader runs as a separate process (on a second core or companion ESP32) and injects meter data into Meshtastic's Protobuf channel. This path is lower-risk for Phase 2 evaluation but defers custom load-shed logic to a later iteration. See P7 for the test plan.
+
 **EMS integration deferred:** This prototype outputs parsed meter data over serial only. Integration with OpenEMS/evcc/Home Assistant via MQTT topics (Brainstorming §3.3) will be added in the next build iteration, after the physical layer is proven.
 
 ### P1.4 Flashing & First Test
@@ -393,3 +395,62 @@ The prototype is a success when:
 - Simple onboarding (FR-05): web UI or captive portal for limit configuration
 
 **After success of both iterations:** Full protocol stack with the 7 message types (Brainstorming §4.1) and inter-household coordination (Phase 2).
+
+---
+
+## P7. Optional Step — Meshtastic Feasibility Check
+
+Before committing to a custom LoRa protocol stack, validate whether standard Meshtastic firmware satisfies the Phase 2 communication requirements. This uses identical LilyGO T3 S3 hardware — the only change is the firmware.
+
+### P7.1 Flashing
+
+```bash
+# Flash Meshtastic firmware via web flasher (no build tools needed):
+#   1. Open https://flasher.meshtastic.org in a browser
+#   2. Connect T3 S3 via USB, select "LilyGO T3 S3" board
+#   3. Select region "EU_868" and flash
+
+# Alternative: CLI flash
+pip install meshtastic-flasher
+meshtastic-flasher --port /dev/ttyACM0 --board t3-s3 --region EU_868
+```
+
+### P7.2 Configuration
+
+```bash
+# Set LEM channel (encrypted on radio, unencrypted Protobuf on MQTT bridge)
+meshtastic --set lora.region EU_868
+meshtastic --set channel.psk "LEM2-Neighborhood-Key"  # shared PSK for all agents
+meshtastic --set position.gps_mode 0  # disable GPS (not needed)
+
+# Configure MQTT bridge (if household has internet)
+meshtastic --set mqtt.enabled true
+meshtastic --set mqtt.address "mqtt://192.168.1.100:1883"  # local broker
+```
+
+### P7.3 Test Procedure
+
+Repeat P4 (range test) and P5 (latency measurement) with Meshtastic firmware instead of custom LoRa. Key differences:
+
+| Aspect | Custom LoRa (P4–P5) | Meshtastic (P7) |
+|--------|---------------------|-----------------|
+| Payload | 18–25 byte binary | Protobuf wrapped in Meshtastic frame (~50–100 bytes) |
+| Routing | Point-to-point | Mesh flooding (each node rebroadcasts) |
+| Duty cycle | Single transmitter | Each relay consumes airtime too |
+| Latency | Direct TX → RX | Flooding adds per-hop delay |
+
+### P7.4 Pass/Fail Criteria
+
+- **PASS**: ≥80% packet delivery at 100m (same as P4.3) with ≤5s end-to-end latency
+- **PASS**: Mesh routing works across 3+ nodes (agent → relay → coordinator)
+- **PASS**: Duty cycle stays under 1% at expected message frequency (grid limit every 60s, flex offers on demand)
+- **FAIL**: Meshtastic protocol overhead exceeds LoRa frame budget for a GridLimit-sized payload
+- **FAIL**: Flooding causes excessive airtime consumption at ≥5 nodes
+
+### P7.5 Decision Gate
+
+| If Meshtastic test result is... | Then... |
+|--------------------------------|---------|
+| ✅ All PASS | Adopt Meshtastic as Phase 2 transport layer. Build LEM app layer as Protobuf messages on top |
+| ⚠️ Range or latency borderline | Tune spreading factor, antenna, or relay placement. Retest |
+| ❌ Range or duty cycle fails | Abandon Meshtastic path. Proceed with custom LoRa protocol (Architecture A in Brainstorming §9) |

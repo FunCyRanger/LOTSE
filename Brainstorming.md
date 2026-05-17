@@ -693,6 +693,7 @@ Phase 2 adds flexibility coordination between households. The evaluation below c
 | **C** | MQTT over internet | Cloud coordinator | All agents connect via outbound MQTT to a broker on a VPS |
 | **D** | MQTT over internet | Local coordinator | One household hosts coordinator, others connect via internet |
 | **E** | None (local only) | None | Phase 1 only — no flexibility coordination between households |
+| **F** | LoRa 868 MHz | Meshtastic mesh | Existing OSS LoRa mesh (Meshtastic) on same T3 S3 hardware; LEM app layer on top via Protobuf channels; MQTT bridge for hybrid fallback |
 
 ### 9.3 Evaluation Criteria
 
@@ -712,17 +713,17 @@ Weights 1-5, higher = more important. Focused on Phase 2 requirements. Grid prot
 
 ### 9.4 Scores (1-5 per architecture per criterion)
 
-| # | Criterion | Wt | A: LoRa+Coord | B: LoRa+P2P | C: MQTT+Cloud | D: MQTT+Local | E: None |
-|---|-----------|----|---------------|-------------|---------------|---------------|---------|
-| W1 | Grid protection unaffected | 5 | **5** Phase 1 fallback | **5** Phase 1 fallback | **5** Phase 1 fallback | **5** Phase 1 fallback | **5** N/A |
-| W2 | No incoming ports | 5 | **5** radio, no IP | **5** radio, no IP | **5** all outbound | **2** coordinator opens port | **5** no comms |
-| W3 | Range | 5 | **5** through buildings | **5** through buildings | **4** WiFi must reach cellar | **4** same | **5** N/A |
-| W4 | Easy Phase 2 setup | 4 | **4** add LoRa module or new device | **4** same | **3** WiFi config + broker credentials | **3** coordinator household config | **5** nothing to add |
-| W5 | EUR 0 recurring | 4 | **5** none | **5** none | **2** EUR 36-48/yr | **5** none | **5** none |
-| W6 | Data privacy | 3 | **5** stays in neighborhood | **5** stays in neighborhood | **3** transits VPS | **4** passes through neighbor | **5** no data leaves |
-| W7 | Maturity / OSS | 3 | **3** LoRa+SML mature, flex protocol new | **2** gossip protocol new | **5** MQTT, evcc, OpenEMS mature | **4** same, local hosting | **5** nothing to build |
-| W8 | Flex bandwidth | 3 | **4** sufficient for flex offers | **3** P2P on LoRa complex | **5** high bandwidth | **5** high bandwidth | **1** no flex possible |
-| W9 | Incremental from P1 | 2 | **3** needs new hardware (LoRa) or agent upgrade | **3** same | **4** software-only upgrade if WiFi exists | **4** same | **5** already done |
+| # | Criterion | Wt | A: LoRa+Coord | B: LoRa+P2P | C: MQTT+Cloud | D: MQTT+Local | E: None | F: LoRa+Meshtastic |
+|---|-----------|----|---------------|-------------|---------------|---------------|---------|-------------------|
+| W1 | Grid protection unaffected | 5 | **5** Phase 1 fallback | **5** Phase 1 fallback | **5** Phase 1 fallback | **5** Phase 1 fallback | **5** N/A | **5** Phase 1 fallback |
+| W2 | No incoming ports | 5 | **5** radio, no IP | **5** radio, no IP | **5** all outbound | **2** coordinator opens port | **5** no comms | **5** radio, no IP |
+| W3 | Range | 5 | **5** through buildings | **5** through buildings | **4** WiFi must reach cellar | **4** same | **5** N/A | **5** through buildings |
+| W4 | Easy Phase 2 setup | 4 | **4** add LoRa module or new device | **4** same | **3** WiFi config + broker credentials | **3** coordinator household config | **5** nothing to add | **5** flash Meshtastic firmware, configure channel |
+| W5 | EUR 0 recurring | 4 | **5** none | **5** none | **2** EUR 36-48/yr | **5** none | **5** none | **5** none |
+| W6 | Data privacy | 3 | **5** stays in neighborhood | **5** stays in neighborhood | **3** transits VPS | **4** passes through neighbor | **5** no data leaves | **5** stays in neighborhood |
+| W7 | Maturity / OSS | 3 | **3** LoRa+SML mature, flex protocol new | **2** gossip protocol new | **5** MQTT, evcc, OpenEMS mature | **4** same, local hosting | **5** nothing to build | **5** Meshtastic production-proven, active community |
+| W8 | Flex bandwidth | 3 | **4** sufficient for flex offers | **3** P2P on LoRa complex | **5** high bandwidth | **5** high bandwidth | **1** no flex possible | **3** Meshtastic overhead vs custom binary |
+| W9 | Incremental from P1 | 2 | **3** needs new hardware (LoRa) or agent upgrade | **3** same | **4** software-only upgrade if WiFi exists | **4** same | **5** already done | **5** same T3 S3 hardware, reflash only |
 
 ### 9.5 Weighted Totals
 
@@ -733,22 +734,27 @@ Weights 1-5, higher = more important. Focused on Phase 2 requirements. Grid prot
 | **C: MQTT+Cloud** | 25 | 25 | 20 | 12 | 8 | 9 | 15 | 15 | 8 | **137** |
 | **D: MQTT+Local** | 25 | 10 | 20 | 12 | 20 | 12 | 12 | 15 | 8 | **134** |
 | **E: None (P1 only)** | 25 | 25 | 25 | 20 | 20 | 15 | 15 | 3 | 10 | **158** |
+| **F: LoRa+Meshtastic** | 25 | 25 | 25 | 20 | 20 | 15 | 15 | 9 | 10 | **164** |
 
 ### 9.6 Interpretation
 
-**Architecture E (Phase 1 only) scores highest (158)** — but this simply means "do nothing extra," which is correct for Phase 1. It validates that Phase 1 is solid on its own.
+**Architecture E (Phase 1 only) scores 158** — but this simply means "do nothing extra," which is correct for Phase 1. It validates that Phase 1 is solid on its own.
 
-**For Phase 2**, Architecture A (LoRa + lightweight coordinator) leads at 153. Key drivers:
-- Perfect scores on the critical criteria (W1-W3)
-- No recurring cost
-- Data stays in the neighborhood
-- LoRa is sufficient bandwidth for flex offers (small messages, infrequent)
+**Architecture F (LoRa + Meshtastic mesh) scores highest overall at 164**, beating even the Phase-1-only baseline. Key drivers:
+- Perfect scores on critical criteria (W1-W3, same LoRa hardware)
+- **W7 maturity at 5** instead of A's 3 — Meshtastic is production-proven with thousands of deployed nodes, native MQTT bridging, and Home Assistant integration
+- **W4 and W9 at 5** — zero incremental effort from Phase 1: same T3 S3 hardware, just flash Meshtastic firmware and configure a channel
+- Only concession: W8=3 because Meshtastic's chat-oriented protocol overhead is higher than custom binary, but still sufficient for sporadic flex signals
+
+**For Phase 2**, Architecture A (LoRa + lightweight coordinator) scores 153. Strong across the board, but requires building a custom protocol from scratch (penalty on W7).
 
 **Architecture C (MQTT+Cloud) scores 137.** It wins on maturity and bandwidth but the recurring cost and internet dependency for Phase 2 services are drawbacks.
 
-**Architecture D (MQTT+Local) ranks lowest (134)** due to the coordinator household port requirement.
+**Architecture D (MQTT+Local) ranks lowest among Phase 2 options (134)** due to the coordinator household port requirement.
 
 The gap between architectures is smaller than before because Phase 1's individual allocation ensures grid protection regardless of the Phase 2 choice.
+
+**Practical implication:** The prototype should test standard Meshtastic firmware (P7 in prototype-build.md) alongside the custom LoRa path before committing to a protocol stack. If Meshtastic's range, latency, and duty cycle are adequate, it may eliminate the need for a custom protocol entirely.
 
 ### 9.7 Wrong Directions
 
