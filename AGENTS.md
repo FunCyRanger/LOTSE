@@ -1,76 +1,98 @@
 # Agent Instructions
 
-Specification-only repository for a decentralized neighborhood energy coordination system. **100+ households** per logical neighborhood. **No code, no build tooling, no CI, no test framework.** All work is in Markdown. **Do not write code, generate build files, or add CI/CD configurations.**
+Spec + simulation repo for a decentralized neighborhood energy coordination system (100+ households). Primary objective: maximize grid utilization to defer upgrades. Design docs are Markdown; the grid utilization simulation is Python.
 
 ## Source documents
 
-| File | What it contains |
-|------|-----------------|
-| `Requirements.md` | Single source of truth — requirements, use cases, priority hierarchy (Draft) |
-| `Brainstorming.md` | Technical pre-design — architecture, protocol, hardware evaluation, open decisions (§8) |
-| `prototype-build.md` | Hardware build plan — BOM, circuit, PlatformIO commands, flashing guide |
-| `README.md` | Project overview, architecture diagrams, technical direction table |
-| `20260517 AI review/Claude.md` | AI review — concrete errors found in prototype-build.md (OBIS codes, library IDs, baud rate) |
-| `20260517 AI review/Grok.md` | AI review — feasibility assessment and recommendations |
+| File | Key content |
+|------|-------------|
+| `Requirements.md` | Requirements, use cases, 10 household types (T1–T10), priority hierarchy |
+| `Brainstorming.md` | Architecture, protocol, 7 message types, open decisions (§8) |
+| `prototype-build.md` | Hardware BOM, circuit, PlatformIO flashing guide |
+| `simulation-spec.md` | Grid utilization simulation specification (v2) |
+| `fairness-analysis.md` | FR-06 problem statement (superseded — see simulation-spec.md) |
+| `20260517 AI review/Claude.md` | Verified errors in `prototype-build.md` |
+
+## Simulation code
+
+**Active**: `simulation_v2/` (pandapower + numpy + pandas). **Archived**: `simulation/` (older version, do not use).
+
+```sh
+# Run (approach A, 365 days, synthetic data)
+python -m simulation_v2.sim
+
+# Common variations
+python -m simulation_v2.sim --approach E --days 30
+python -m simulation_v2.sim --data-source opsd
+python -m simulation_v2.sim -c configs/stress.yaml
+
+# Technology scaling (PV, EV, heat pump penetration)
+python -m simulation_v2.sim --pv-scale 2.0 --ev-scale 1.5
+
+# Penetration sweep — find hosting capacity limits
+python -m simulation_v2.sim --sweep
+
+# Exit code: 0 = grid safe (coordination kept transformer ≤ 100%), 1 = grid unsafe
+```
+
+Deps: `pip install pandapower numpy pandas pyyaml` (see `simulation_v2/requirements.txt`).
+
+**Key files:**
+- `sim.py` — entrypoint, CLI arg parsing, sys.path quirk (`sys.path.insert(0, parent.parent)`), `--sweep` mode
+- `agents.py` — 10 household agents (T1–T10), each with a list of `FlexDevice` (ev/battery/pv/heatpump) and device-level priority shedding
+- `coordinator.py` — 9 coordination strategies (A–I), `_priority_shed()` tiers: wallbox → battery → heat pump
+- `core.py` — `run_simulation()`, `write_timeseries_csv()`, dataclasses for state/signals, `compute_utilization_metrics()`
+- `grid.py` — builds pandapower LV network from config
+- `data_loader.py` — OPSD time-series data loading
+- `configs/` — `default.yaml`, `opsd.yaml`, `stress.yaml`, `opsd_stress.yaml`
+
+**No tests exist.** Results directory (`simulation_v2/results/`) is gitignored — regenerated on each run.
+
+### Configuration
+
+Config keys of interest in `configs/*.yaml`:
+- `approach`: coordination strategy (A–I), overridable via `--approach`
+- `duration_days`, `timestep_min`, `seed`, `n_households`
+- `household_mix`: dict mapping T1–T10 to proportions
+- `type_defaults`: per-type overrides for `pv_kwp`, `battery_kwh`, `annual_consumption_kwh`
+- `tariff_rate_ct_per_kwh`, `eeg_rate_ct_per_kwh`
+- `transformer_kva`, `feeder_config`, `par14a`
+- `technology_scaling`: `{pv, ev, heatpump}` multipliers for penetration sweeps (default 1.0)
+- `sweep`: `{max_pv_scale, max_ev_scale, max_hp_scale, step}` for `--sweep` mode
 
 ## Architecture invariants
 
-- **Signaling/coordination layer only** — never controls inverters, heat pumps, or wallboxes directly. All device control stays with the household's own EMS (OpenEMS, evcc, Home Assistant).
-- **Infrastructure Safety > Economic Fairness** — load shed order: EV wallbox → battery charging → heat pump. Balcony solar curtailed if reverse power flow limits exceeded (non-negotiable).
-- **Phase 1**: Individual allocation, no inter-household communication needed. **Phase 2**: flexibility trading + §14a signals added; Phase 1 limits remain hard ceiling.
-- **FR-06**: Each household must break even or benefit vs. baseline. See §2b for 10 household types.
-- No balancing-energy-sharing accounting (deliberate).
+- **Signaling/coordination layer only** — never controls devices directly. All device control stays with household's EMS (OpenEMS, evcc, Home Assistant).
+- **Infrastructure Safety (hard constraint) > Economic Fairness (informational)** — load shed order: EV wallbox → battery charging → heat pump. Balcony solar curtailed if reverse power flow exceeded. Within each household, devices shed by priority: EV (prio 1) → battery (2) → PV (3) → heat pump (4).
+- **Phase 1**: individual allocation, no inter-household communication. **Phase 2**: flexibility trading + §14a signals; Phase 1 limits remain hard ceiling.
+- **Grid utilization** is the primary evaluation metric: peak reduction, congestion events, headroom increase. FR-06 (household economics) is informational only.
 
 ## Communication constraints
 
-- No incoming ports (outbound-only or dedicated local medium). ≥100m through walls/cellars. No port forwarding, DDNS, or VPN. Internet connections allowed if constraints met.
-- Preferred transport: LoRa 868 MHz (~50 bytes per ~50s, 1% duty cycle). See Brainstorming §2/§9 for full evaluation.
+- No incoming ports. ≥100m through walls/cellars. No port forwarding, DDNS, or VPN.
+- Preferred transport: LoRa 868 MHz (~50 bytes per ~50s, 1% duty cycle).
+
+## Known errors (verified, carry forward)
+
+| Error | Fix |
+|-------|-----|
+| PlatformIO library ID `m-/SML` invalid | Use **`mzi_/sml`** instead |
+| Holley DTZ541 baud 115200 but firmware defaults to 9600 | Handle per-meter baud config |
+| OBIS code `36.7.0` wrong for instantaneous power | Use **`-1:16.7.0`** (bidirectional) |
+| Prototype steps P3–P5 test Phase 2 LoRa but labeled Phase 1 | Phase 1 has no inter-household comm |
 
 ## Open design decisions (Brainstorming §8)
 
 | # | Question | Status |
 |---|----------|--------|
 | Q1 | Communication medium (LoRa vs MQTT vs hybrid) | Open |
-| Q2 | Coordinator placement | Phase 1: none. Phase 2: Open |
-| Q3 | Dedicated agent device per household? | Both approaches valid — no single decision needed |
-| Q4 | How is grid limit determined? | Phase 1: individual household limits (configured per agent) |
-| Q5 | Household without home EMS? | Passive participation (meter reading + alerts, no auto-response) |
+| Q2 | Coordinator placement | Phase 1: none. Phase 2: open |
 | Q6 | Flex matching algorithm | Open |
 | Q7 | Data retention | Open |
-| Q8 | Physical security of coordinator | Depends on Q1/Q2 outcomes |
 
-## Protocol (Brainstorming §4)
+## Key references
 
-7 message types: GridLimit, LoadShed, Par14aSignal, FlexOffer, FlexRequest, TariffInfo, Heartbeat. Transport-agnostic. JSON/CBOR for MQTT; CBOR/custom binary for LoRa. Security: TLS 1.3 (MQTT) or AES-128-CCM + per-household PSK + HMAC + sequence number (LoRa).
-
-## Known errors (from AI reviews)
-
-The `20260517 AI review/Claude.md` review found errors in `prototype-build.md`. These are verified fixes an agent should carry forward:
-- **Wrong PlatformIO library ID**: `m-/SML` is not a valid registry name. Use **`mzi_/sml`** instead.
-- **Baud rate mismatch**: Holley DTZ541 runs at **115200 baud** but firmware defaults to 9600. Handle per-meter baud config.
-- **Phase inconsistency**: Prototype steps P3–P5 test inter-household LoRa (Phase 2 infra) but are labeled Phase 1 validation. Phase 1 has no inter-household communication.
-
-OBIS codes in the current `prototype-build.md` §P2.1 have been corrected per review (code `36.7.0` replaced with `-1:16.7.0`).
-
-## Regulatory cross-references
-
-- §14a EnWG (grid-serving control): https://www.gesetze-im-internet.de/enwg_2005/__14a.html
-- BNetzA §14a procedure: https://www.bundesnetzagentur.de/enwg14a
-- MsbG (metering): https://www.gesetze-im-internet.de/messbg/
-- BNetzA steuerbare VBE: https://www.bundesnetzagentur.de/DE/Vportal/Energie/SteuerbareVBE/start.html
-
-## Key referenced systems
-
-- **OpenEMS**, **evcc**, **Home Assistant** — household EMS (MQTT/REST API)
-- **SML** (IEC 62056-21) — German smart meter protocol via IR/UART; OBIS codes: 1.8.0 (total consumption), 2.8.0 (total feed-in), 16.7.0 (current power)
-- **EPEX Spot** — free day-ahead/intraday data
-- **RadioLib**, **Meshtastic** — LoRa stacks
-- **ESPHome**, **Tasmota** — built-in SML parsing
-
-## Cost targets
-
-Per household: €100–200 one-time (prototype BOM ~€46–55 with LilyGO T3 S3 + WattWächter TTL). Central: ≤€300 one-time. Recurring: €0.
-
-## Git history note
-
-Earlier commits reference the `LEM2` name.
+- **Regulatory**: §14a EnWG, BNetzA procedure, MsbG (metering). Links in `Requirements.md §7`.
+- **EMS**: OpenEMS, evcc, Home Assistant (MQTT/REST API). Smart meter SML (IEC 62056-21) via IR/UART.
+- **LoRa stacks**: RadioLib, Meshtastic. SML parsing: ESPHome, Tasmota.
+- **Cost targets**: €100–200/hh one-time (BOM ~€46–55), central ≤€300, €0 recurring.

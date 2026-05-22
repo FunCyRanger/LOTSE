@@ -682,7 +682,7 @@ These need decisions before implementation starts. Entries accumulate discussion
 **Options**: Only current values / Each agent stores own history / Coordinator stores aggregate history / Optional opt-in logging
 
 **Discussion notes**:
-- **Only current values, no history**: Maximum privacy, minimal resource usage. No debugging capability, no optimization history, no fairness audit trail. Hard to verify FR-06 (economic fairness) without any record.
+- **Only current values, no history**: Maximum privacy, minimal resource usage. No debugging capability, no optimization history, no audit trail. Hard to verify long-term coordination effects without any record.
 - **Each agent stores own history**: Data stays in the household (GDPR-friendly). Enables local trend analysis and fairness validation. Data survives coordinator failure. If the agent device fails, history is lost unless backed up.
 - **Coordinator stores aggregate history**: Enables neighborhood-level trend analysis, transformer load profiles, and system optimization over time. Privacy concern — must only store aggregate (sum of all households), never per-household data, or require explicit consent.
 - **Optional opt-in logging**: Household chooses whether to contribute data. Most flexible but adds permission complexity. Households without logging can still benefit from the system; those with logging help improve coordination over time.
@@ -813,6 +813,6 @@ Regardless of which communication medium is chosen, the next concrete step could
 3. **Build coordinator prototype** (RPi + LoRa hat or MQTT broker)
 4. **Test range in a real neighborhood** — drive 100m with a LoRa node in a backpack through cellars
 5. **Measure latency and reliability** for grid limit broadcast under real conditions
-6. **Simulate before scaling:** Before deploying Phase 2 coordination, validate flex matching and fairness algorithms in a Python simulation (e.g. pandapower load flow or a simplified discrete-event model). This catches fairness violations (FR-06) and duty cycle issues without hardware iteration.
+6. **Simulate before scaling:** Before deploying Phase 2 coordination, validate flex matching and grid utilization in a Python simulation (e.g. pandapower load flow). This measures peak reduction, congestion behavior, and hosting capacity limits without hardware iteration. FR-06 (household economics) is tracked as an informational metric.
 
 This would prove the physical layer before investing in the full protocol stack.

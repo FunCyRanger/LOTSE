@@ -1,0 +1,10 @@
+# Simulation results (regenerated on each run)
+simulation_v2/results/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/

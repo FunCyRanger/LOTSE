@@ -78,13 +78,15 @@ flowchart LR
 
 ---
 
-## Economic Constraint (FR-06)
+## Grid Utilization (primary constraint)
 
-Every household must break even or benefit compared to its baseline without the system. Coordination signals (load shed, curtailment, shift requests) must never cause financial loss for any household.
+Infrastructure safety is the sole hard constraint. The goal is to **use existing grid capacity more efficiently** — deferring transformer and line upgrades by managing peak loads through coordination. The system prioritizes:
 
-This is **unsolved** — no comparison algorithm or data structure is defined yet. See [Requirements.md §2b](Requirements.md#2b-supported-household-types) for the 10 supported household types and their distinct pricing models (fixed tariff, EEG feed-in, dynamic/EPEX Spot, §14a), each with different optimization goals.
+1. **Protecting grid hardware** — transformer and line limits are non-negotiable
+2. **Maximizing capacity utilization** — operate closer to limits by coordinating flexibly
+3. **Hosting more devices** — accommodate increasing PV, EV, heat pumps without grid upgrades
 
-Designing the fairness mechanism is required before Phase 2 implementation.
+Economic impact on households is tracked as an **informational metric** (FR-06) but is not a pass/fail criterion. See [simulation-spec.md](simulation-spec.md) for the evaluation framework.
 
 ---
 

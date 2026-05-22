@@ -1,8 +1,8 @@
-# FR-06 Economic Fairness — Analysis
+# FR-06 Economic Fairness — Analysis (Superseded)
 
-**Status:** Open — collection of approaches, no decision made yet.
+**Status:** Historical reference. FR-06 is now an **informational metric** — infrastructure safety is the sole hard constraint. See `simulation-spec.md` for the updated focus on grid utilization and `simulation_v2/` for the implementation.
+
 **Based on:** Requirements.md §2b, §3 FR-06; Brainstorming §6, §8 Q6/Q7.
-**Prerequisite for:** Phase 2 implementation.
 
 ---
 

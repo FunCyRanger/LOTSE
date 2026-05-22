@@ -20,7 +20,7 @@ The system enables neighborhoods to robustly and cost-effectively coordinate gen
 > **Infrastructure Safety > Economic Fairness**
 
 1. **Infrastructure Safety (highest priority)**: The transformer and line limits are non-negotiable. When a conflict arises, all optimization is suspended to protect grid infrastructure.
-2. **Economic Fairness**: Optimization must not financially disadvantage any household type. Every household must break even or benefit.
+2. **Economic Fairness (informational)**: Optimization should minimize financial disadvantage to any household type. Economic impact is tracked as an informational metric — infrastructure safety always takes precedence.
 3. **If these conflict, infrastructure safety always wins.**
 
 ### 2b. Supported Household Types
@@ -37,6 +37,25 @@ The system enables neighborhoods to robustly and cost-effectively coordinate gen
 | EV + Wallbox + Heat pump + Battery | Mixed | Full optimization across all assets |
 | Balcony solar (Balkonkraftwerk) | Self-consumption | Maximize generation, curtail if grid export limit exceeded ⚠️ Note: most balcony solar systems lack a digital control interface — curtailment may not be programmatically achievable; treated as a known limitation |
 | Balcony solar + Battery | Dynamic | Self-consumption + arbitrage (charge from grid when cheap, discharge when expensive) |
+
+### 2c. Device Hierarchy
+
+Household loads and generation are divided into two categories:
+
+**Uncontrollable devices** — base loads that cannot be curtailed or shifted:
+- Lighting, PCs, entertainment, oven, stove, refrigeration, always-on standby loads
+- These are part of the household's baseline consumption and never included in flexibility offers
+
+**Controllable devices** — can be shed or reduced when grid limits are exceeded, in priority order:
+
+| Priority | Device | Rationale |
+|----------|--------|-----------|
+| 1 (shed first) | EV wallbox | Least comfort impact — charging can be delayed hours without notice |
+| 2 | Battery | No comfort impact — lost arbitrage revenue only; can recharge later |
+| 3 | PV curtailment | Reduces reverse power flow — lost feed-in revenue only; only relevant when exporting |
+| 4 (shed last) | Heat pump | Comfort-sensitive — buffer allows short curtailment but cold building is unacceptable |
+
+Within each household agent, shedding follows this priority: **EV → battery → PV → heat pump**. The coordinator's cross-household priority tiers (T7 → T4/T5/T10 → T6) complement this by targeting device-owning households first.
 
 ### 3. Functional Requirements (FR)
 
@@ -55,10 +74,10 @@ Support for coordinating local surplus and demand within applicable grid limits,
 **FR-05 Simple Onboarding**  
 New participants must be able to integrate into the system without extensive administrative effort.
 
-**FR-06 Economic Fairness**  
-The optimization logic MUST NOT apply strategies that result in financial loss to any household compared to their baseline pricing model. Each household must have visibility into the financial impact of coordination decisions and the ability to opt out of participation.
+**FR-06 Economic Fairness (informational)**  
+The optimization logic SHOULD avoid strategies that result in financial loss to any household compared to their baseline pricing model. This is an informational metric, not a hard constraint — infrastructure safety (FR-01) always takes precedence. Each household must have visibility into the financial impact of coordination decisions and the ability to opt out of participation.
 
-> **Open:** No comparison algorithm or data structure is defined yet (needed before Phase 2). Each household's baseline scenario and the calculation method for financial impact must be specified.
+> **Note:** FR-06 is evaluated as an informational metric in the simulation. The primary hard constraint is infrastructure safety (see FR-01). The comparison algorithm and baseline scenario are defined in the simulation (`simulation_v2/`).
 
 **FR-07 §14a Compatibility**  
 The system must coexist with §14a grid-serving control without interference. The grid operator's control path (smart meter gateway → Steuerbox → EEBUS/relay → device or household EMS) is independent and pre-existing for households with §14a-capable devices. The system operates as a separate coordination layer above this: it may optionally receive §14a state information from the household EMS to inform coordination decisions, but it is never a §14a signal carrier. The household EMS reconciles both system coordination signals and §14a reduction commands autonomously. Formal §14a certification is not required because the system is not in the signal path.
