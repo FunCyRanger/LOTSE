@@ -1,7 +1,7 @@
 # Prototype Build Plan
 
 **Purpose:** Prove the physical and communication layer before investing in the full protocol stack.
-**Based on:** Brainstorming.md §10 Recommendations for Next Step.
+**Based on:** Brainstorming.md §10 Progress — Phase 1 POC already implemented in `meshtastic-fork/`.
 
 ---
 
@@ -60,25 +60,48 @@ No breadboard, no soldering. The WattWächter TTL comes with a pre-wired 1m cabl
 
 ### P1.3 Software Stack
 
-| Layer | Choice | Rationale |
-|-------|--------|-----------|
-| Framework | Arduino core for ESP32 (ESP32-S3 variant) | Largest ecosystem, most SML parsing examples, ESP32-S3 support via `esp32` platform |
-| Build system | PlatformIO | Cross-platform, library manager, simple CLI, `board = esp32-s3-devkitc-1` |
-| SML parser | `sml` library by mzi (`mzi_/sml` in PlatformIO registry), or `SmartMeter` library | Mature, handles German smart meter SML output |
-| OBIS extraction | Manual OBIS code filter on parsed SML | Targeted parsing is simpler than full SML stack |
-| Serial (meter) | HardwareSerial on UART (GPIO4 RX) using ESP32-S3 GPIO matrix | UART1 or UART2 mapped to GPIO4. Define `METER_BAUD` as configurable constant (default 9600, override to 115200 for Holley DTZ541) |
-| LoRa driver | RadioLib (SX1262) | Mature OSS, supports SX1262, RadioLib handles SPI + IRQ + DIO + CAD |
-| Display | Adafruit SSD1306 + Adafruit GFX | 0.96" OLED for local status (grid limit, current power, agent state) |
-| SD card | SD_MMC or SD library (ESP32) | Data logging for validation and potential retention (Q7) |
-| WiFi (optional) | WiFi.h (ESP32 Arduino core) | Only needed if forwarding to MQTT |
+**Chosen approach: Meshtastic firmware fork.** Instead of building a custom Arduino firmware from scratch, we forked the Meshtastic firmware and added an HTTP endpoint (`POST /api/v1/meter`) that accepts Tasmota IR sensor readings and re-broadcasts them over the LoRa mesh. This gives us LoRa mesh routing, AES encryption, MQTT bridging, and Home Assistant integration out of the box — all on the same T3-S3 hardware. See [meshtastic-fork](https://github.com/FunCyRanger/meshtastic-fork) branch `develop`.
 
-**Why Arduino over ESPHome:** ESPHome (listed in Brainstorming §3.2) is simpler (YAML-based) but limited for custom load-shed logic, flexible MQTT topic control, and the agent state machine to come. Arduino + PlatformIO gives full control over the agent behavior with minimal overhead.
+**Fallback: custom Arduino firmware** (at `firmware/` in this repo) — a simpler point-to-point LoRa implementation with no mesh routing. Used only if Meshtastic limitations bind in Phase 2.
 
-> **Alternative: Meshtastic firmware path** — Instead of a custom Arduino firmware, flash standard Meshtastic firmware on the T3 S3 (Brainstorming §4.4). This gives LoRa mesh, AES-256 encryption, MQTT bridging, and Home Assistant integration out of the box. The SML reader runs as a separate process (on a second core or companion ESP32) and injects meter data into Meshtastic's Protobuf channel. This path is lower-risk for Phase 2 evaluation but defers custom load-shed logic to a later iteration. See P7 for the test plan.
+| Layer | Phase 1 POC (Meshtastic fork) | Fallback (custom firmware) |
+|-------|-------------------------------|---------------------------|
+| Framework | Arduino core for ESP32 via PlatformIO (`espressif32` platform) | Arduino core for ESP32 via PlatformIO |
+| LoRa mesh | Meshtastic (SX1262), mesh flooding | RadioLib (SX1262), point-to-point |
+| Meter data ingress | SoftAP HTTP `POST /api/v1/meter` | UART serial from WattWächter TTL |
+| Device config | SoftAP Web UI (192.168.4.1) | Serial CLI |
+| Encryption | AES-256 (Meshtastic built-in) | None (or custom) |
+| MQTT bridging | Built-in Meshtastic MQTT | Custom PubSubClient |
+| Display | SSD1306 via Meshtastic UI | Adafruit SSD1306 + GFX |
+| SD card | LittleFS (Meshtastic) | SD_MMC library |
 
-**EMS integration deferred:** This prototype outputs parsed meter data over serial only. Integration with OpenEMS/evcc/Home Assistant via MQTT topics (Brainstorming §3.3) will be added in the next build iteration, after the physical layer is proven.
+**Why Meshtastic over custom firmware:** See the decision matrix in Brainstorming §9.6 — Architecture F (LoRa+Meshtastic) scores highest (164) across all criteria. The key advantages are production-proven mesh routing, zero incremental protocol development, and the HTTP server extension point that lets a separate Tasmota sensor inject data without modifying the Meshtastic core protocol.
+
+**EMS integration deferred:** This prototype outputs meter data over LoRa and logs it on receiving nodes. Integration with OpenEMS/evcc/Home Assistant via MQTT topics will be added in the next build iteration, after the LoRa link is proven.
 
 ### P1.4 Flashing & First Test
+
+**Option A (chosen): Meshtastic fork** — the Phase 1 POC firmware:
+
+```bash
+# Build the modified Meshtastic fork (T3-S3 v1, no PSRAM)
+cd /home/felix/LOTSE/meshtastic-fork
+pio run -e tlora-t3s3-v1
+
+# Flash
+pio run -e tlora-t3s3-v1 --target upload
+
+# Upload LittleFS filesystem (for web UI assets)
+pio run -e tlora-t3s3-v1 --target uploadfs
+
+# Monitor — note: T3-S3 v1 uses UART0 (CP2102) at 115200 baud,
+# only ESP-IDF logs appear here, not Arduino Serial (USB CDC)
+pio device monitor --baud 115200 --port /dev/ttyUSB0
+```
+
+**Important hardware note:** The LilyGO T3-S3 v1 board revision does NOT connect the native USB D+/D- lines (GPIO 19/20) to the USB-C port. Only the CP2102 UART bridge is wired. With `ARDUINO_USB_CDC_ON_BOOT=1` (Meshtastic default), `Serial` goes to USB CDC — a non-existent port on this board. ESP-IDF logs (LittleFS mount, WiFi init) do appear on UART0 at 115200 baud, but no Arduino `Serial.print()` output. This can be fixed by reconfiguring `Serial` to UART0 in the variant, or accepted as-is since the SoftAP provides the management interface.
+
+**Option B (fallback): Custom firmware** from `firmware/`:
 
 ```bash
 # Prerequisites
@@ -115,8 +138,6 @@ pio run --target upload
 # Monitor serial output (T3 S3 uses USB CDC on UART0)
 pio device monitor --baud 115200 --rtscts 0 --dtr 0
 ```
-
-> **Note:** LilyGO T3 S3 does not have a dedicated PlatformIO board definition yet. Use `esp32-s3-devkitc-1` as the base board and override the flash/PSRAM settings. See [LilyGO T3 S3 docs](https://github.com/Xinyuan-LilyGO/T3_S3) for pinout and configuration.
 
 Expected output when held against a live smart meter:
 ```
@@ -398,59 +419,74 @@ The prototype is a success when:
 
 ---
 
-## P7. Optional Step — Meshtastic Feasibility Check
+## P7. Meshtastic Fork — Phase 1 POC Implementation
 
-Before committing to a custom LoRa protocol stack, validate whether standard Meshtastic firmware satisfies the Phase 2 communication requirements. This uses identical LilyGO T3 S3 hardware — the only change is the firmware.
+**Status:** ✅ Chosen approach. The Meshtastic fork (branch `develop` at `git@github.com:FunCyRanger/meshtastic-fork.git`) has the following modifications for Phase 1:
 
-### P7.1 Flashing
+### P7.1 Changes Made
+
+| File | Change | Purpose |
+|------|--------|---------|
+| `boards/tlora-t3s3-v1.json` | Removed `-DBOARD_HAS_PSRAM` | PSRAM crash fix (no PSRAM populated on v1) |
+| `variants/esp32s3/tlora_t3s3_v1/platformio.ini` | Added `CONFIG_SPIRAM=n`, `board_build.psram = disable` | Same |
+| `src/mesh/http/ContentHandler.cpp` | Added `POST /api/v1/meter` handler | Accepts Tasmota meter JSON `{power_w, import_kwh, export_kwh}`, broadcasts over LoRa mesh via TEXT_MESSAGE_APP |
+| `src/mesh/http/ContentHandler.h` | Declared `handleAPIv1Meter` | — |
+| `src/mesh/wifi/WiFiAPClient.cpp` | Unconditional SoftAP in `initWifi()`, SoftAP check in `isWifiAvailable()` | SoftAP starts on every boot regardless of WiFi STA config |
+| `src/mesh/http/WebServer.cpp` | Null-safe `secureServer` init | HTTPS server handles `cert == nullptr` gracefully for SoftAP-only mode |
+| `src/mesh/http/WebServer.h` | Exported `isCertReady` | For cert-await flow |
+
+### P7.2 Build & Flash
 
 ```bash
-# Flash Meshtastic firmware via web flasher (no build tools needed):
-#   1. Open https://flasher.meshtastic.org in a browser
-#   2. Connect T3 S3 via USB, select "LilyGO T3 S3" board
-#   3. Select region "EU_868" and flash
+cd /home/felix/LOTSE/meshtastic-fork
 
-# Alternative: CLI flash
-pip install meshtastic-flasher
-meshtastic-flasher --port /dev/ttyACM0 --board t3-s3 --region EU_868
-```
+# Build
+pio run -e tlora-t3s3-v1
 
-### P7.2 Configuration
+# Flash
+pio run -e tlora-t3s3-v1 --target upload
 
-```bash
-# Set coordination channel (encrypted on radio, unencrypted Protobuf on MQTT bridge)
-meshtastic --set lora.region EU_868
-meshtastic --set channel.psk "Neighborhood-Coordination-Key"  # shared PSK for all agents
-meshtastic --set position.gps_mode 0  # disable GPS (not needed)
-
-# Configure MQTT bridge (if household has internet)
-meshtastic --set mqtt.enabled true
-meshtastic --set mqtt.address "mqtt://192.168.1.100:1883"  # local broker
+# Upload LittleFS filesystem
+pio run -e tlora-t3s3-v1 --target uploadfs
 ```
 
 ### P7.3 Test Procedure
 
-Repeat P4 (range test) and P5 (latency measurement) with Meshtastic firmware instead of custom LoRa. Key differences:
+1. **Power on** the T3-S3 — wait ~10s for boot
+2. **Scan for SoftAP** SSID `LEM-Meshtastic-XXXX` (password `lem12345`), e.g. with phone or laptop
+3. **Verify HTTP endpoint**:
+   ```bash
+   curl -X POST http://192.168.4.1/api/v1/meter \
+     -H "Content-Type: application/json" \
+     -d '{"power_w": 1234, "import_kwh": 50000, "export_kwh": 1000}'
+   ```
+4. **Check response**: `{"status":"ok"}`
+5. **Two-node test**: second T3-S3 receives the broadcast meter data (visible on Meshtastic serial debug or via the second node's SoftAP web UI)
 
-| Aspect | Custom LoRa (P4–P5) | Meshtastic (P7) |
-|--------|---------------------|-----------------|
-| Payload | 18–25 byte binary | Protobuf wrapped in Meshtastic frame (~50–100 bytes) |
-| Routing | Point-to-point | Mesh flooding (each node rebroadcasts) |
-| Duty cycle | Single transmitter | Each relay consumes airtime too |
-| Latency | Direct TX → RX | Flooding adds per-hop delay |
+### P7.4 Hardware Findings
 
-### P7.4 Pass/Fail Criteria
+| Finding | Details |
+|---------|---------|
+| **No PSRAM** on T3-S3 v1 | Board ships without PSRAM populated. `BOARD_HAS_PSRAM` causes crash at boot (5.5s). Fixed by removing define and adding `CONFIG_SPIRAM=n`. |
+| **No native USB CDC** | USB D+/D- (GPIO 19/20) not connected to USB-C on v1. Only CP2102 UART (UART0) is available. `ARDUINO_USB_CDC_ON_BOOT=1` redirects `Serial` to disconnected USB CDC — no app output on UART0. ESP-IDF logs appear on UART0. |
+| **SoftAP works** | Modified Meshtastic starts SoftAP unconditionally on `192.168.4.1`. The WebServer registers HTTP handlers even without STA connection. |
+| **Cert generation** | 2048-bit RSA cert blocks for 30-60s on boot. Null-safe guard prevents crash. If cert is needed, the SoftAP must be reachable long enough for `createSSLCert()` to complete. |
 
-- **PASS**: ≥80% packet delivery at 100m (same as P4.3) with ≤5s end-to-end latency
-- **PASS**: Mesh routing works across 3+ nodes (agent → relay → coordinator)
-- **PASS**: Duty cycle stays under 1% at expected message frequency (grid limit every 60s, flex offers on demand)
-- **FAIL**: Meshtastic protocol overhead exceeds LoRa frame budget for a GridLimit-sized payload
-- **FAIL**: Flooding causes excessive airtime consumption at ≥5 nodes
+### P7.5 Known Issues
 
-### P7.5 Decision Gate
+1. **No UART0 app output**: With USB CDC disconnected, `Serial` output (Meshtastic CLI) is invisible. To fix: configure `Serial` to use UART0 explicitly in the variant's `variant.cpp` or a custom init hook. Currently diagnosed but not fixed.
+2. **Cert generation delay**: The 30-60s blocking cert generation delays WebServer availability. Acceptable for Phase 1 (rare reboots) but should be deferred to background or skipped entirely for SoftAP-only mode.
+3. **HTTPS unavailable without cert**: The HTTP server is insecure until cert is generated. Acceptable for Phase 1 (local SoftAP, no sensitive data crossing the air). The `cert == nullptr` guard prevents crash but means no HTTPS endpoint until `createSSLCert()` completes.
 
-| If Meshtastic test result is... | Then... |
-|--------------------------------|---------|
-| ✅ All PASS | Adopt Meshtastic as Phase 2 transport layer. Build system app layer as Protobuf messages on top |
-| ⚠️ Range or latency borderline | Tune spreading factor, antenna, or relay placement. Retest |
-| ❌ Range or duty cycle fails | Abandon Meshtastic path. Proceed with custom LoRa protocol (Architecture A in Brainstorming §9) |
+### P7.6 Decision: Chosen Over Custom LoRa
+
+| Criterion | Meshtastic fork | Custom firmware |
+|-----------|----------------|-----------------|
+| Development effort | ~50 lines added to existing project | Would need full LoRa stack, mesh routing, encryption |
+| Mesh routing | ✅ Built-in flooding | ❌ Would need custom implementation |
+| MQTT bridge | ✅ Native | ❌ Custom PubSubClient needed |
+| Home Assistant | ✅ Official integration | ❌ Custom integration needed |
+| Duty cycle control | ⚠️ Meshtastic default aggressive | ⚠️ Same hardware constraint |
+| Payload flexibility | ⚠️ Protobuf overhead | ✅ Raw binary, minimal overhead |
+
+The Meshtastic fork was chosen for Phase 1 because it eliminates the need to build a complete protocol stack — we only needed to add the HTTP meter data injection endpoint (~50 lines). The custom firmware at `firmware/` remains available as a fallback if Meshtastic's overhead becomes binding in Phase 2.

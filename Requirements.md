@@ -1,6 +1,6 @@
 **Requirements Analysis and Use-Case Documentation (Simplified Version)**
 
-**Status:** Draft
+**Status:** Draft — Phase 1 POC implemented in `meshtastic-fork/` (branch `develop`).
 
 ### 1. Introduction and Purpose
 
@@ -109,23 +109,26 @@ The system must coexist with §14a grid-serving control without interference. Th
 ```mermaid
 mindmap
   root((System))
-    Phase 1 - Data Collection
-      Determine & broadcast grid limit
-      Record consumption & generation data
-      Simple onboarding
+    Phase 1 - Meter Data Collection & Broadcast
+      Local grid limit enforcement (per household)
+      Smart meter reading via Tasmota IR sensor → HTTP POST
+      Mesh-LoRa broadcast (Meshtastic fork) for logging
+      SoftAP configuration interface (192.168.4.1)
+      Simple onboarding via SoftAP
     Phase 2 - Coordination
       Offer / request flexibility
       Local coordination & load shifting
       Grid-serving signals §14a
+      Flexibility trading between households
 ```
 
 ### 6. Detailed Use Cases
 
-#### Phase 1 — Data Collection
+#### Phase 1 — Meter Data Collection & Broadcast
 
-- **UC-01 Determine & broadcast grid limit**: Periodic determination and distribution of the binding grid limit.
-- **UC-02 Record consumption & generation data**: Provision of timely measurement values through suitable metering devices.
-- **UC-05 Simple onboarding**: New participants can register via a self-service process with minimal configuration and are automatically recognized by the system.
+- **UC-01 Determine & broadcast grid limit**: Each household's grid limit is configured locally on the agent (from the grid connection contract). The agent self-regulates within this limit independently — no inter-household communication needed. The limit is set via the SoftAP web UI (192.168.4.1) or the Meshtastic admin interface.
+- **UC-02 Record consumption & generation data**: A Tasmota-based IR sensor (WattWächter TTL) reads the German smart meter via optical interface. The Tasmota device sends parsed values to the T3-S3 agent via `POST /api/v1/meter` over WiFi (SoftAP). The agent re-broadcasts the meter data over the LoRa mesh for logging and display on other nodes. Supported OBIS codes: 1.8.0 (total consumption), 2.8.0 (total feed-in), 16.7.0 (current power, needs PIN).
+- **UC-05 Simple onboarding**: The T3-S3 broadcasts a SoftAP (`LEM-Meshtastic-XXXX`) on every boot. A new participant connects to this WiFi network and configures the agent via the embedded web interface. No port forwarding, DDNS, VPN, or technical networking expertise required.
 
 #### Phase 2 — Coordination
 

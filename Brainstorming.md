@@ -1,6 +1,6 @@
 # Technical Concept Brainstorming
 
-**Status:** Brainstorming / Pre-design
+**Status:** Meshtastic fork chosen for Phase 1 POC — see §10 for progress.
 **Based on:** `Requirements.md` (Draft)
 
 ---
@@ -9,27 +9,33 @@
 
 The system is a **signaling and coordination layer** between autonomous household energy management systems. It does not control end devices. 
 
-**Phase 1 uses individual allocation:** Each household has a configured individual grid limit (based on its grid connection contract). The agent enforces this limit locally — no inter-household communication needed for grid protection. This avoids any dependency on transformer access or central infrastructure.
+**Phase 1 uses individual allocation:** Each household has a configured individual grid limit (based on its grid connection contract). The agent self-regulates within this limit locally — no inter-household communication needed for grid protection. This avoids any dependency on transformer access or central infrastructure.
 
-**Phase 2 adds coordination between households:** Flexibility trading, load shedding coordination, and §14a signal forwarding require inter-household communication. The Phase 1 individual limits remain the hard ceiling.
-
-The topology has two tiers and evolves from Phase 1 to Phase 2:
+The Phase 1 POC additionally broadcasts anonymized meter readings over LoRa for logging and validation purposes (no active limit enforcement). This is implemented via a Meshtastic firmware fork on T3-S3 hardware, with a SoftAP HTTP endpoint (`POST /api/v1/meter`) that accepts Tasmota IR sensor data and re-broadcasts it over the LoRa mesh.
 
 ```
-  PHASE 1 (Individual Allocation):
-    ┌──────────────┐   ┌──────────────┐   ┌──────────────┐
-    │ Agent HH-01  │   │ Agent HH-02  │   │ Agent HH-03  │
-    │ Limit: 5 kW  │   │ Limit: 3 kW  │   │ Limit: 4 kW  │
-    │ Meter reading│   │ Meter reading│   │ Meter reading│
-    └──────┬───────┘   └──────┬───────┘   └──────┬───────┘
-           │ local            │ local            │ local
-           │ MQTT/REST        │ MQTT/REST        │ MQTT/REST
-    ┌──────┴───────┐   ┌──────┴───────┐   ┌──────┴───────┐
-    │ Home EMS     │   │ Home EMS     │   │ Home EMS     │
-    │ self-regulates│  │ within limit │   │ within limit │
-    │ within limit │   │              │   │              │
-    └──────────────┘   └──────────────┘   └──────────────┘
-    No inter-household communication needed.
+  PHASE 1 (Individual Allocation + LoRa logging):
+                                ┌────────────────────────────┐
+                                │ LoRa mesh (Meshtastic fork) │
+                                │ meter data broadcast        │
+                                └───┬────────┬────────┬───────┘
+                                    │        │        │
+                    HTTP POST       │ LoRa   │ LoRa   │ LoRa
+    ┌──────────┐   /api/v1/meter    │        │        │
+    │ Tasmota  │─────►┌──────────────┐   ┌──────────────┐   ┌──────────────┐
+    │ IR sensor│SoftAP│ Agent HH-01  │   │ Agent HH-02  │   │ Agent HH-03  │
+    │ meter    │      │ Limit: 5 kW  │   │ Limit: 3 kW  │   │ Limit: 4 kW  │
+    └──────────┘      │ Meter reading│   │ Meter reading│   │ Meter reading│
+                      └──────┬───────┘   └──────┬───────┘   └──────┬───────┘
+                             │ local            │ local            │ local
+                             │ MQTT/REST        │ MQTT/REST        │ MQTT/REST
+                      ┌──────┴───────┐   ┌──────┴───────┐   ┌──────┴───────┐
+                      │ Home EMS     │   │ Home EMS     │   │ Home EMS     │
+                      │ self-regulates│  │ within limit │   │ within limit │
+                      │ within limit │   │              │   │              │
+                      └──────────────┘   └──────────────┘   └──────────────┘
+    Grid protection: local limit enforcement, no inter-household dependency.
+    Meter data: LoRa broadcast for logging only.
 
   PHASE 2 (adds Coordination):
                      ┌─────────────────────────┐
@@ -78,6 +84,8 @@ Every option evaluated against the hard constraints from §4 NFRs.
 | C3 | No DDNS, no VPN, no port forwarding | Zero network configuration |
 | C4 | €0 recurring | No cloud subscriptions, no VPS |
 | C5 | €100-200/hh hardware one-time | Components + sensor + installation |
+
+**Phase 1 solution:** The agent provides a SoftAP WiFi network (192.168.4.1) that devices within the household (Tasmota IR sensor, configuration phone/laptop) connect to. The device itself has no incoming ports from outside the household. For the LoRa path, the Meshtastic mesh handles all inter-node communication — no IP routing needed.
 | C6 | ≤€300 central infra one-time | Coordinator hardware |
 
 ### 2.2 Option Comparison
@@ -615,7 +623,7 @@ These need decisions before implementation starts. Entries accumulate discussion
 - WiFi mesh unlikely to work reliably through German residential construction at 100m
 - Powerline possible but expensive modules and interference risk from PV inverters
 - RS485 excellent technically but cabling impractical across private property
-- **Status**: 🔄 Open — no decision made yet
+- **Decision**: We chose **Architecture F (LoRa + Meshtastic fork)** as the Phase 1 transport layer. The Meshtastic firmware provides LoRa mesh routing, AES encryption, MQTT bridging, and the HTTP server extension point for meter data injection — all on the same T3-S3 hardware. This avoids building a custom protocol stack from scratch. The decision is validated by the decision matrix (§9.6, Architecture F scores highest at 164) and the Phase 1 POC implementation (SoftAP HTTP endpoint + LoRa rebroadcast on meshtastic-fork `develop`). An independent custom firmware fallback exists at `firmware/` in case Meshtastic limitations become binding in Phase 2.
 
 ### Q2: Where does the coordinator live?
 
@@ -804,15 +812,32 @@ For Phase 1 at any scale: all architectures score identically (no inter-househol
 
 ---
 
-## 10. Recommendations for Next Step
+## 10. Progress and Recommendations
 
-Regardless of which communication medium is chosen, the next concrete step could be:
+### §10.1 Phase 1 POC Completed
 
-1. **Build one agent prototype** (ESP32 + IR reader on a test smart meter or simulator)
-2. **Validate SML parsing** against real German smart meters (ISKRA, Landis+Gyr, Holley, etc.)
-3. **Build coordinator prototype** (RPi + LoRa hat or MQTT broker)
-4. **Test range in a real neighborhood** — drive 100m with a LoRa node in a backpack through cellars
-5. **Measure latency and reliability** for grid limit broadcast under real conditions
-6. **Simulate before scaling:** Before deploying Phase 2 coordination, validate flex matching and grid utilization in a Python simulation (e.g. pandapower load flow). This measures peak reduction, congestion behavior, and hosting capacity limits without hardware iteration. FR-06 (household economics) is tracked as an informational metric.
+The following has been implemented and tested:
 
-This would prove the physical layer before investing in the full protocol stack.
+1. **PSRAM crash fixed** on LilyGO T3-S3 v1 (no PSRAM populated): removed `-DBOARD_HAS_PSRAM` from board flags, added `CONFIG_SPIRAM=n` — boot confirmed working past 5.5s without crash.
+2. **Unconditional SoftAP**: Meshtastic fork modified to start SoftAP (`LEM-Meshtastic-XXXX`, `192.168.4.1`) and embedded WebServer on every boot, regardless of WiFi STA configuration. The `isWifiAvailable()` check includes SoftAP status, and HTTPS server init handles null cert gracefully for SoftAP-only mode.
+3. **HTTP meter endpoint**: `POST /api/v1/meter` accepts JSON `{power_w, import_kwh, export_kwh}` from a Tasmota IR sensor and broadcasts it over the LoRa mesh via a Meshtastic Protobuf TEXT_MESSAGE_APP packet. CORS headers included for cross-origin requests. Compiles successfully.
+4. **Hardware diagnosis**: T3-S3 v1 does not connect native USB D+/D- (GPIO 19/20) to the USB-C port — only CP2102 UART is available. The Arduino `Serial` stream is routed to the disconnected USB CDC, so no app-level serial output appears on UART0. This affects Meshtastic serial CLI but does not block the SoftAP+HTTP approach.
+5. **Git repository**: All changes committed to `meshtastic-fork/` (branch `develop`), pushed to `git@github.com:FunCyRanger/meshtastic-fork.git`.
+
+### §10.2 What Remains for Phase 1
+
+1. **Build and flash** the modified Meshtastic fork to a physical T3-S3 board
+2. **Verify SoftAP** is visible (SSID scan from phone/laptop)
+3. **Test HTTP endpoint** via `curl -X POST http://192.168.4.1/api/v1/meter ...`
+4. **Tasmota integration**: wire WattWächter TTL IR sensor → Tasmota (ESP32/ESP8266) → HTTP POST to T3-S3 SoftAP
+5. **Two-node LoRa test**: second T3-S3 receives the broadcast meter data
+6. **24h stability test** without crash
+
+### §10.3 Phase 2 (deferred)
+
+Phase 2 coordination (flex trading, load shedding, §14a forwarding) depends on the Meshtastic prototype passing the hardware tests above. Key unknowns:
+- Whether Meshtastic's chat-oriented protocol overhead constrains flex signaling frequency
+- Whether the ~40-node practical mesh limit binds at 100+ households (multi-mesh gateways may be needed)
+- Whether the SoftAP HTTP approach generalizes to Meshtastic's official web server API for configuration
+
+These will be revisited after the Phase 1 POC hardware validation.

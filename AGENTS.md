@@ -9,6 +9,7 @@ Spec + simulation repo for a decentralized neighborhood energy coordination syst
 | `Requirements.md` | Requirements, use cases, 10 household types (T1–T10), priority hierarchy |
 | `Brainstorming.md` | Architecture, protocol, 7 message types, open decisions (§8) |
 | `prototype-build.md` | Hardware BOM, circuit, PlatformIO flashing guide |
+| `prototype-build.md` | Hardware BOM, circuit, PlatformIO flashing guide |
 | `simulation-spec.md` | Grid utilization simulation specification (v2) |
 | `fairness-analysis.md` | FR-06 problem statement (superseded — see simulation-spec.md) |
 | `20260517 AI review/Claude.md` | Verified errors in `prototype-build.md` |
@@ -80,12 +81,15 @@ Config keys of interest in `configs/*.yaml`:
 | Holley DTZ541 baud 115200 but firmware defaults to 9600 | Handle per-meter baud config |
 | OBIS code `36.7.0` wrong for instantaneous power | Use **`-1:16.7.0`** (bidirectional) |
 | Prototype steps P3–P5 test Phase 2 LoRa but labeled Phase 1 | Phase 1 has no inter-household comm |
+| T3-S3 v1: no PSRAM populated + `-DBOARD_HAS_PSRAM` crashes boot | Remove `-DBOARD_HAS_PSRAM`, add `CONFIG_SPIRAM=n` |
+| T3-S3 v1: native USB CDC not connected (no /dev/ttyACM0) | `Serial` goes to disconnected USB CDC; only CP2102 UART works |
+| T3-S3 v1: SoftAP+WebServer changes reverted during PSRAM debugging | Re-apply after crash fix confirmed
 
 ## Open design decisions (Brainstorming §8)
 
 | # | Question | Status |
 |---|----------|--------|
-| Q1 | Communication medium (LoRa vs MQTT vs hybrid) | Open |
+| Q1 | Communication medium (LoRa vs MQTT vs hybrid) | **Decided: Meshtastic fork (LoRa 868 MHz + SoftAP HTTP)** |
 | Q2 | Coordinator placement | Phase 1: none. Phase 2: open |
 | Q6 | Flex matching algorithm | Open |
 | Q7 | Data retention | Open |
