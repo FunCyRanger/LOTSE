@@ -25,19 +25,9 @@ Phase 1 is a **data transport pipeline** only: relay IR sensor readings from a s
 | Heltec V3 (ESP32-S3 + SX1262 868 MHz) | Egress node (LoRa RX, WiFi station, MQTT) |
 | Tasmota IR sensor (or similar) | Reads smart meter IR interface, sends HTTP POST |
 
-## Current build status (Heltec V3)
+## Current build status
 
-The Meshtastic firmware (v2.7.9) is the base. Building for `heltec-v3` requires:
-
-| Requirement | Status |
-|-------------|--------|
-| Base build passes | ❌ Blocked — BLE, Ethernet, nRF52 platform issues |
-| BLE excluded | Needs NimBLE lib or source filter |
-| Ethernet excluded | Needs source filter on `src/mesh/eth/` |
-| nRF52 platform excluded | Needs source filter on `src/platform/nrf52/` |
-| ArduinoJson added | Added to root `lib_deps` |
-
-Known build blockers are documented in `AGENTS.md`.
+Build blockers are documented in `AGENTS.md`. The Heltec V3 build has BLE, Ethernet, and nRF52 platform code that must be excluded from the Meshtastic build.
 
 ## Next steps
 

@@ -1,6 +1,6 @@
 # Technical Concept Brainstorming
 
-**Status:** Meshtastic fork chosen for Phase 1 POC — see §10 for progress.
+**Status:** Phase 1 data bridge — design complete, build in progress (Heltec V3). Phase 2 coordination deferred.
 **Based on:** `Requirements.md` (Draft)
 
 ---
@@ -9,35 +9,23 @@
 
 The system is a **signaling and coordination layer** between autonomous household energy management systems. It does not control end devices. 
 
-**Phase 1 uses individual allocation:** Each household has a configured individual grid limit (based on its grid connection contract). The agent self-regulates within this limit locally — no inter-household communication needed for grid protection. This avoids any dependency on transformer access or central infrastructure.
-
-The Phase 1 POC additionally broadcasts anonymized meter readings over LoRa for logging and validation purposes (no active limit enforcement). This is implemented via a Meshtastic firmware fork on T3-S3 hardware, with a SoftAP HTTP endpoint (`POST /api/v1/meter`) that accepts Tasmota IR sensor data and re-broadcasts it over the LoRa mesh.
+Phase 1 is a **data transport pipeline**: relay IR sensor readings from a smart meter to Home Assistant via a LoRa mesh bridge. No local limit enforcement, no inter-household coordination, no device control. Implemented on Heltec V3 hardware with a Meshtastic firmware fork: the ingress node runs a SoftAP HTTP endpoint at `POST /api/v1/meter`, accepts Tasmota IR sensor data, and re-broadcasts it over the LoRa mesh. An egress node receives LoRa packets and forwards them to Home Assistant via MQTT/REST.
 
 ```
-  PHASE 1 (Individual Allocation + LoRa logging):
-                                ┌────────────────────────────┐
-                                │ LoRa mesh (Meshtastic fork) │
-                                │ meter data broadcast        │
-                                └───┬────────┬────────┬───────┘
-                                    │        │        │
-                    HTTP POST       │ LoRa   │ LoRa   │ LoRa
-    ┌──────────┐   /api/v1/meter    │        │        │
-    │ Tasmota  │─────►┌──────────────┐   ┌──────────────┐   ┌──────────────┐
-    │ IR sensor│SoftAP│ Agent HH-01  │   │ Agent HH-02  │   │ Agent HH-03  │
-    │ meter    │      │ Limit: 5 kW  │   │ Limit: 3 kW  │   │ Limit: 4 kW  │
-    └──────────┘      │ Meter reading│   │ Meter reading│   │ Meter reading│
-                      └──────┬───────┘   └──────┬───────┘   └──────┬───────┘
-                             │ local            │ local            │ local
-                             │ MQTT/REST        │ MQTT/REST        │ MQTT/REST
-                      ┌──────┴───────┐   ┌──────┴───────┐   ┌──────┴───────┐
-                      │ Home EMS     │   │ Home EMS     │   │ Home EMS     │
-                      │ self-regulates│  │ within limit │   │ within limit │
-                      │ within limit │   │              │   │              │
-                      └──────────────┘   └──────────────┘   └──────────────┘
-    Grid protection: local limit enforcement, no inter-household dependency.
-    Meter data: LoRa broadcast for logging only.
+PHASE 1 (Data Bridge):
+                          LoRa mesh (Meshtastic)
+                              │
+              HTTP POST       │ LoRa
+┌──────────┐   /api/v1/meter  │         ┌─────────────────┐
+│ Tasmota  │─────►┌─────────────┐       │ Heltec V3       │
+│ IR sensor│SoftAP│ Heltec V3   │───────│ (egress)        │───► Home Assistant
+│ meter    │      │ (ingress)   │ LoRa  │ WiFi station    │     MQTT/REST
+└──────────┘      │ SoftAP HTTP │       │ LoRa RX         │
+                  └─────────────┘       └─────────────────┘
+No local limit enforcement, no inter-household coordination.
+Meter data: forwarded from IR sensor through LoRa to Home Assistant.
 
-  PHASE 2 (adds Coordination):
+PHASE 2 (adds Coordination):
                      ┌─────────────────────────┐
                      │ Optional: Coordinator   │
                      │ (flex matching, §14a)   │
@@ -47,8 +35,7 @@ The Phase 1 POC additionally broadcasts anonymized meter readings over LoRa for 
                     │             │             │
              ┌──────┴──────┐ ┌───┴───────┐ ┌───┴───────┐
              │ Agent HH-01 │ │Agent HH-02│ │Agent HH-03│
-             │ Limit: 5 kW │ │Limit: 3 kW│ │Limit: 4 kW│
-             │ + offers flex│ │+ buys flex│ │+ sells flex│
+             │ + offers    │ │ + buys    │ │ + sells   │
              └──────┬──────┘ └───┬───────┘ └───┬───────┘
                     │ local      │ local       │ local
              ┌──────┴──────┐ ┌───┴───────┐ ┌───┴───────┐
@@ -73,7 +60,7 @@ The Phase 1 POC additionally broadcasts anonymized meter readings over LoRa for 
 
 ## 2. Communication Medium Options
 
-Every option evaluated against the hard constraints from §4 NFRs.
+Every option evaluated against the hard constraints from Requirements.md §4 NFRs.
 
 ### 2.1 Constraint Summary
 
@@ -98,118 +85,6 @@ Every option evaluated against the hard constraints from §4 NFRs.
 | **Powerline (PLC)** | ✅ Uses electrical wiring | ✅ Same low-voltage grid | ✅ Plug in | ✅ None | €25-50 | ~€100 | Medium |
 | **Thread/Matter mesh** | ✅ Local mesh | ❌ ~30m per hop, walls reduce drastically | ❌ Border router + commissioning needed | ✅ None | €15-25 | ~€50 | Medium |
 | **RS485 wired** | ✅ Physical wire | ✅ Up to 1200m | ❌ Cable laying across properties | ✅ None | €5-10 | ~€30 | Medium |
-
-### 2.3 Detailed Assessment
-
-#### LoRa 868 MHz
-
-**How it works**: ESP32 + Semtech SX1276/SX1262 transceiver. Operates in EU 868 MHz ISM band (license-free). Star topology with coordinator as gateway, or peer-to-peer.
-
-**Range**: 1-5 km line of sight, 200-500m through dense urban construction. Easily satisfies 100m through walls/cellars.
-
-**Bandwidth constraints**: Duty cycle limited to 1% (ETSI EN 300.220). At SF7 this gives ~50 bytes every ~50 seconds per device. Sufficient for:
-- Grid limit broadcast (50 bytes, every few minutes)
-- Flex offer/request (50-100 bytes, occasional)
-- Load shed signal (30 bytes, rare)
-- §14a signal (30 bytes, hourly)
-
-Not sufficient for: raw meter time series, large config transfers, firmware updates.
-
-**Scaling to 100+ households:** The duty cycle calculation changes per agent as the network grows. At 100 agents each sending one 100ms message per 5 minutes, aggregate airtime = 100 × 0.1s / 300s ≈ 3.3% — still over the 1% limit. **Broadcast messages** (coordinator → all agents, one transmission covers everyone) remain efficient at any scale. **Individual agent → coordinator messages** must be sparse: on a shared channel, each agent gets roughly 1/100th of the duty cycle budget, limiting individual transmissions to ~1 per 10 minutes per agent. This is acceptable for occasional flex offers and heartbeat, but not for frequent meter data streaming. For higher-frequency communication, the hybrid approach (§2.4) or MQTT-only (§2.3 MQTT) is more scalable.
-
-**Security**: AES-128 encryption at link layer. No IP-based attack surface (no TCP/IP stack). Physical range limits eavesdropping.
-
-**Cost**: SX1276 module €3-5, ESP32 €5-8, IR sensor €1-2 = **€10-15/hh**. Coordinator: RPi 3B €40 + LoRa hat €25 + SD card €10 = **€75**.
-
-**Maturity**: ESP32+LoRa is mature in OSS (Meshtastic, RadioLib, ESP-IDF). Many open SML meter readers exist for ESP32.
-
-**Key tradeoff**: Very low throughput limits message frequency and payload size. Not suitable if agents need to exchange detailed data frequently.
-
----
-
-#### MQTT over Internet
-
-**How it works**: Each agent connects via outbound MQTT over TLS to a reachable broker. The coordinator also connects to the same broker. All traffic is via the broker — no household opens ports. Uses the household's existing internet connection.
-
-**Broker placement**:
-- **VPS** (€3-4/month on Hetzner/Hetzner): violates C4 (€0 recurring), but avoids any household needing ports
-- **Local RPi + DDNS**: requires opening one port (MQTTS 8883) on the coordinator's household — violates C1 for that household
-- **Community-hosted** (e.g., transformer room with LTE router): feasible but depends on finding suitable location
-
-**Scaling**: MQTT handles 100+ agents without protocol changes — the broker is the only scaling bottleneck. A single RPi running Mosquitto supports thousands of clients. Spreading agents across neighborhoods uses separate topic namespaces (`lem/{neighborhood_id}/`).
-
-**Range**: Depends on home WiFi coverage. If the agent is in a cellar next to the smart meter, a separate AP or powerline WiFi extender may be needed to reach the household's router — adds cost and complexity.
-
-**Security**: TLS + MQTT username/password or client certificates. Well-understood. Brute-force protection via broker config.
-
-**Cost**: MQTT broker VPS ~€3-4/month (€36-48/year). Spread across 10 households = €0.30-0.40/hh/month. Agent hardware: ESP32 with WiFi €5-8, no LoRa needed, IR sensor €1-2 = **€7-10/hh**. Coordinator: none if using VPS, or RPi for local fallback.
-
-**Maturity**: Extremely mature. Both OpenEMS and evcc have native MQTT support. Home Assistant has MQTT integration.
-
-**Key tradeoff**: Violates €0 recurring unless a non-VPS approach is found. Requires WiFi coverage where the agent is installed.
-
-**MQTT topic structure sketch (transport independent, works with any TCP/IP link)**:
-```
-lem/{neighborhood_id}/coordinator/limit           ← Grid limit broadcast
-lem/{neighborhood_id}/coordinator/flex/request    ← Flexibility needed
-lem/{neighborhood_id}/coordinator/signal/par14a   ← §14a reduction signal
-lem/{neighborhood_id}/coordinator/signal/shed     ← Load shed order
-lem/{neighborhood_id}/coordinator/tariff          ← Price/Tariff info
-
-lem/{neighborhood_id}/household/{hh_id}/meter     ← Current consumption/generation (optional)
-lem/{neighborhood_id}/household/{hh_id}/flex/offer ← Available flexibility
-lem/{neighborhood_id}/household/{hh_id}/status    ← Health, connection state
-```
-
----
-
-#### Local WiFi Mesh
-
-**How it works**: Multiple access points across the neighborhood forming a mesh (802.11s, BATMAN, OLSR). All agents and coordinator connect to the same mesh network. Can work without internet.
-
-**Range**: 2.4 GHz WiFi has poor wall penetration. ~30m per hop through one wall degrades quickly. Unlikely to achieve 100m through multiple walls/cellars without many mesh nodes.
-
-**Cost**: Additional APs at €20-40 each if coverage gaps exist. WiFi-capable ESP32 is cheap (€5-8).
-
-**Key tradeoff**: Range is the limiting factor. In a dense German neighborhood with thick stone walls and cellars, this is unreliable without extensive infrastructure.
-
----
-
-#### Powerline (PLC)
-
-**How it works**: Uses existing household electrical wiring as a communication medium. Modern standards (HomePlug AV, G.hn) achieve 10-100 Mbps.
-
-**Range**: Stays within the same low-voltage transformer — ideal for a neighborhood.
-
-**Cost**: HomePlug adapters €20-50 each. Limited OSS ecosystem.
-
-**Key tradeoff**: German PV inverters and modern power electronics are known to inject noise on power lines, potentially degrading PLC performance. Modules are relatively expensive. No established OSS stack exists for this use case.
-
----
-
-#### Thread / Matter Mesh
-
-**How it works**: 2.4 GHz mesh using IEEE 802.15.4. Self-healing, IPv6-capable. Border router needed for internet connectivity.
-
-**Range**: ~30m per hop, further reduced by walls. Needs many devices close together to form a mesh. Unlikely to cover 100m through multiple buildings.
-
-**Cost**: ESP32-H2 or similar Thread-capable MCU: €5-10.
-
-**Key tradeoff**: Range insufficient for typical neighborhood layouts. Requires dense device placement (every 20-30m) for reliable coverage.
-
----
-
-#### RS485 Wired
-
-**How it works**: Two-wire differential bus running between households. Simple, robust, proven in industrial settings.
-
-**Range**: Up to 1200m. Immune to interference. No penetration issues (it's wired).
-
-**Cost**: RS485 transceiver €1-2. Cable: €0.50-1/m. For 10 households spread across 200m of cable run: €100-200 in cabling alone.
-
-**Key tradeoff**: Laying cable across private properties, possibly under roads, is impractical for a voluntary neighborhood initiative. Installation cannot be done by a layperson.
-
----
 
 ### 2.4 Hybrid Possibility
 
@@ -297,127 +172,9 @@ All referenced hardware components must be CE-certified and available through Ge
 - No modification to the metering equipment
 - The PIN for enhanced data (current power, historic values) can be requested from the meter operator (Messstellenbetreiber)
 
-**Data protection**: Local data processing is preferred over cloud transmission to comply with GDPR data minimization principles and MsbG data processing rules (§§ 49–70 MsbG). The system's outbound-only communication constraint (§4 NFRs, constraint C1) inherently reduces the attack surface for personal data.
+**Data protection**: Local data processing is preferred over cloud transmission to comply with GDPR data minimization principles and MsbG data processing rules (§§ 49–70 MsbG). The system's outbound-only communication constraint (Requirements.md §4 NFRs, constraint C1) inherently reduces the attack surface for personal data.
 
 ---
-
-## 4. Message Protocol Design (Transport-Agnostic)
-
-The protocol is defined at application layer and is independent of the physical transport (LoRa radio frames, MQTT topics, HTTP payloads, etc.).
-
-### 4.1 Message Types
-
-```
-Message
-├── GridLimit          (coordinator → all agents)
-│   ├── import_limit_w: int      // Max net import in W
-│   ├── export_limit_w: int      │ Max net export in W (negative)
-│   ├── valid_from: timestamp
-│   └── valid_until: timestamp
-│
-├── LoadShed           (coordinator → all agents)
-│   ├── reason: enum              // grid_overload | reverse_power | transformer
-│   ├── priority_order: string[]  // ["wallbox", "battery_charge", "heatpump"]
-│   ├── reduction_pct: int        // 0-100, how much to reduce
-│   └── duration_s: int
-│
-├── Par14aSignal       (household-EMS → agent, informational — the system never originates this)
-│   ├── module: enum              // 1 (flat reduction) | 2 (pct reduction) | 3 (time-variable)
-│   ├── reduction_pct: int        // for module 2
-│   ├── valid_from: timestamp
-│   └── valid_until: timestamp
-│
-├── FlexOffer          (agent → coordinator)
-│   ├── hh_id: string
-│   ├── type: enum                // load_shed | load_increase | battery_discharge | battery_charge
-│   ├── power_w: int
-│   ├── duration_s: int
-│   ├── start_earliest: timestamp
-│   ├── end_latest: timestamp
-│   └── price_ct_per_kwh: int     // minimum price for flex (if applicable)
-│
-├── FlexRequest        (coordinator → agent)
-│   ├── type: enum
-│   ├── power_w: int
-│   ├── duration_s: int
-│   ├── window_start: timestamp
-│   └── window_end: timestamp
-│
-├── TariffInfo         (coordinator → all agents)
-│   ├── type: enum                // epex_spot | fixed | tou
-│   ├── price_ct_per_kwh: float
-│   └── valid_from: timestamp
-│   └── valid_until: timestamp
-│
-├── FlexAck            (agent → coordinator)
-│   ├── hh_id: string
-│   ├── accepted: bool
-│   └── reason: string             // if rejected
-│
-└── Heartbeat          (bidirectional)
-    ├── node_id: string
-    └── seq: int
-```
-
-### 4.2 Serialization
-
-For **internet/MQTT** transport: JSON or CBOR.
-- JSON: human-readable, ~100-300 bytes per message
-- CBOR: binary, ~50-150 bytes per message
-
-For **LoRa** transport: CBOR or custom binary.
-- CBOR: widely supported, compact
-- Custom binary: most compact (e.g., 8 bytes for a limit message), but least flexible
-
-A CBOR-encoded `GridLimit` message: ~25-40 bytes
-```
-{
-  1: 50000,    // import_limit
-  2: -30000,   // export_limit
-  3: 1715000000, // valid_from (epoch)
-  4: 1715000600  // valid_until
-}
-```
-
-In CBOR: 25 bytes. In custom binary (4 int32 fields): 18 bytes. Easily fits in a LoRa frame.
-
-### 4.3 Security
-
-| Aspect | Approach |
-|--------|----------|
-| Encryption (MQTT) | TLS 1.3 |
-| Encryption (LoRa) | AES-128 at application layer |
-| Authentication | Pre-shared key per household or client certificate |
-| Replay protection | Message sequence number + timestamp validation |
-| Payload integrity | HMAC in each message |
-| Forward secrecy | Not critical — short-lived messages, no long-term secrets |
-
-For LoRa specifically, a simple approach:
-- Each agent has a unique PSK (pre-shared key) baked at onboarding
-- Coordinator has all PSKs
-- Messages encrypted with AES-128-CCM
-- Sequence number prevents replay
-- No key exchange needed over the air (reduces attack surface)
-
-### 4.4 Alternative: Meshtastic as Protocol Foundation
-
-Instead of implementing a custom LoRa protocol stack, **Meshtastic** (open-source LoRa mesh project) can serve as the transport and security layer. The system would add its application messages on top.
-
-**Advantages:**
-- Mature mesh routing (flooding/rebroadcast) — no custom TDMA/CSMA/CA needed
-- AES-256 encryption, replay protection, PSK per channel
-- Native MQTT bridging (JSON/Protobuf) — enables hybrid LoRa+MQTT without custom gateway code
-- Official Home Assistant integration and Python libraries (`meshtastic`, `meshtastic-mqtt-json`)
-- Runs on LilyGO T3 S3 and Heltec boards with no custom firmware
-- Active German community and field-proven urban range
-
-**Limitations (critical for the system):**
-- Chat-oriented design — not optimized for frequent small messages; duty cycle management is critical
-- Optimal up to ~30–40 nodes per mesh; for 100+ households, Meshtastic would require multiple meshes interconnected by a gateway node (e.g., RPi bridging two LoRa channels), adding topology complexity and a potential single point of failure
-- PSK-based (no perfect forward secrecy); spoofing possible if key compromised
-- Relaying increases per-node power consumption vs star topology
-
-**Recommendation:** Test standard Meshtastic firmware on 3–5 LilyGO T3 S3 nodes as a Phase 1 proof-of-concept before committing to a custom protocol. If mesh routing and range are adequate, system application messages can use Meshtastic Protobuf channels. If airtime limits bite, fall back to a custom star-topology protocol (Architecture A in §9). See `20260517 AI review/Grok.md` for full implementation analysis.<｜end▁of▁thinking｜> was: ---
 
 ## 5. Coordinator Design
 
@@ -470,47 +227,6 @@ Phase 2 coordination depends on the coordinator or P2P network. If it fails, eac
 | Power supply + case | €10-15 | |
 | **Total RPi 3B+ + LoRa** | **€70-85** | Within €300 budget |
 | **Total RPi 4 + LoRa** | **€85-105** | Still well within budget |
-
----
-
-## 6. Cost Verification
-
-### 6.1 Per-Household (Target: €100-200 one-time)
-
-| Component | LoRa-based | MQTT-internet | Notes |
-|-----------|-----------|---------------|-------|
-| ESP32 | €6 | €6 | Or RPi Zero at €17 |
-| LoRa module (SX1276) | €4 | €0 | Not needed for internet-only |
-| IR sensor + resistors | €2 | €2 | Smart meter reading |
-| Wiring/enclosure | €5 | €5 | |
-| Power supply (USB) | €3 | €3 | Existing phone charger likely works |
-| Installation materials | €5 | €5 | Cable clips, etc. |
-| **Total** | **€25** | **€16** | Well within €100-200 |
-
-With RPi Zero instead of ESP32: add €11. Still under €50.
-
-**Headroom**: €75-184 for optional extras (display, sensors, backup).
-
-### 6.2 Central Infrastructure (Target: ≤€300)
-
-| Component | LoRa-based | Internet-based (VPS) | Notes |
-|-----------|-----------|---------------------|-------|
-| Raspberry Pi | €40 | €0 | VPS replaces local hardware |
-| LoRa hat | €25 | €0 | Not needed for internet-only |
-| SD card | €10 | €0 | |
-| Power/case | €15 | €0 | |
-| VPS (first year) | €0 | €0 | If free tier available |
-| **Total** | **€90** | **€0-48/yr** | |
-
-With RPi 4: add €15.
-
-**Headroom (LoRa)**: €210 for extras (backup coordinator, better antenna, weatherproofing).
-
-### 6.3 Recurring (Target: €0)
-
-- **LoRa**: ✅ €0 — no subscriptions, no cloud
-- **MQTT internet, VPS**: ❌ ~€3-4/month unless a free tier suffices
-- **MQTT internet, local RPi**: ✅ €0 — household hosting, but violates C1 at that household
 
 ---
 
@@ -603,7 +319,7 @@ The system is **not in this signal path**. The household EMS receives §14a comm
 2. **Optional system awareness**: The EMS can expose its current §14a state to the system agent (e.g. "§14a active, 4.2 kW limit"), allowing the coordinator to factor this into flex matching. This is informational only — the system never originates or relays §14a commands.
 3. **No certification needed**: Because the system is not in the §14a signal path, it does not require §14a certification per BK6-22-300.
 
-**Implication for protocol design (§4):** The `Par14aSignal` message is informational (household-EMS → agent), not a §14a distribution channel. No changes to the Phase 1 or Phase 2 grid protection model are needed — the Phase 1 individual limit already provides local grid protection independent of §14a.
+**Implication for application protocol:** The `Par14aSignal` message is informational (household-EMS → agent), not a §14a distribution channel. No changes to the Phase 1 or Phase 2 grid protection model are needed — the Phase 1 individual limit already provides local grid protection independent of §14a.
 
 ---
 
@@ -623,7 +339,7 @@ These need decisions before implementation starts. Entries accumulate discussion
 - WiFi mesh unlikely to work reliably through German residential construction at 100m
 - Powerline possible but expensive modules and interference risk from PV inverters
 - RS485 excellent technically but cabling impractical across private property
-- **Decision**: We chose **Architecture F (LoRa + Meshtastic fork)** as the Phase 1 transport layer. The Meshtastic firmware provides LoRa mesh routing, AES encryption, MQTT bridging, and the HTTP server extension point for meter data injection — all on the same T3-S3 hardware. This avoids building a custom protocol stack from scratch. The decision is validated by the decision matrix (§9.6, Architecture F scores highest at 164) and the Phase 1 POC implementation (SoftAP HTTP endpoint + LoRa rebroadcast on meshtastic-fork `develop`). An independent custom firmware fallback exists at `firmware/` in case Meshtastic limitations become binding in Phase 2.
+- **Decision**: We chose **Architecture F (LoRa + Meshtastic fork)** as the Phase 1 transport layer. The Meshtastic firmware provides LoRa mesh routing, AES encryption, MQTT bridging, and the HTTP server extension point for meter data injection — all on the same Heltec V3 hardware. This avoids building a custom protocol stack from scratch (see `prototype-build.md §P5` for fork status).
 
 ### Q2: Where does the coordinator live?
 
@@ -710,184 +426,3 @@ These need decisions before implementation starts. Entries accumulate discussion
 - If **coordinator in community/transformer space**: needs locked, weatherproof enclosure
 - **Status**: 🔄 Open — depends on Q1 and Q2 decisions
 
----
-
-## 9. Decision Matrix
-
-### 9.1 Phase 1: Already Decided
-
-Phase 1 uses **individual allocation**: each agent self-regulates within its configured household limit. No coordinator, no inter-household communication, no transformer access needed. This is the starting point.
-
-### 9.2 Phase 2: What Remains Open
-
-Phase 2 adds flexibility coordination between households. The evaluation below compares architectures for this layer. Note that **grid protection does not depend on Phase 2** — individual limits from Phase 1 remain the hard ceiling and fallback.
-
-| ID | Communication (Q1) | Coordination (Q2) | Description |
-|----|--------------------|--------------------|-------------|
-| **A** | LoRa 868 MHz | Lightweight coordinator | Agent-to-coordinator LoRa for flex offers, load shed, §14a |
-| **B** | LoRa 868 MHz | Fully P2P (gossip) | No central node. Agents exchange flex via gossip protocol |
-| **C** | MQTT over internet | Cloud coordinator | All agents connect via outbound MQTT to a broker on a VPS |
-| **D** | MQTT over internet | Local coordinator | One household hosts coordinator, others connect via internet |
-| **E** | None (local only) | None | Phase 1 only — no flexibility coordination between households |
-| **F** | LoRa 868 MHz | Meshtastic mesh | Existing OSS LoRa mesh (Meshtastic) on same T3 S3 hardware; system app layer on top via Protobuf channels; MQTT bridge for hybrid fallback |
-
-### 9.3 Evaluation Criteria
-
-Weights 1-5, higher = more important. Focused on Phase 2 requirements. Grid protection (W1) is inherently handled by Phase 1 fallback.
-
-| # | Criterion | Wt | Derived from | What a score of 5 means |
-|---|----------|----|-------------|----------------------|
-| W1 | Grid protection unaffected | 5 | FR-01, §2a | Phase 2 failures don't impact grid protection (Phase 1 fallback) |
-| W2 | No incoming ports | 5 | NFR Secure Comm. | Every household: zero ports open |
-| W3 | Range through obstacles | 5 | NFR Comm. Range | Reliable 100m+ through walls/cellars |
-| W4 | Easy Phase 2 setup | 4 | NFR, FR-05 | Adding flexibility requires minimal config |
-| W5 | EUR 0 recurring cost | 4 | §4.1 | No subscriptions, no VPS |
-| W6 | Data privacy | 3 | §4 Data Sovereignty | Flex data stays in neighborhood if desired |
-| W7 | Maturity / OSS reuse | 3 | §4.1 (all OSS) | Amount of proven code we build on |
-| W8 | Flexibility bandwidth | 3 | FR-04 | Enough throughput for flex offers/matching |
-| W9 | Incremental from Phase 1 | 2 | §1 Introduction | Can add to existing Phase 1 agents without replacement |
-
-### 9.4 Scores (1-5 per architecture per criterion)
-
-| # | Criterion | Wt | A: LoRa+Coord | B: LoRa+P2P | C: MQTT+Cloud | D: MQTT+Local | E: None | F: LoRa+Meshtastic |
-|---|-----------|----|---------------|-------------|---------------|---------------|---------|-------------------|
-| W1 | Grid protection unaffected | 5 | **5** Phase 1 fallback | **5** Phase 1 fallback | **5** Phase 1 fallback | **5** Phase 1 fallback | **5** N/A | **5** Phase 1 fallback |
-| W2 | No incoming ports | 5 | **5** radio, no IP | **5** radio, no IP | **5** all outbound | **2** coordinator opens port | **5** no comms | **5** radio, no IP |
-| W3 | Range | 5 | **5** through buildings | **5** through buildings | **4** WiFi must reach cellar | **4** same | **5** N/A | **5** through buildings |
-| W4 | Easy Phase 2 setup | 4 | **4** add LoRa module or new device | **4** same | **3** WiFi config + broker credentials | **3** coordinator household config | **5** nothing to add | **5** flash Meshtastic firmware, configure channel |
-| W5 | EUR 0 recurring | 4 | **5** none | **5** none | **2** EUR 36-48/yr | **5** none | **5** none | **5** none |
-| W6 | Data privacy | 3 | **5** stays in neighborhood | **5** stays in neighborhood | **3** transits VPS | **4** passes through neighbor | **5** no data leaves | **5** stays in neighborhood |
-| W7 | Maturity / OSS | 3 | **3** LoRa+SML mature, flex protocol new | **2** gossip protocol new | **5** MQTT, evcc, OpenEMS mature | **4** same, local hosting | **5** nothing to build | **5** Meshtastic production-proven, active community |
-| W8 | Flex bandwidth | 3 | **4** sufficient for flex offers | **3** P2P on LoRa complex | **5** high bandwidth | **5** high bandwidth | **1** no flex possible | **3** Meshtastic overhead vs custom binary |
-| W9 | Incremental from P1 | 2 | **3** needs new hardware (LoRa) or agent upgrade | **3** same | **4** software-only upgrade if WiFi exists | **4** same | **5** already done | **5** same T3 S3 hardware, reflash only |
-
-### 9.5 Weighted Totals
-
-| Architecture | W1x5 | W2x5 | W3x5 | W4x4 | W5x4 | W6x3 | W7x3 | W8x3 | W9x2 | **Total** |
-|-------------|------|------|------|------|------|------|------|------|------|-----------|
-| **A: LoRa+Coord** | 25 | 25 | 25 | 16 | 20 | 15 | 9 | 12 | 6 | **153** |
-| **B: LoRa+P2P** | 25 | 25 | 25 | 16 | 20 | 15 | 6 | 9 | 6 | **147** |
-| **C: MQTT+Cloud** | 25 | 25 | 20 | 12 | 8 | 9 | 15 | 15 | 8 | **137** |
-| **D: MQTT+Local** | 25 | 10 | 20 | 12 | 20 | 12 | 12 | 15 | 8 | **134** |
-| **E: None (P1 only)** | 25 | 25 | 25 | 20 | 20 | 15 | 15 | 3 | 10 | **158** |
-| **F: LoRa+Meshtastic** | 25 | 25 | 25 | 20 | 20 | 15 | 15 | 9 | 10 | **164** |
-
-### 9.6 Interpretation
-
-**Architecture E (Phase 1 only) scores 158** — but this simply means "do nothing extra," which is correct for Phase 1. It validates that Phase 1 is solid on its own.
-
-**Architecture F (LoRa + Meshtastic mesh) scores highest overall at 164**, beating even the Phase-1-only baseline. Key drivers:
-- Perfect scores on critical criteria (W1-W3, same LoRa hardware)
-- **W7 maturity at 5** instead of A's 3 — Meshtastic is production-proven with thousands of deployed nodes, native MQTT bridging, and Home Assistant integration
-- **W4 and W9 at 5** — zero incremental effort from Phase 1: same T3 S3 hardware, just flash Meshtastic firmware and configure a channel
-- Only concession: W8=3 because Meshtastic's chat-oriented protocol overhead is higher than custom binary, but still sufficient for sporadic flex signals
-
-**For Phase 2**, Architecture A (LoRa + lightweight coordinator) scores 153. Strong across the board, but requires building a custom protocol from scratch (penalty on W7).
-
-**Architecture C (MQTT+Cloud) scores 137.** It wins on maturity and bandwidth but the recurring cost and internet dependency for Phase 2 services are drawbacks.
-
-**Architecture D (MQTT+Local) ranks lowest among Phase 2 options (134)** due to the coordinator household port requirement.
-
-The gap between architectures is smaller than before because Phase 1's individual allocation ensures grid protection regardless of the Phase 2 choice.
-
-**Scaling to 100+ households:** The scores above assume typical neighborhood size (5–20 households). At 100+ households, the duty cycle and mesh-size constraints reshape the rankings:
-- **Architectures A and F (LoRa)** — scalable for broadcast messages only. Individual agent → coordinator messages require sparse transmission (≤1 per 10 min per agent) to stay within 1% duty cycle. Fine for occasional flex offers, not for frequent telemetry. F (Meshtastic) hits the ~40-node mesh ceiling and requires multi-mesh gateways at scale.
-- **Architecture B (LoRa P2P)** — O(n²) message complexity makes it impractical beyond ~30 nodes.
-- **Architecture D (MQTT+Local)** — coordinator port constraint affects that one household regardless of scale.
-- **Architectures C (MQTT+Cloud)** — no scaling concerns. MQTT brokers handle thousands of clients. This is the most future-proof option at scale, but carries the recurring cost.
-- **Hybrid approach (§2.4)** — LoRa for broadcast (grid limit, load shed) + MQTT for individual messages (flex offers) combines the scaling strengths of both mediums.
-
-For Phase 1 at any scale: all architectures score identically (no inter-household communication needed).
-
-**Practical implication:** The prototype should test standard Meshtastic firmware (P7 in prototype-build.md) alongside the custom LoRa path before committing to a protocol stack. If range and duty cycle are adequate for broadcast-only use, Meshtastic + MQTT hybrid (Architecture F variant) becomes the recommended path at scale.
-
-### 9.7 Wrong Directions
-
-| Option | Why it leads wrong |
-|--------|-------------------|
-| WiFi mesh as sole Phase 2 medium | Range insufficient through German residential construction |
-| RS485 as sole Phase 2 medium | Cable across private property impractical |
-| Requiring EMS for participation | Excludes households without automation (contradicts FR-05) |
-| Cloud dependency for grid protection | Grid protection is Phase 1, individual allocation — already solved |
-
----
-
-## 10. Progress and Recommendations
-
- ### §10.1 Phase 1 POC — Current Status
-
-The Phase 1 POC is **in progress** with the following known results:
-
-#### ✅ Done and Confirmed
-
-1. **PSRAM crash fixed** on LilyGO T3-S3 v1 (no PSRAM populated): removed `-DBOARD_HAS_PSRAM` from board flags, added `CONFIG_SPIRAM=n`, `board_build.psram = disable` — single clean boot confirmed (single `entry 0x403c8898`, no crash loop). Stock Meshtastic firmware compiles and runs with just the PSRAM fix.
-
-2. **SoftAP visible and functional** when started early in `setup()` with `WiFi.mode(WIFI_AP)`:
-   - SSID `LEM-7498` (last 4 MAC hex digits) visible on laptop scan
-   - DHCP works (laptop gets 192.168.4.2/24)
-   - ICMP ping to 192.168.4.1 works (~1-5ms)
-   
-3. **HTTP meter endpoint code compiles**: `POST /api/v1/meter` handler in `ContentHandler.cpp` (JSON body parsing, LoRa broadcast via TEXT_MESSAGE_APP packet, CORS headers).
-
-4. **Git repository**: All Phase 1 changes committed to `meshtastic-fork/` (branch `develop`), pushed to `git@github.com:FunCyRanger/meshtastic-fork.git`.
-
-5. **Webserver enabled**: `MESHTASTIC_EXCLUDE_WEBSERVER=1` in `configuration.h:536` was overriding the build — `initWebServer()` was a no-op stub. Fixed by adding `-D MESHTASTIC_EXCLUDE_WEBSERVER=0` in T3-S3 v1 build flags.
-
-#### 🔴 Blocked — HTTPServer Not Binding
-
-The `esp32_https_server` library's `HTTPServer::start()` consistently fails to bind port 80 on the T3-S3 v1. The laptop gets `curl: (7) Connection refused` (RST sent) — the server socket is never established.
-
-**Note:** This is NOT a regression. Code analysis confirmed that `initWebServer()` was never called in ef734b7 (nor any earlier build) — `MESHTASTIC_EXCLUDE_WEBSERVER=1` compiled out all web server code. The HTTPServer has never been started on this hardware. Previous reports of "port 80 open" on ef734b7 were in error.
-
-**What has been tried (all fail with port 80 refused)**:
-- `WiFi.mode(WIFI_AP)` in initWifi() → port refused
-- `WiFi.mode(WIFI_AP_STA)` in initWifi() → port refused
-- SoftAP started early in setup() + duplicate in initWifi() → port refused
-- SoftAP started only in setup() (not in initWifi()) + auto-init in handleWebResponse() → port refused
-- Adding `delay(500)` before `initWebServer()` → port refused
-- Port change from 80 to 8080 → port refused (not a port collision)
-- Using Arduino `WiFiServer` instead of esp32_https_server → port refused
-- Unified `WIFI_AP_STA` mode throughout (no mode transitions) → port refused
-
-**Observations**:
-- `initWebServer()` is called (`MESHTASTIC_EXCLUDE_WEBSERVER=0`), but `isWebServerReady` stays false
-- The `HTTPServer` constructor allocates memory but `start()` → `setupSocket()` → `socket()` or `bind()` or `listen()` returns failure
-- No error messages visible — serial output is corrupted by a separate upstream bug (heap buffer overflow in protobuf loading corrupts `RedirectablePrint` after `/prefs/device.proto` loads)
-- With `ARDUINO_USB_CDC_ON_BOOT=0` on UART0, boot log appears up to the filesystem listing, then goes garbled
-
-**Suspected root causes**:
-- Memory corruption from protobuf loading (`/prefs/device.proto`) corrupts heap before socket allocation
-- Library (`esp32_https_server` commit `0c71f38`) incompatibility with ESP32-S3 Arduino 3.x
-- lwIP initialization gap in SoftAP-only mode
-
-**Hardware confirmed**:
-- `setDTR(True)` → EN HIGH (normal); `setDTR(False)` → EN LOW (reset) — correct reset sequence: `s.setDTR(True); s.setRTS(True)` → `s.setDTR(False)` → wait → `s.setDTR(True)`
-- 8 MB GD flash, SPI mode DIO, 80 MHz, chip rev v0.2, MAC `d8:85:ac:aa:74:98`
-- No PSRAM populated
-- No native USB CDC (`/dev/ttyACM0`), only CP2102 UART0 (`/dev/ttyUSB0`, 115200 baud)
-
- ### §10.2 Phase 1 — Next Steps
-
-#### Immediate: Resolve HTTPServer Binding
-
-1. **Verify `MESHTASTIC_EXCLUDE_WEBSERVER=0`** is in build flags (done in Session 2)
-2. **Add errno logging** to `HTTPServer::setupSocket()` via GPIO or UART register writes to capture why `socket()`/`bind()`/`listen()` fails (serial output is corrupted by separate upstream Meshtastic bug)
-3. **Try replacing esp32_https_server** with Arduino built-in `WiFiServer` (well-tested on ESP32-S3) to bypass library incompatibility
-4. **Fix serial corruption** by investigating the heap buffer overflow after `/prefs/device.proto` loading — may fix the socket failure too if both share a root cause
-
-#### After HTTPServer Works
-
-1. **Verify HTTP endpoint** with `curl -X POST http://192.168.4.1/api/v1/meter ...`
-2. **Fix HTTP response flush** (known issue — TCP data not reaching client, needs `SO_LINGER` or explicit flush)
-3. **Tasmota integration**: wire WattWächter TTL IR sensor → Tasmota (ESP32/ESP8266) → HTTP POST to T3-S3 SoftAP
-4. **Two-node LoRa test**: second T3-S3 receives the broadcast meter data
-5. **24h stability test** without crash
-
-### §10.3 Phase 2 (deferred)
-
-Phase 2 coordination (flex trading, load shedding, §14a forwarding) depends on the Meshtastic prototype passing the hardware tests above. Key unknowns:
-- Whether Meshtastic's chat-oriented protocol overhead constrains flex signaling frequency
-- Whether the ~40-node practical mesh limit binds at 100+ households (multi-mesh gateways may be needed)
-- Whether the SoftAP HTTP approach generalizes to Meshtastic's official web server API for configuration
-
-These will be revisited after the Phase 1 POC hardware validation.

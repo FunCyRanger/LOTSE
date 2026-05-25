@@ -23,7 +23,7 @@ Phase 1 is a **data transport pipeline**: relay smart meter IR readings from sen
 | File | Content |
 |------|---------|
 | [`Requirements.md`](Requirements.md) | Requirements, use cases, priority hierarchy |
-| [`Brainstorming.md`](Brainstorming.md) | Architecture, protocol, hardware evaluation, open decisions |
+| [`Brainstorming.md`](Brainstorming.md) | Architecture, hardware evaluation, open decisions |
 | [`prototype-build.md`](prototype-build.md) | BOM, circuit, PlatformIO flashing guide |
 | [`phase1-summary.md`](phase1-summary.md) | Phase 1 data bridge status |
 | [`AGENTS.md`](AGENTS.md) | Architecture invariants & constraints (AI agent reference) |

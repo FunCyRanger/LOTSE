@@ -2,7 +2,7 @@
 
 **Status:** Historical reference. FR-06 is now an **informational metric** — infrastructure safety is the sole hard constraint. See `simulation-spec.md` for the updated focus on grid utilization and `simulation_v2/` for the implementation.
 
-**Based on:** Requirements.md §2b, §3 FR-06; Brainstorming §6, §8 Q6/Q7.
+**Based on:** Requirements.md §2b, §3 FR-06; Brainstorming §7 (Phase 2), §8 Q6/Q7.
 
 ---
 
@@ -690,8 +690,8 @@ These need resolution before a fairness approach can be selected:
 | Requirements.md | §3 (FR-07) | §14a compatibility constraints |
 | Brainstorming.md | §1 (signal table) | Voluntary vs mandatory signals |
 | Brainstorming.md | §5.1 | Phase 1: no coordinator, individual limits |
-| Brainstorming.md | §6 (Phase 2) | Fairness validation design sketch |
+| Brainstorming.md | §7 (Phase 2) + §8 Q6-Q7 | Fairness validation design sketch |
 | Brainstorming.md | §8 Q6 | Flex matching algorithm (open) |
 | Brainstorming.md | §8 Q7 | Data retention (open) |
-| Brainstorming.md | §10 rec. 6 | Simulation recommendation for fairness validation |
+| Brainstorming.md | §7 (Phase 2) | Simulation recommendation for fairness validation |
 | AGENTS.md | Architecture invariants | Phase structure, no balancing accounting |

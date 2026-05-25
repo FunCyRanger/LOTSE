@@ -1,6 +1,6 @@
 **Requirements Analysis and Use-Case Documentation (Simplified Version)**
 
-**Status:** Draft — Phase 1 POC in progress (SoftAP works, HTTPServer binding blocked — see `phase1-summary.md` and `prototype-build.md §P7.5`).
+**Status:** Draft — Phase 1 data bridge specification complete. Implementation in progress on Heltec V3.
 
 ### 1. Introduction and Purpose
 
@@ -65,22 +65,10 @@ The system must periodically determine the maximum permissible net export/import
 **FR-02 Measurement Data Acquisition**  
 Provision of time-resolved consumption and generation data through a suitable, certified metering device. As a private individual, access to this measurement data must be possible.
 
-**FR-03 Decentralized Agents**  
-Each participant operates an autonomous agent that acts as a bridge between the neighborhood coordination layer and the household's existing energy management system (e.g., OpenEMS, evcc, Home Assistant). The agent processes local measurement data, offers or requests flexibility to the neighborhood, and forwards coordination signals (grid limits, flexibility requests, tariff or § 14a information) to the household's internal automation. Direct device control remains with the household's own EMS — the agent never controls end devices such as inverters, heat pumps, or wallboxes directly.
-
-**FR-04 Local Coordination**  
-Support for coordinating local surplus and demand within applicable grid limits, mediated through household agents without direct device control. Coordination is achieved via signaling (grid limits, flexibility offers/requests, tariff information) — each household's EMS decides autonomously how to respond. No balancing accounting is performed.
 
 **FR-05 Simple Onboarding**  
 New participants must be able to integrate into the system without extensive administrative effort.
 
-**FR-06 Economic Fairness (informational)**  
-The optimization logic SHOULD avoid strategies that result in financial loss to any household compared to their baseline pricing model. This is an informational metric, not a hard constraint — infrastructure safety (FR-01) always takes precedence. Each household must have visibility into the financial impact of coordination decisions and the ability to opt out of participation.
-
-> **Note:** FR-06 is evaluated as an informational metric in the simulation. The primary hard constraint is infrastructure safety (see FR-01). The comparison algorithm and baseline scenario are defined in the simulation (`simulation_v2/`).
-
-**FR-07 §14a Compatibility**  
-The system must coexist with §14a grid-serving control without interference. The grid operator's control path (smart meter gateway → Steuerbox → EEBUS/relay → device or household EMS) is independent and pre-existing for households with §14a-capable devices. The system operates as a separate coordination layer above this: it may optionally receive §14a state information from the household EMS to inform coordination decisions, but it is never a §14a signal carrier. The household EMS reconciles both system coordination signals and §14a reduction commands autonomously. Formal §14a certification is not required because the system is not in the signal path.
 
 ### 4. Non-Functional Requirements
 
@@ -110,9 +98,7 @@ The system must coexist with §14a grid-serving control without interference. Th
 mindmap
   root((System))
     Phase 1 - Meter Data Collection & Broadcast
-      Local grid limit enforcement (per household)
-      Smart meter reading via Tasmota IR sensor → HTTP POST
-      Mesh-LoRa broadcast (Meshtastic fork) for logging
+      IR sensor → SoftAP HTTP → LoRa mesh → Home Assistant
       SoftAP configuration interface (192.168.4.1)
       Simple onboarding via SoftAP
     Phase 2 - Coordination
@@ -126,15 +112,10 @@ mindmap
 
 #### Phase 1 — Meter Data Collection & Broadcast
 
-- **UC-01 Determine & broadcast grid limit**: Each household's grid limit is configured locally on the agent (from the grid connection contract). The agent self-regulates within this limit independently — no inter-household communication needed. The limit is set via the SoftAP web UI (192.168.4.1) or the Meshtastic admin interface.
-- **UC-02 Record consumption & generation data**: A Tasmota-based IR sensor (WattWächter TTL) reads the German smart meter via optical interface. The Tasmota device sends parsed values to the T3-S3 agent via `POST /api/v1/meter` over WiFi (SoftAP). The agent re-broadcasts the meter data over the LoRa mesh for logging and display on other nodes. Supported OBIS codes: 1.8.0 (total consumption), 2.8.0 (total feed-in), 16.7.0 (current power, needs PIN).
-- **UC-05 Simple onboarding**: The T3-S3 broadcasts a SoftAP (`LEM-Meshtastic-XXXX`) on every boot. A new participant connects to this WiFi network and configures the agent via the embedded web interface. No port forwarding, DDNS, VPN, or technical networking expertise required.
+- **UC-01 Forward meter data to Home Assistant**: The IR sensor sends meter readings to the ingress Heltec V3 via SoftAP HTTP POST at `/api/v1/meter`. The ingress forwards them over the LoRa mesh to the egress node, which publishes to Home Assistant via MQTT or REST. No local limit enforcement, no inter-household coordination.
+- **UC-02 Record consumption & generation data**: A Tasmota-based IR sensor reads the smart meter via optical interface and sends parsed JSON to the ingress Heltec V3 via `POST /api/v1/meter` over WiFi (SoftAP). The ingress re-broadcasts the data over the LoRa mesh to the egress node, which publishes to Home Assistant.
+- **UC-05 Simple onboarding**: The Heltec V3 broadcasts a SoftAP on every boot. A new participant connects to this WiFi network and configures the agent via the embedded web interface. No port forwarding, DDNS, VPN, or technical networking expertise required.
 
-#### Phase 2 — Coordination
-
-- **UC-03 Offer / request flexibility**: The household agent advertises available flexibility or signals demand to the neighborhood coordinator. The household's own EMS decides whether and how to fulfill flexibility requests.
-- **UC-04 Local coordination & load shifting**: Coordination of flexibility between autonomous household systems via signaling. When grid limits are breached, the coordinator broadcasts a load-shed signal with this recommended priority order: EV wallbox → battery charging → heat pump. Each household's EMS decides how to respond. Balcony solar (Balkonkraftwerk) curtailment follows the same signaling principle if reverse power flow limits are exceeded.
-- **UC-06 Grid-serving signals**: Forwarding of § 14a-compliant grid-serving signals (module 1/2/3) from grid operator or coordinator to each household's EMS for autonomous implementation.
 
 ### 7. Sources
 

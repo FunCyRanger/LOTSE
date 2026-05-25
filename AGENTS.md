@@ -1,6 +1,6 @@
 # AGENTS.md
 
-LoRa-to-WiFi data bridge for Home Assistant. Firmware in `firmware/` (PlatformIO ESP32-S3); design docs in root `.md` files.
+LoRa-to-WiFi data bridge for Home Assistant. Firmware in `meshtastic-fork-clean/` (PlatformIO ESP32-S3 Heltec V3); design docs in root `.md` files.
 
 ## System architecture
 
@@ -14,8 +14,9 @@ Phase 1 = data transport only (no local limit enforcement, no inter-household co
 
 | Path | Contents |
 |------|----------|
-| `firmware/` | PlatformIO ESP32-S3 firmware (Heltec V3 target). |
-| `meshtastic-fork/` | Earlier LoRa stack fork (deprecated for Phase 1 — kept for reference). |
+| `meshtastic-fork-clean/` | Active PlatformIO ESP32-S3 firmware (Heltec V3 target, Meshtastic v2.7.9). |
+| `meshtastic-fork/` | Earlier LoRa stack fork (deprecated — kept for reference). |
+| `firmware/` | Unused placeholder (empty). |
 
 ## Build & flash (Heltec V3)
 
@@ -51,11 +52,6 @@ pio run -e heltec-v3 -t upload --upload-port /dev/ttyUSB0  # flash via CP2102 UA
 
 | Error | Fix |
 |-------|-----|
-| PlatformIO lib `m-/SML` invalid | Use `mzi_/sml` |
-| Holley DTZ541 baud 115200, firmware defaults 9600 | Handle per-meter baud config |
-| OBIS code `36.7.0` wrong | Use `-1:16.7.0` (bidirectional) |
-| T3-S3 v1: no PSRAM, `-DBOARD_HAS_PSRAM` crashes boot | Remove flag, add `CONFIG_SPIRAM=n`, `board_build.psram = disable` |
-| T3-S3 v1: USB CDC not connected | Use CP2102 UART, not `/dev/ttyACM0`. Changed `ARDUINO_USB_CDC_ON_BOOT=1` → `=0`. |
 | `MESHTASTIC_EXCLUDE_WEBSERVER=1` in `configuration.h:536` | Set `-D MESHTASTIC_EXCLUDE_WEBSERVER=0` |
 | Serial corruption after proto load | Upstream Meshtastic bug: null byte corrupts `RedirectablePrint` after device.proto load. |
 | DTR/RTS reset inverted | `setDTR(False)` = EN LOW (reset). Correct: `True → False (wait) → True`. |

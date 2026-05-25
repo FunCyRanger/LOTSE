@@ -88,7 +88,7 @@ Same external conditions (price, load, PV) in both runs. Agent state is minimal:
 
 ### 2.3 Faithfulness to the real system
 
-The simulation mirrors the Phase 2 architecture (Brainstorming §6):
+The simulation mirrors the Phase 2 architecture (Brainstorming §5 + §7):
 - Agents are autonomous — they decide whether to respond to signals based on min_price and budget
 - Coordination is voluntary (except during grid emergencies where infrastructure > fairness)
 - No balancing accounting — the system never settles payments
@@ -927,7 +927,7 @@ pyyaml>=6.0
 | Requirements.md | §6 UC-04 | Load shed priority order (wallbox → battery → heat pump) |
 | Requirements.md | §2b | 10 household types with pricing models |
 | Requirements.md | §2a | Priority hierarchy (infrastructure > fairness) |
-| Brainstorming.md | §6 | Phase 2 coordination architecture |
+| Brainstorming.md | §5 + §7 | Phase 2 coordination architecture |
 | Brainstorming.md | §5.2 | Phase 2 coordinator functions |
 | AGENTS.md | Architecture | Phase 2 invariants, no balancing accounting |
 | OPSD Time Series | §8.5 | Real German prices, PV, and load (2015–2020) — [data.open-power-system-data.org/time_series/2020-10-06/](https://data.open-power-system-data.org/time_series/2020-10-06/) |

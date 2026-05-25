@@ -137,7 +137,7 @@ network_config = {
 ### 2.5 Communication Model
 
 Tracks LoRa duty cycle for each agent:
-- Payload size per message type (from Brainstorming §4)
+- Payload size per message type (design assumption: 25-100 bytes per message)
 - Time on air (SF, bandwidth, payload → calculate with RadioLib parameters)
 - 1% duty cycle: sum of tx_time / window_time <= 0.01
 - At 100+ agents: broadcast is O(1), agent→coordinator is O(N)
@@ -396,5 +396,5 @@ pyyaml>=6.0
 | Requirements.md §3 (FR-06) | Simulation quantifies FR-06 compliance |
 | Brainstorming.md §8 Q6 | Simulation results inform flex matching algorithm decision |
 | Brainstorming.md §8 Q7 | Simulation determines data retention needs for tracking-based approaches |
-| Brainstorming.md §10 rec. 6 | This is the implementation of recommendation 6 |
+| Brainstorming.md §7 (Phase 2) | Simulation validates Phase 2 coordination before hardware implementation |
 | prototype-build.md | Simulation parameters (duty cycle, message sizes) calibrated from prototype |
