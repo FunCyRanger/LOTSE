@@ -1,6 +1,6 @@
 **Requirements Analysis and Use-Case Documentation (Simplified Version)**
 
-**Status:** Draft — Phase 1 POC implemented in `meshtastic-fork/` (branch `develop`).
+**Status:** Draft — Phase 1 POC in progress (SoftAP works, HTTPServer binding blocked — see `phase1-summary.md` and `prototype-build.md §P7.5`).
 
 ### 1. Introduction and Purpose
 

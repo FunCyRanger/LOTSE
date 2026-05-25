@@ -814,24 +814,74 @@ For Phase 1 at any scale: all architectures score identically (no inter-househol
 
 ## 10. Progress and Recommendations
 
-### §10.1 Phase 1 POC Completed
+ ### §10.1 Phase 1 POC — Current Status
 
-The following has been implemented and tested:
+The Phase 1 POC is **in progress** with the following known results:
 
-1. **PSRAM crash fixed** on LilyGO T3-S3 v1 (no PSRAM populated): removed `-DBOARD_HAS_PSRAM` from board flags, added `CONFIG_SPIRAM=n` — boot confirmed working past 5.5s without crash.
-2. **Unconditional SoftAP**: Meshtastic fork modified to start SoftAP (`LEM-Meshtastic-XXXX`, `192.168.4.1`) and embedded WebServer on every boot, regardless of WiFi STA configuration. The `isWifiAvailable()` check includes SoftAP status, and HTTPS server init handles null cert gracefully for SoftAP-only mode.
-3. **HTTP meter endpoint**: `POST /api/v1/meter` accepts JSON `{power_w, import_kwh, export_kwh}` from a Tasmota IR sensor and broadcasts it over the LoRa mesh via a Meshtastic Protobuf TEXT_MESSAGE_APP packet. CORS headers included for cross-origin requests. Compiles successfully.
-4. **Hardware diagnosis**: T3-S3 v1 does not connect native USB D+/D- (GPIO 19/20) to the USB-C port — only CP2102 UART is available. The Arduino `Serial` stream is routed to the disconnected USB CDC, so no app-level serial output appears on UART0. This affects Meshtastic serial CLI but does not block the SoftAP+HTTP approach.
-5. **Git repository**: All changes committed to `meshtastic-fork/` (branch `develop`), pushed to `git@github.com:FunCyRanger/meshtastic-fork.git`.
+#### ✅ Done and Confirmed
 
-### §10.2 What Remains for Phase 1
+1. **PSRAM crash fixed** on LilyGO T3-S3 v1 (no PSRAM populated): removed `-DBOARD_HAS_PSRAM` from board flags, added `CONFIG_SPIRAM=n`, `board_build.psram = disable` — single clean boot confirmed (single `entry 0x403c8898`, no crash loop). Stock Meshtastic firmware compiles and runs with just the PSRAM fix.
 
-1. **Build and flash** the modified Meshtastic fork to a physical T3-S3 board
-2. **Verify SoftAP** is visible (SSID scan from phone/laptop)
-3. **Test HTTP endpoint** via `curl -X POST http://192.168.4.1/api/v1/meter ...`
-4. **Tasmota integration**: wire WattWächter TTL IR sensor → Tasmota (ESP32/ESP8266) → HTTP POST to T3-S3 SoftAP
-5. **Two-node LoRa test**: second T3-S3 receives the broadcast meter data
-6. **24h stability test** without crash
+2. **SoftAP visible and functional** when started early in `setup()` with `WiFi.mode(WIFI_AP)`:
+   - SSID `LEM-7498` (last 4 MAC hex digits) visible on laptop scan
+   - DHCP works (laptop gets 192.168.4.2/24)
+   - ICMP ping to 192.168.4.1 works (~1-5ms)
+   
+3. **HTTP meter endpoint code compiles**: `POST /api/v1/meter` handler in `ContentHandler.cpp` (JSON body parsing, LoRa broadcast via TEXT_MESSAGE_APP packet, CORS headers).
+
+4. **Git repository**: All Phase 1 changes committed to `meshtastic-fork/` (branch `develop`), pushed to `git@github.com:FunCyRanger/meshtastic-fork.git`.
+
+5. **Webserver enabled**: `MESHTASTIC_EXCLUDE_WEBSERVER=1` in `configuration.h:536` was overriding the build — `initWebServer()` was a no-op stub. Fixed by adding `-D MESHTASTIC_EXCLUDE_WEBSERVER=0` in T3-S3 v1 build flags.
+
+#### 🔴 Blocked — HTTPServer Not Binding
+
+The `esp32_https_server` library's `HTTPServer::start()` consistently fails to bind port 80 on the T3-S3 v1. The laptop gets `curl: (7) Connection refused` (RST sent) — the server socket is never established.
+
+**Note:** This is NOT a regression. Code analysis confirmed that `initWebServer()` was never called in ef734b7 (nor any earlier build) — `MESHTASTIC_EXCLUDE_WEBSERVER=1` compiled out all web server code. The HTTPServer has never been started on this hardware. Previous reports of "port 80 open" on ef734b7 were in error.
+
+**What has been tried (all fail with port 80 refused)**:
+- `WiFi.mode(WIFI_AP)` in initWifi() → port refused
+- `WiFi.mode(WIFI_AP_STA)` in initWifi() → port refused
+- SoftAP started early in setup() + duplicate in initWifi() → port refused
+- SoftAP started only in setup() (not in initWifi()) + auto-init in handleWebResponse() → port refused
+- Adding `delay(500)` before `initWebServer()` → port refused
+- Port change from 80 to 8080 → port refused (not a port collision)
+- Using Arduino `WiFiServer` instead of esp32_https_server → port refused
+- Unified `WIFI_AP_STA` mode throughout (no mode transitions) → port refused
+
+**Observations**:
+- `initWebServer()` is called (`MESHTASTIC_EXCLUDE_WEBSERVER=0`), but `isWebServerReady` stays false
+- The `HTTPServer` constructor allocates memory but `start()` → `setupSocket()` → `socket()` or `bind()` or `listen()` returns failure
+- No error messages visible — serial output is corrupted by a separate upstream bug (heap buffer overflow in protobuf loading corrupts `RedirectablePrint` after `/prefs/device.proto` loads)
+- With `ARDUINO_USB_CDC_ON_BOOT=0` on UART0, boot log appears up to the filesystem listing, then goes garbled
+
+**Suspected root causes**:
+- Memory corruption from protobuf loading (`/prefs/device.proto`) corrupts heap before socket allocation
+- Library (`esp32_https_server` commit `0c71f38`) incompatibility with ESP32-S3 Arduino 3.x
+- lwIP initialization gap in SoftAP-only mode
+
+**Hardware confirmed**:
+- `setDTR(True)` → EN HIGH (normal); `setDTR(False)` → EN LOW (reset) — correct reset sequence: `s.setDTR(True); s.setRTS(True)` → `s.setDTR(False)` → wait → `s.setDTR(True)`
+- 8 MB GD flash, SPI mode DIO, 80 MHz, chip rev v0.2, MAC `d8:85:ac:aa:74:98`
+- No PSRAM populated
+- No native USB CDC (`/dev/ttyACM0`), only CP2102 UART0 (`/dev/ttyUSB0`, 115200 baud)
+
+ ### §10.2 Phase 1 — Next Steps
+
+#### Immediate: Resolve HTTPServer Binding
+
+1. **Verify `MESHTASTIC_EXCLUDE_WEBSERVER=0`** is in build flags (done in Session 2)
+2. **Add errno logging** to `HTTPServer::setupSocket()` via GPIO or UART register writes to capture why `socket()`/`bind()`/`listen()` fails (serial output is corrupted by separate upstream Meshtastic bug)
+3. **Try replacing esp32_https_server** with Arduino built-in `WiFiServer` (well-tested on ESP32-S3) to bypass library incompatibility
+4. **Fix serial corruption** by investigating the heap buffer overflow after `/prefs/device.proto` loading — may fix the socket failure too if both share a root cause
+
+#### After HTTPServer Works
+
+1. **Verify HTTP endpoint** with `curl -X POST http://192.168.4.1/api/v1/meter ...`
+2. **Fix HTTP response flush** (known issue — TCP data not reaching client, needs `SO_LINGER` or explicit flush)
+3. **Tasmota integration**: wire WattWächter TTL IR sensor → Tasmota (ESP32/ESP8266) → HTTP POST to T3-S3 SoftAP
+4. **Two-node LoRa test**: second T3-S3 receives the broadcast meter data
+5. **24h stability test** without crash
 
 ### §10.3 Phase 2 (deferred)
 

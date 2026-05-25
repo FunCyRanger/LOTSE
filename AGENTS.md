@@ -1,102 +1,78 @@
-# Agent Instructions
+# AGENTS.md
 
-Spec + simulation repo for a decentralized neighborhood energy coordination system (100+ households). Primary objective: maximize grid utilization to defer upgrades. Design docs are Markdown; the grid utilization simulation is Python.
+LoRa-to-WiFi data bridge for Home Assistant. Firmware in `firmware/` (PlatformIO ESP32-S3); design docs in root `.md` files.
 
-## Source documents
+## System architecture
 
-| File | Key content |
-|------|-------------|
-| `Requirements.md` | Requirements, use cases, 10 household types (T1–T10), priority hierarchy |
-| `Brainstorming.md` | Architecture, protocol, 7 message types, open decisions (§8) |
-| `prototype-build.md` | Hardware BOM, circuit, PlatformIO flashing guide |
-| `prototype-build.md` | Hardware BOM, circuit, PlatformIO flashing guide |
-| `simulation-spec.md` | Grid utilization simulation specification (v2) |
-| `fairness-analysis.md` | FR-06 problem statement (superseded — see simulation-spec.md) |
-| `20260517 AI review/Claude.md` | Verified errors in `prototype-build.md` |
-
-## Simulation code
-
-**Active**: `simulation_v2/` (pandapower + numpy + pandas). **Archived**: `simulation/` (older version, do not use).
-
-```sh
-# Run (approach A, 365 days, synthetic data)
-python -m simulation_v2.sim
-
-# Common variations
-python -m simulation_v2.sim --approach E --days 30
-python -m simulation_v2.sim --data-source opsd
-python -m simulation_v2.sim -c configs/stress.yaml
-
-# Technology scaling (PV, EV, heat pump penetration)
-python -m simulation_v2.sim --pv-scale 2.0 --ev-scale 1.5
-
-# Penetration sweep — find hosting capacity limits
-python -m simulation_v2.sim --sweep
-
-# Exit code: 0 = grid safe (coordination kept transformer ≤ 100%), 1 = grid unsafe
+```
+IR sensor --WiFi (SoftAP HTTP)--> Heltec V3 (ingress) --LoRa mesh--> Heltec V3 (egress) --WiFi station--> Home Assistant (MQTT/REST)
 ```
 
-Deps: `pip install pandapower numpy pandas pyyaml` (see `simulation_v2/requirements.txt`).
+Phase 1 = data transport only (no local limit enforcement, no inter-household coordination).
 
-**Key files:**
-- `sim.py` — entrypoint, CLI arg parsing, sys.path quirk (`sys.path.insert(0, parent.parent)`), `--sweep` mode
-- `agents.py` — 10 household agents (T1–T10), each with a list of `FlexDevice` (ev/battery/pv/heatpump) and device-level priority shedding
-- `coordinator.py` — 9 coordination strategies (A–I), `_priority_shed()` tiers: wallbox → battery → heat pump
-- `core.py` — `run_simulation()`, `write_timeseries_csv()`, dataclasses for state/signals, `compute_utilization_metrics()`
-- `grid.py` — builds pandapower LV network from config
-- `data_loader.py` — OPSD time-series data loading
-- `configs/` — `default.yaml`, `opsd.yaml`, `stress.yaml`, `opsd_stress.yaml`
+## Directories
 
-**No tests exist.** Results directory (`simulation_v2/results/`) is gitignored — regenerated on each run.
+| Path | Contents |
+|------|----------|
+| `firmware/` | PlatformIO ESP32-S3 firmware (Heltec V3 target). |
+| `meshtastic-fork/` | Earlier LoRa stack fork (deprecated for Phase 1 — kept for reference). |
 
-### Configuration
+## Build & flash (Heltec V3)
 
-Config keys of interest in `configs/*.yaml`:
-- `approach`: coordination strategy (A–I), overridable via `--approach`
-- `duration_days`, `timestep_min`, `seed`, `n_households`
-- `household_mix`: dict mapping T1–T10 to proportions
-- `type_defaults`: per-type overrides for `pv_kwp`, `battery_kwh`, `annual_consumption_kwh`
-- `tariff_rate_ct_per_kwh`, `eeg_rate_ct_per_kwh`
-- `transformer_kva`, `feeder_config`, `par14a`
-- `technology_scaling`: `{pv, ev, heatpump}` multipliers for penetration sweeps (default 1.0)
-- `sweep`: `{max_pv_scale, max_ev_scale, max_hp_scale, step}` for `--sweep` mode
+```bash
+cd meshtastic-fork-clean
+pio run -e heltec-v3               # build
+pio run -e heltec-v3 -t upload --upload-port /dev/ttyUSB0  # flash via CP2102 UART
+```
 
-## Architecture invariants
+**Known build blockers (Heltec V3):**
 
-- **Signaling/coordination layer only** — never controls devices directly. All device control stays with household's EMS (OpenEMS, evcc, Home Assistant).
-- **Infrastructure Safety (hard constraint) > Economic Fairness (informational)** — load shed order: EV wallbox → battery charging → heat pump. Balcony solar curtailed if reverse power flow exceeded. Within each household, devices shed by priority: EV (prio 1) → battery (2) → PV (3) → heat pump (4).
-- **Phase 1**: individual allocation, no inter-household communication. **Phase 2**: flexibility trading + §14a signals; Phase 1 limits remain hard ceiling.
-- **Grid utilization** is the primary evaluation metric: peak reduction, congestion events, headroom increase. FR-06 (household economics) is informational only.
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `host/ble_uuid.h: No such file` | Framework BLE library requires NimBLE. | Add `nkolban/NimBLE-Arduino` to `lib_deps` or exclude BLE sources. |
+| `RAK13800_W5100S.h: No such file` | Ethernet code not needed. | Exclude `src/mesh/eth/` in `build_src_filter`. |
+| `bluefruit_common.h: No such file` | nRF52 platform code compiled for ESP32. | Exclude `src/platform/nrf52/` in `build_src_filter`. |
+| `AES.h: No such file` | `lib_deps` override broke base inheritance. | Use `${env.lib_deps}` to inherit, don't re-list. |
+| `pb.h: No such file` | Nanopb missing from deps. | Same cause — inherit from base, don't override. |
 
-## Communication constraints
+## Data bridge implementation plan
 
-- No incoming ports. ≥100m through walls/cellars. No port forwarding, DDNS, or VPN.
-- Preferred transport: LoRa 868 MHz (~50 bytes per ~50s, 1% duty cycle).
+1. **Ingress node** (Heltec V3, SoftAP mode):
+   - Run SoftAP on `192.168.4.1`.
+   - Accept HTTP POST at `/api/v1/meter` with IR sensor JSON payload.
+   - Forward payload over LoRa mesh as a Meshtastic packet.
+2. **Egress node** (Heltec V3, WiFi station mode):
+   - Connect to home WiFi.
+   - Listen for specific LoRa packets.
+   - Forward data to Home Assistant via MQTT or REST.
+3. **Simplify**: strip BLE, Ethernet, GPS, display UI from the build to reduce flash size and build time.
 
-## Known errors (verified, carry forward)
+## Known firmware errors
 
 | Error | Fix |
 |-------|-----|
-| PlatformIO library ID `m-/SML` invalid | Use **`mzi_/sml`** instead |
-| Holley DTZ541 baud 115200 but firmware defaults to 9600 | Handle per-meter baud config |
-| OBIS code `36.7.0` wrong for instantaneous power | Use **`-1:16.7.0`** (bidirectional) |
-| Prototype steps P3–P5 test Phase 2 LoRa but labeled Phase 1 | Phase 1 has no inter-household comm |
-| T3-S3 v1: no PSRAM populated + `-DBOARD_HAS_PSRAM` crashes boot | Remove `-DBOARD_HAS_PSRAM`, add `CONFIG_SPIRAM=n` |
-| T3-S3 v1: native USB CDC not connected (no /dev/ttyACM0) | `Serial` goes to disconnected USB CDC; only CP2102 UART works |
-| T3-S3 v1: SoftAP+WebServer changes reverted during PSRAM debugging | Re-apply after crash fix confirmed
+| PlatformIO lib `m-/SML` invalid | Use `mzi_/sml` |
+| Holley DTZ541 baud 115200, firmware defaults 9600 | Handle per-meter baud config |
+| OBIS code `36.7.0` wrong | Use `-1:16.7.0` (bidirectional) |
+| T3-S3 v1: no PSRAM, `-DBOARD_HAS_PSRAM` crashes boot | Remove flag, add `CONFIG_SPIRAM=n`, `board_build.psram = disable` |
+| T3-S3 v1: USB CDC not connected | Use CP2102 UART, not `/dev/ttyACM0`. Changed `ARDUINO_USB_CDC_ON_BOOT=1` → `=0`. |
+| `MESHTASTIC_EXCLUDE_WEBSERVER=1` in `configuration.h:536` | Set `-D MESHTASTIC_EXCLUDE_WEBSERVER=0` |
+| Serial corruption after proto load | Upstream Meshtastic bug: null byte corrupts `RedirectablePrint` after device.proto load. |
+| DTR/RTS reset inverted | `setDTR(False)` = EN LOW (reset). Correct: `True → False (wait) → True`. |
 
-## Open design decisions (Brainstorming §8)
+## Open decisions (Brainstorming §8)
 
 | # | Question | Status |
 |---|----------|--------|
-| Q1 | Communication medium (LoRa vs MQTT vs hybrid) | **Decided: Meshtastic fork (LoRa 868 MHz + SoftAP HTTP)** |
+| Q1 | Comms medium | **Decided: LoRa 868 MHz + SoftAP HTTP** |
 | Q2 | Coordinator placement | Phase 1: none. Phase 2: open |
 | Q6 | Flex matching algorithm | Open |
 | Q7 | Data retention | Open |
 
-## Key references
+## Quick commands (firmware project root)
 
-- **Regulatory**: §14a EnWG, BNetzA procedure, MsbG (metering). Links in `Requirements.md §7`.
-- **EMS**: OpenEMS, evcc, Home Assistant (MQTT/REST API). Smart meter SML (IEC 62056-21) via IR/UART.
-- **LoRa stacks**: RadioLib, Meshtastic. SML parsing: ESPHome, Tasmota.
-- **Cost targets**: €100–200/hh one-time (BOM ~€46–55), central ≤€300, €0 recurring.
+| Action | Command |
+|--------|---------|
+| List envs | `pio run -t listenvs` |
+| Clean build | `pio run -e heltec-v3 -t clean && pio run -e heltec-v3` |
+| Monitor serial | `pio device monitor -p /dev/ttyUSB0 -b 115200` |

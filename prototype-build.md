@@ -421,7 +421,9 @@ The prototype is a success when:
 
 ## P7. Meshtastic Fork — Phase 1 POC Implementation
 
-**Status:** ✅ Chosen approach. The Meshtastic fork (branch `develop` at `git@github.com:FunCyRanger/meshtastic-fork.git`) has the following modifications for Phase 1:
+**Status:** 🔄 In progress — SoftAP works, HTTPServer binding blocked (see §P7.5).
+
+The Meshtastic fork (branch `develop` at `git@github.com:FunCyRanger/meshtastic-fork.git`) has the following modifications for Phase 1:
 
 ### P7.1 Changes Made
 
@@ -432,8 +434,9 @@ The prototype is a success when:
 | `src/mesh/http/ContentHandler.cpp` | Added `POST /api/v1/meter` handler | Accepts Tasmota meter JSON `{power_w, import_kwh, export_kwh}`, broadcasts over LoRa mesh via TEXT_MESSAGE_APP |
 | `src/mesh/http/ContentHandler.h` | Declared `handleAPIv1Meter` | — |
 | `src/mesh/wifi/WiFiAPClient.cpp` | Unconditional SoftAP in `initWifi()`, SoftAP check in `isWifiAvailable()` | SoftAP starts on every boot regardless of WiFi STA config |
-| `src/mesh/http/WebServer.cpp` | Null-safe `secureServer` init | HTTPS server handles `cert == nullptr` gracefully for SoftAP-only mode |
+| `src/mesh/http/WebServer.cpp` | Null-safe `secureServer` init, auto-init fallback in `handleWebResponse()` | HTTPS server handles `cert == nullptr` gracefully for SoftAP-only mode |
 | `src/mesh/http/WebServer.h` | Exported `isCertReady` | For cert-await flow |
+| `src/main.cpp` | Early SoftAP init in `setup()` (before `powerHAL_init`) | Reliable SoftAP visibility with `WIFI_AP` mode |
 
 ### P7.2 Build & Flash
 
@@ -445,38 +448,50 @@ pio run -e tlora-t3s3-v1
 
 # Flash
 pio run -e tlora-t3s3-v1 --target upload
-
-# Upload LittleFS filesystem
-pio run -e tlora-t3s3-v1 --target uploadfs
 ```
 
 ### P7.3 Test Procedure
 
 1. **Power on** the T3-S3 — wait ~10s for boot
-2. **Scan for SoftAP** SSID `LEM-Meshtastic-XXXX` (password `lem12345`), e.g. with phone or laptop
-3. **Verify HTTP endpoint**:
+2. **Scan for SoftAP** SSID `LEM-7498` (password `lem12345`), e.g. with phone or laptop
+3. **Connect** to the SoftAP — DHCP assigns 192.168.4.2/24
+4. **Verify HTTP endpoint** (currently blocked — see §P7.5):
    ```bash
    curl -X POST http://192.168.4.1/api/v1/meter \
      -H "Content-Type: application/json" \
      -d '{"power_w": 1234, "import_kwh": 50000, "export_kwh": 1000}'
    ```
-4. **Check response**: `{"status":"ok"}`
-5. **Two-node test**: second T3-S3 receives the broadcast meter data (visible on Meshtastic serial debug or via the second node's SoftAP web UI)
+5. **Check response**: Expected `{"status":"ok"}`
+6. **Two-node test**: second T3-S3 receives the broadcast meter data (visible on Meshtastic serial debug or via the second node's SoftAP web UI)
 
 ### P7.4 Hardware Findings
 
 | Finding | Details |
 |---------|---------|
-| **No PSRAM** on T3-S3 v1 | Board ships without PSRAM populated. `BOARD_HAS_PSRAM` causes crash at boot (5.5s). Fixed by removing define and adding `CONFIG_SPIRAM=n`. |
-| **No native USB CDC** | USB D+/D- (GPIO 19/20) not connected to USB-C on v1. Only CP2102 UART (UART0) is available. `ARDUINO_USB_CDC_ON_BOOT=1` redirects `Serial` to disconnected USB CDC — no app output on UART0. ESP-IDF logs appear on UART0. |
-| **SoftAP works** | Modified Meshtastic starts SoftAP unconditionally on `192.168.4.1`. The WebServer registers HTTP handlers even without STA connection. |
-| **Cert generation** | 2048-bit RSA cert blocks for 30-60s on boot. Null-safe guard prevents crash. If cert is needed, the SoftAP must be reachable long enough for `createSSLCert()` to complete. |
+| **No PSRAM** on T3-S3 v1 | Board ships without PSRAM populated. `BOARD_HAS_PSRAM` causes crash at boot (5.5s). Fixed by removing define and adding `CONFIG_SPIRAM=n`, `board_build.psram = disable`. |
+| **No native USB CDC** | USB D+/D- (GPIO 19/20) not connected to USB-C on v1. Only CP2102 UART (UART0) is available. `ARDUINO_USB_CDC_ON_BOOT=1` redirects `Serial` to disconnected USB CDC — no app output on UART0. ESP-IDF boot logs appear on UART0. |
+| **SoftAP works** | Modified Meshtastic starts SoftAP unconditionally on `192.168.4.1`. DHCP and ICMP work. SSID `LEM-7498`. |
+| **DTR/RTS reset sequence** | `setDTR(True)` → pin LOW (0V) → EN HIGH; `setDTR(False)` → pin HIGH (3.3V) → EN LOW (reset). Correct boot: `s.setDTR(True); s.setRTS(True)` → `s.setDTR(False)` → wait 300ms → `s.setDTR(True)`. |
+| **ESP32-S3 chip rev** | v0.2, 8 MB GD flash, SPI DIO, 80 MHz. |
 
 ### P7.5 Known Issues
 
-1. **No UART0 app output**: With USB CDC disconnected, `Serial` output (Meshtastic CLI) is invisible. To fix: configure `Serial` to use UART0 explicitly in the variant's `variant.cpp` or a custom init hook. Currently diagnosed but not fixed.
-2. **Cert generation delay**: The 30-60s blocking cert generation delays WebServer availability. Acceptable for Phase 1 (rare reboots) but should be deferred to background or skipped entirely for SoftAP-only mode.
-3. **HTTPS unavailable without cert**: The HTTP server is insecure until cert is generated. Acceptable for Phase 1 (local SoftAP, no sensitive data crossing the air). The `cert == nullptr` guard prevents crash but means no HTTPS endpoint until `createSSLCert()` completes.
+1. **HTTPServer won't bind (BLOCKER)** — `esp32_https_server` library's `HTTPServer::start()` → `socket()`/`bind()`/`listen()` fails on T3-S3 v1. TCP connection to 192.168.4.1:80 gets RST ("connection refused"). Root cause unknown. Suspected causes:
+   - Memory corruption after protobuf loading (`/prefs/device.proto`) corrupts heap before socket allocation
+   - Library incompatibility with ESP32-S3 / Arduino 3.x
+   - lwIP initialization issue in SoftAP-only mode
+   
+   **Note:** This is NOT a regression since ef734b7. Code analysis shows `initWebServer()` was never called in ef734b7 either — `MESHTASTIC_EXCLUDE_WEBSERVER=1` in `configuration.h:536` compiled out all web server code. The HTTPServer has never worked on this hardware.
+   
+   See `phase1-summary.md` for current status and next steps.
+
+2. **No UART0 app output** — With `ARDUINO_USB_CDC_ON_BOOT=1` (default in board JSON), `Serial` output goes to unconnected USB D+/D- pins instead of the CP2102 UART. To get serial output, set `ARDUINO_USB_CDC_ON_BOOT=0` in board JSON. Baud: 115200 (SERIAL_BAUD).
+
+3. **Serial output corruption after proto load** — After loading `/prefs/device.proto` from LittleFS, a null byte corrupts `RedirectablePrint` ANSI escape sequences, garbling all subsequent serial output. Suspected heap buffer overflow in protobuf loading. This makes UART debugging impossible for code paths after filesystem init (including the HTTPServer init).
+
+4. **HTTP response not flushed** — Even if the server were running, initial tests showed `WiFiClient::print()`/`res->print()` output doesn't reach the TCP peer. Likely needs `close()` with `SO_LINGER` or explicit flush.
+
+5. **Cert generation delay** — 2048-bit RSA cert blocks for 30-60s on boot. Null-safe guard prevents crash. If cert is needed, the SoftAP must be reachable long enough for `createSSLCert()` to complete.
 
 ### P7.6 Decision: Chosen Over Custom LoRa
 
@@ -490,3 +505,20 @@ pio run -e tlora-t3s3-v1 --target uploadfs
 | Payload flexibility | ⚠️ Protobuf overhead | ✅ Raw binary, minimal overhead |
 
 The Meshtastic fork was chosen for Phase 1 because it eliminates the need to build a complete protocol stack — we only needed to add the HTTP meter data injection endpoint (~50 lines). The custom firmware at `firmware/` remains available as a fallback if Meshtastic's overhead becomes binding in Phase 2.
+
+### P7.7 Reference Build
+
+The base commit for the Meshtastic fork is `ef734b73c` ("fix: mbed TLS crash in Arduino 3.x"). Our Phase 1 POC changes are on top of this commit in branch `develop`.
+
+```bash
+cd /home/felix/LOTSE/meshtastic-fork
+git log --oneline develop
+```
+
+Key changes from base:
+- `boards/tlora-t3s3-v1.json` — removed `-DBOARD_HAS_PSRAM`, `ARDUINO_USB_CDC_ON_BOOT=1→0`
+- `variants/esp32s3/tlora_t3s3_v1/platformio.ini` — PSRAM disable, `-DMESHTASTIC_EXCLUDE_WEBSERVER=0`
+- `src/main.cpp` — early SoftAP init in `setup()`
+- `src/mesh/wifi/WiFiAPClient.cpp` — SoftAP always-on, webserver init hook
+- `src/mesh/http/WebServer.cpp` — `initWebServer()` with auto-init fallback
+- `src/mesh/http/ContentHandler.cpp` — `/api/v1/meter` endpoint
