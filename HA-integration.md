@@ -1,4 +1,6 @@
-# Home Assistant Integration — Round-Trip Test
+# Home Assistant Integration — Round-Trip Test (Superseded)
+
+**Status:** Historical reference. The current per-household setup is at `ha-mesh-setup.md`. This file documents the original round-trip test with a single injector node — kept because the firmware validation details (`from` field, `mqtt` channel name) are still correct.
 
 For **stock Meshtastic firmware** (validated against v2.7.9). The critical MQTT/JSON downlink requirements ("mqtt" channel name, `from` field validation) are standard upstream behavior.
 
