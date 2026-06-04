@@ -30,13 +30,27 @@ Tasmota ──MQTT──► HA automation          Tasmota ──MQTT──► H
 | Username/Password | If your broker requires auth |
 | TLS | Uncheck (local network) |
 
-### Primary Channel (index 0, usually `LongFast`)
+### Channel Configuration
 
-| Setting | Value |
-|---------|-------|
-| Uplink Enabled | ✅ Check (**sends received LoRa messages to your local MQTT**) |
+Choose one of two approaches:
 
-### Create an `mqtt` Channel
+**Option 1: mqtt channel for everything (recommended)**
+
+| Channel | Role | Uplink | Downlink |
+|---------|------|--------|----------|
+| Primary (LongFast) | Default LoRa | ✅ Leave checked (for mesh discovery) | ☐ Unchecked |
+| `mqtt` (index 1) | All meter data | ✅ **Check this** | ✅ **Check this** |
+
+With this setup, your node receives MQTT downlink on the `mqtt` channel and publishes received LoRa meter data to MQTT on the same channel.
+
+**Option 2: primary channel for receive (legacy)**
+
+| Channel | Role | Uplink | Downlink |
+|---------|------|--------|----------|
+| Primary (LongFast) | Receive LoRa → MQTT | ✅ Check | ☐ Unchecked |
+| `mqtt` (index 1) | MQTT → LoRa send | ☐ Unchecked | ✅ Check |
+
+### Creating the `mqtt` channel
 
 Create a NEW channel with these settings:
 
@@ -44,8 +58,8 @@ Create a NEW channel with these settings:
 |---------|-------|
 | Name | **`mqtt`** (exactly this, lowercase) |
 | PSK | Default/random |
-| Uplink Enabled | ☐ Unchecked |
-| Downlink Enabled | ✅ **Check this** |
+| Uplink Enabled | See table above |
+| Downlink Enabled | See table above |
 
 **Reboot the node** — channel changes don't take effect until reboot.
 
@@ -63,7 +77,25 @@ From Web UI → **About** page, note:
 
 ## 2. Data Format
 
-Messages sent over LoRa use compact plain text. The HA on each receiving end parses it.
+Choose one format — both are described below.
+
+### JSON format (recommended)
+
+Structured payload for easy parsing and extensibility. Supports SOC (state of charge).
+
+**Example payload:** `{"IMP":0.3,"EXP":0.0,"SOC":85}`
+
+| Field | Meaning | Type | Unit |
+|-------|---------|------|------|
+| IMP | Cumulative import | float | kWh |
+| EXP | Cumulative export | float | kWh |
+| SOC | Battery state of charge | int | % |
+
+**Size:** ~35-50 bytes — well within Meshtastic's ~220-byte limit.
+
+### Text format (legacy)
+
+Compact pipe-delimited plain text. Supported for backward compatibility.
 
 **Format:** `PWR:{value}\|IMP:{value}\|EXP:{value}`
 
@@ -73,27 +105,53 @@ Messages sent over LoRa use compact plain text. The HA on each receiving end par
 | IMP | Cumulative import | `IMP:50000.0` | kWh |
 | EXP | Cumulative export | `EXP:1000.0` | kWh |
 
-**Size:** ~40 bytes — well within Meshtastic's ~220-byte limit.
+**Size:** ~40 bytes.
 
 ---
 
 ## 3. Home Assistant: Sender Automation (per household)
 
-Create one automation that triggers every 5 minutes and publishes your meter data to your node's downlink topic.
+Create one automation that triggers periodically and publishes your meter data to your node's downlink topic. Choose the JSON format (recommended) or the text format (legacy).
 
-**Replace these values** for your household:
+**Replace these values** for your household in either template:
 - `{YOUR_REGION}` — e.g., `EU_868`
 - `{YOUR_NODE_DECIMAL}` — your node's decimal number (unquoted integer)
-- `{POWER_SENSOR}` — your HA entity for current power
-- `{IMPORT_SENSOR}` — your HA entity for cumulative import
-- `{EXPORT_SENSOR}` — your HA entity for cumulative export
+- `{INTERVAL}` — how often to send, e.g., `/5` (every 5 min) or `/1` (every 1 min)
+- Entity IDs — replace with your HA sensor entities
+
+### JSON format (recommended)
 
 ```yaml
-alias: "Meter Data → LoRa Mesh"
-description: "Send Tasmota meter readings into the LoRa mesh every 5 min"
+alias: "Meter Data → LoRa Mesh (JSON)"
+description: "Send meter readings as JSON into the LoRa mesh"
 trigger:
   - platform: time_pattern
-    minutes: "/5"
+    minutes: "/{INTERVAL}"
+    seconds: 0
+condition: []
+action:
+  - service: mqtt.publish
+    data:
+      qos: 0
+      retain: false
+      topic: "msh/{YOUR_REGION}/2/json/mqtt/"
+      payload: >
+        {"from": {YOUR_NODE_DECIMAL}, "type": "sendtext",
+         "payload": "{\"IMP\":{{ states('sensor.your_imp_sensor')|float(0)|round(2) }},\"EXP\":{{ states('sensor.your_exp_sensor')|float(0)|round(2) }},\"SOC\":{{ states('sensor.your_soc_sensor')|int(0) }}",
+         "channel": 1}
+mode: single
+```
+
+Fields: `IMP` (cumulative import, kWh), `EXP` (cumulative export, kWh), `SOC` (battery state of charge, %). Omit any field you don't have.
+
+### Text format (legacy)
+
+```yaml
+alias: "Meter Data → LoRa Mesh (text)"
+description: "Send meter readings as pipe-delimited text into the LoRa mesh"
+trigger:
+  - platform: time_pattern
+    minutes: "/{INTERVAL}"
     seconds: 0
 condition: []
 action:
@@ -106,7 +164,7 @@ action:
         {
           "from": {YOUR_NODE_DECIMAL},
           "type": "sendtext",
-          "payload": "PWR:{{ states('{POWER_SENSOR}')|int(0) }}|IMP:{{ states('{IMPORT_SENSOR}')|float(0) }}|EXP:{{ states('{EXPORT_SENSOR}')|float(0) }}"
+          "payload": "PWR:{{ states('sensor.your_power_sensor')|int(0) }}|IMP:{{ states('sensor.your_imp_sensor')|float(0) }}|EXP:{{ states('sensor.your_exp_sensor')|float(0) }}"
         }
 mode: single
 ```
@@ -128,14 +186,78 @@ From each neighbor's Meshtastic Web UI or from an observed MQTT message, collect
 
 ### 4.2 Subscribe to Their Messages
 
-Add to `configuration.yaml`. Create one block per neighbor.
+All neighbor messages arrive on a single topic: your node's uplink topic. The `from` field distinguishes who sent each message. Choose the template style matching your payload format.
+
+**Replace:**
+- `{YOUR_REGION}` — your region string (e.g., `EU_868`)
+- `{YOUR_NODE_HEX}` — **your own** node's hex ID (e.g., `!acaad598`)
+- `NEIGHBOR_A_DECIMAL` — neighbor's decimal number (unquoted integer)
+- `{STATE_TOPIC}` — see note below
+
+#### State topic depends on your uplink channel
+
+| If you use... | State topic is... |
+|---------------|-------------------|
+| mqtt channel (recommended) | `msh/{YOUR_REGION}/2/json/mqtt/!{YOUR_NODE_HEX}` |
+| primary (LongFast) channel | `msh/{YOUR_REGION}/2/json/LongFast/!{YOUR_NODE_HEX}` |
+
+#### JSON payload (recommended)
+
+Add to `configuration.yaml`. One block per field per neighbor.
+
+```yaml
+mqtt:
+  sensor:
+    - name: "Neighbor A IMP"
+      unique_id: "neighbor_a_imp"
+      state_topic: "{STATE_TOPIC}"
+      value_template: >
+        {% if value_json.from == NEIGHBOR_A_DECIMAL %}
+          {{ value_json.payload.IMP | float(0) }}
+        {% else %}
+          {{ this.state }}
+        {% endif %}
+      unit_of_measurement: "kW"
+      device_class: "power"
+      state_class: "measurement"
+
+    - name: "Neighbor A EXP"
+      unique_id: "neighbor_a_exp"
+      state_topic: "{STATE_TOPIC}"
+      value_template: >
+        {% if value_json.from == NEIGHBOR_A_DECIMAL %}
+          {{ value_json.payload.EXP | float(0) }}
+        {% else %}
+          {{ this.state }}
+        {% endif %}
+      unit_of_measurement: "kW"
+      device_class: "power"
+      state_class: "measurement"
+
+    - name: "Neighbor A SOC"
+      unique_id: "neighbor_a_soc"
+      state_topic: "{STATE_TOPIC}"
+      value_template: >
+        {% if value_json.from == NEIGHBOR_A_DECIMAL %}
+          {{ value_json.payload.SOC | int(0) }}
+        {% else %}
+          {{ this.state }}
+        {% endif %}
+      unit_of_measurement: "%"
+      device_class: "battery"
+      state_class: "measurement"
+```
+
+#### Text payload (legacy)
+
+For the pipe-delimited format (`PWR:\|IMP:\|EXP:`):
 
 ```yaml
 mqtt:
   sensor:
     - name: "Neighbor A Power"
       unique_id: "neighbor_a_power"
-      state_topic: "msh/{YOUR_REGION}/2/json/LongFast/!{YOUR_NODE_HEX}"
+      state_topic: "{STATE_TOPIC}"
       value_template: >
         {% if value_json.from == NEIGHBOR_A_DECIMAL %}
           {% set parts = value_json.payload.text.split('|') %}
@@ -149,7 +271,7 @@ mqtt:
 
     - name: "Neighbor A Import"
       unique_id: "neighbor_a_import"
-      state_topic: "msh/{YOUR_REGION}/2/json/LongFast/!{YOUR_NODE_HEX}"
+      state_topic: "{STATE_TOPIC}"
       value_template: >
         {% if value_json.from == NEIGHBOR_A_DECIMAL %}
           {% set parts = value_json.payload.text.split('|') %}
@@ -163,7 +285,7 @@ mqtt:
 
     - name: "Neighbor A Export"
       unique_id: "neighbor_a_export"
-      state_topic: "msh/{YOUR_REGION}/2/json/LongFast/!{YOUR_NODE_HEX}"
+      state_topic: "{STATE_TOPIC}"
       value_template: >
         {% if value_json.from == NEIGHBOR_A_DECIMAL %}
           {% set parts = value_json.payload.text.split('|') %}
@@ -176,12 +298,7 @@ mqtt:
       unit_of_measurement: "kWh"
 ```
 
-**Replace:**
-- `{YOUR_REGION}` — your region string (e.g., `EU_868`)
-- `{YOUR_NODE_HEX}` — **your own** node's hex ID (e.g., `!acaad598`)
-- `NEIGHBOR_A_DECIMAL` — neighbor's decimal number (unquoted integer)
-
-**Why `{YOUR_NODE_HEX}` in the topic?** Your node publishes received LoRa messages to `msh/{R}/2/json/LongFast/{YOUR_NODE_HEX}`. If there are 5 neighbors, all their messages arrive on this same topic. The `from` field distinguishes who sent each message.
+**Why `{YOUR_NODE_HEX}` in the topic?** Your node publishes received LoRa messages to `msh/{R}/2/json/mqtt/{YOUR_NODE_HEX}` (or `LongFast/` if using the primary channel). Every neighbor's messages arrive on this same topic. The `from` field distinguishes who sent each message.
 
 ### 4.3 Filter Out Your Own Messages
 
@@ -283,24 +400,28 @@ mode: single
 | Step | What to do |
 |------|-----------|
 | New neighbor joins | They install a Heltec V3 + Tasmota, configure their node per §1, add the send automation per §3 |
-| Existing households see them | Add a sensor block per §4.2 with the new neighbor's decimal number |
+| Existing households see them | Either: add a sensor block per §4.2 with their decimal number, or use the auto-discovery automation (§4.4) |
 | No changes needed on the mesh | The new node is already on the shared LoRa channel; all existing nodes will receive its messages automatically |
 
 ---
 
 ## 6. Expected Message Flow
 
+Examples use the JSON format (recommended).
+
 ### Send direction
 
 ```
-HA publishes to: msh/EU_868/2/json/mqtt/
-Payload: {"from": 2892010904, "type": "sendtext",
-          "payload": "PWR:1234|IMP:50000.0|EXP:1000.0"}
+HA publishes to:        msh/EU_868/2/json/mqtt/
+Payload (JSON):
+  {"from": 2892010904, "type": "sendtext",
+   "payload": "{\"IMP\":0.3,\"EXP\":0.0,\"SOC\":85}",
+   "channel": 1}
 
 Your node receives MQTT:
   ✅ "from" == 2892010904 (matches own number)
   ✅ channel is "mqtt" with downlink
-  ✅ injects into LoRa mesh
+  ✅ injects into LoRa mesh on mqtt channel
 ```
 
 ### Receive direction
@@ -308,14 +429,16 @@ Your node receives MQTT:
 ```
 LoRa message arrives at your node:
   from: 2712679380 (neighbor's decimal)
-  payload: "PWR:567|IMP:51000.0|EXP:900.0"
+  payload: {"IMP": 0.3, "EXP": 0.0, "SOC": 85}
 
 Your node publishes to MQTT:
-  Topic: msh/EU_868/2/json/LongFast/!your_node_hex
+  Topic: msh/EU_868/2/json/mqtt/!your_node_hex
   Payload: {"from": 2712679380, "type": "text",
-            "payload": {"text": "PWR:567|IMP:51000.0|EXP:900.0"}}
+            "payload": {"IMP": 0.3, "EXP": 0.0, "SOC": 85},
+            "channel": 1, ...}
 
-Your HA receives it, checks from == NEIGHBOR_DECIMAL, parses text → updates sensors
+Your HA receives it, checks from == NEIGHBOR_DECIMAL,
+  valued_json.payload.IMP → sensor value
 ```
 
 ---
@@ -331,4 +454,7 @@ Your HA receives it, checks from == NEIGHBOR_DECIMAL, parses text → updates se
 | Duplicate messages in mesh | Two nodes both have downlink on `mqtt` channel | This is now INTENTIONAL — every node has it. No duplicates because `from` check filters per node. |
 | HA sees own messages as neighbors | Missing filter | Add `if value_json.from != YOUR_DECIMAL` check |
 | Node doesn't send to LoRa after reboot | Reboot required after channel config | Unplug/replug power |
-| Payload too long | Text > ~220 bytes | Keep format compact — PWR, IMP, EXP only |
+| Payload too long | Text or JSON > ~220 bytes | Keep fields compact — IMP, EXP, SOC only |
+| `from_json` template error | JSON payload is already parsed (dict), not a string | Use `value_json.payload.IMP` NOT `(value_json.payload \| from_json).IMP` |
+| Sensors show `unknown` despite messages in MQTT | Filter `from` doesn't match, or template mismatch | Check neighbor's decimal number; verify JSON format matches template |
+| Auto-discovery creates sensors split across devices | HA processed discovery configs before all 3 arrived | Add 1-second delays between the 3 `mqtt.publish` actions in the automation |
