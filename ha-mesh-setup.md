@@ -304,6 +304,38 @@ mode: single
 
 ---
 
+## 4.5 Combined Power Sensors
+
+Add to `configuration.yaml` to sum all neighbors' import and export power into two total sensors. New neighbors are included automatically.
+
+```yaml
+template:
+  - sensor:
+      - name: "Combined Mesh Import Power"
+        unique_id: "combined_mesh_imp"
+        unit_of_measurement: "kW"
+        device_class: "power"
+        state_class: "measurement"
+        state: >
+          {% set entities = expand(states.sensor)
+             | selectattr('entity_id', 'search', 'node_\\d+_imp$') | list %}
+          {{ entities | map(attribute='state') | map('float', 0) | sum | round(2) }}
+
+      - name: "Combined Mesh Export Power"
+        unique_id: "combined_mesh_exp"
+        unit_of_measurement: "kW"
+        device_class: "power"
+        state_class: "measurement"
+        state: >
+          {% set entities = expand(states.sensor)
+             | selectattr('entity_id', 'search', 'node_\\d+_exp$') | list %}
+          {{ entities | map(attribute='state') | map('float', 0) | sum | round(2) }}
+```
+
+**How it works:** The regex `node_\d+_imp$` matches every auto-discovered import sensor (`sensor.node_2896876952_imp`). The same for `_exp$`. `map('float', 0)` handles `unknown`/`unavailable` without errors.
+
+---
+
 ## 5. Adding More Households
 
 | Step | What to do |
