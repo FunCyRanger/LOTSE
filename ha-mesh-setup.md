@@ -187,6 +187,95 @@ mqtt:
 
 Your own node also publishes its received traffic — including your own messages echoed back. The `if value_json.from == NEIGHBOR_A_DECIMAL` check ensures you only create sensors for actual neighbors, not yourself. Add no sensor block for your own decimal number.
 
+### 4.4 Optional: Auto-Discovery via MQTT (JSON payload)
+
+If you use the JSON payload format (`IMP`, `EXP`, `SOC`) and want to avoid manually adding sensor blocks for each new neighbor, create this automation. It watches your uplink topic and uses MQTT discovery to auto-generate sensors for every new `from` it sees.
+
+**Add this automation in HA Settings → Automations → Create Automation → Edit in YAML:**
+
+```yaml
+alias: "Mesh: Auto-discover neighbors"
+description: "Creates IMP/EXP/SOC sensors via MQTT discovery for each new mesh node"
+trigger:
+  - platform: mqtt
+    topic: "msh/{YOUR_REGION}/2/json/mqtt/!{YOUR_NODE_HEX}"
+condition:
+  - condition: template
+    value_template: >
+      {{ trigger.payload_json.from is defined
+         and trigger.payload_json.payload.IMP is defined
+         and trigger.payload_json.from | string != '{YOUR_NODE_DECIMAL}' }}
+variables:
+  from: "{{ trigger.payload_json.from }}"
+action:
+  - service: mqtt.publish
+    data:
+      qos: 0
+      retain: true
+      topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-imp/config"
+      payload: >
+        {"name": "Node {{ from }} IMP",
+         "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/!{YOUR_NODE_HEX}",
+         "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.IMP | float(0) }}{% endif %}{% endraw %}",
+         "unit_of_measurement": "kW",
+         "device_class": "power",
+         "state_class": "measurement",
+         "unique_id": "mesh_{{ from }}_imp",
+         "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
+
+  - delay:
+      seconds: 1
+
+  - service: mqtt.publish
+    data:
+      qos: 0
+      retain: true
+      topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-exp/config"
+      payload: >
+        {"name": "Node {{ from }} EXP",
+         "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/!{YOUR_NODE_HEX}",
+         "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.EXP | float(0) }}{% endif %}{% endraw %}",
+         "unit_of_measurement": "kW",
+         "device_class": "power",
+         "state_class": "measurement",
+         "unique_id": "mesh_{{ from }}_exp",
+         "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
+
+  - delay:
+      seconds: 1
+
+  - service: mqtt.publish
+    data:
+      qos: 0
+      retain: true
+      topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-soc/config"
+      payload: >
+        {"name": "Node {{ from }} SOC",
+         "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/!{YOUR_NODE_HEX}",
+         "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.SOC | int(0) }}{% endif %}{% endraw %}",
+         "unit_of_measurement": "%",
+         "device_class": "battery",
+         "state_class": "measurement",
+         "unique_id": "mesh_{{ from }}_soc",
+         "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
+mode: single
+```
+
+**Replace** the placeholders with your own values before importing:
+- `{YOUR_REGION}` — e.g., `EU_868`
+- `{YOUR_NODE_HEX}` — your receiving node's hex ID (e.g., `!a1b2c3d4` — the `!` is part of the id, **keep it**)
+- `{YOUR_NODE_DECIMAL}` — your decimal node number (unquoted integer) to exclude your own messages
+
+**How it works:**
+1. Every message triggers the automation
+2. The condition skips your own messages (`from == YOUR_NUM`) and non-meter messages
+3. Publishes 3 retained MQTT discovery configs (IMP, EXP, SOC) for the node's `from` number
+4. HA auto-creates 3 sensors, all grouped under one device per node
+5. The 1-second delays between each publish prevent HA from creating separate device entries for each sensor
+6. Sensors are permanent — retained configs survive HA and node restarts
+
+**Result in HA:** For each neighbor you see 3 sensors (`IMP`, `EXP`, `SOC`) under one device entry (e.g., "Node 2712679380").
+
 ---
 
 ## 5. Adding More Households
