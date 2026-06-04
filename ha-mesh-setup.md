@@ -119,6 +119,8 @@ Create one automation that triggers periodically and publishes your meter data t
 - `{INTERVAL}` — how often to send, e.g., `/5` (every 5 min) or `/1` (every 1 min)
 - Entity IDs — replace with your HA sensor entities
 
+> ⚠️ **Critical:** The topic must end with `/` — `msh/{YOUR_REGION}/2/json/mqtt/`. Omitting the trailing `/` will silently fail; the node will not receive the message.
+
 ### JSON format (recommended)
 
 ```yaml
@@ -441,20 +443,4 @@ Your HA receives it, checks from == NEIGHBOR_DECIMAL,
   valued_json.payload.IMP → sensor value
 ```
 
----
 
-## 7. Troubleshooting
-
-| Symptom | Likely cause | Fix |
-|---------|-------------|-----|
-| No messages appear in HA | MQTT not enabled on node | Check MQTT settings, enable JSON output |
-| HA automation sends but nothing reaches LoRa | Wrong `from` number | Must be your node's decimal number, UNQUOTED |
-| Serial log says "not a valid envelope" | `from` wrong or extra fields like `sender` | Remove `sender` field, verify decimal number |
-| Serial log says "channel not called 'mqtt'" | Topic has `LongFast` instead of `mqtt` | Topic must end with `/json/mqtt/` |
-| Duplicate messages in mesh | Two nodes both have downlink on `mqtt` channel | This is now INTENTIONAL — every node has it. No duplicates because `from` check filters per node. |
-| HA sees own messages as neighbors | Missing filter | Add `if value_json.from != YOUR_DECIMAL` check |
-| Node doesn't send to LoRa after reboot | Reboot required after channel config | Unplug/replug power |
-| Payload too long | Text or JSON > ~220 bytes | Keep fields compact — IMP, EXP, SOC only |
-| `from_json` template error | JSON payload is already parsed (dict), not a string | Use `value_json.payload.IMP` NOT `(value_json.payload \| from_json).IMP` |
-| Sensors show `unknown` despite messages in MQTT | Filter `from` doesn't match, or template mismatch | Check neighbor's decimal number; verify JSON format matches template |
-| Auto-discovery creates sensors split across devices | HA processed discovery configs before all 3 arrived | Add 1-second delays between the 3 `mqtt.publish` actions in the automation |
