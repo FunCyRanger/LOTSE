@@ -77,43 +77,25 @@ From Web UI → **About** page, note:
 
 ## 2. Data Format
 
-Choose one format — both are described below.
-
-### JSON format (recommended)
-
-Structured payload for easy parsing and extensibility. Supports SOC (state of charge).
-
-**Example payload:** `{"IMP":0.3,"EXP":0.0,"SOC":85}`
+JSON payload with three fields:
 
 | Field | Meaning | Type | Unit |
 |-------|---------|------|------|
-| IMP | Cumulative import | float | kWh |
-| EXP | Cumulative export | float | kWh |
+| IMP | Current import power from grid | float | kW |
+| EXP | Export power to grid | float | kW |
 | SOC | Battery state of charge | int | % |
 
+**Example payload:** `{"IMP":0.3,"EXP":0.0,"SOC":85}`
+
 **Size:** ~35-50 bytes — well within Meshtastic's ~220-byte limit.
-
-### Text format (legacy)
-
-Compact pipe-delimited plain text. Supported for backward compatibility.
-
-**Format:** `PWR:{value}\|IMP:{value}\|EXP:{value}`
-
-| Field | Meaning | Example | Unit |
-|-------|---------|---------|------|
-| PWR | Instantaneous power | `PWR:1234` | W (integer) |
-| IMP | Cumulative import | `IMP:50000.0` | kWh |
-| EXP | Cumulative export | `EXP:1000.0` | kWh |
-
-**Size:** ~40 bytes.
 
 ---
 
 ## 3. Home Assistant: Sender Automation (per household)
 
-Create one automation that triggers periodically and publishes your meter data to your node's downlink topic. Choose the JSON format (recommended) or the text format (legacy).
+Create one automation that triggers periodically and publishes your meter data to your node's downlink topic.
 
-**Replace these values** for your household in either template:
+**Replace these values** for your household in the template:
 - `{YOUR_REGION}` — e.g., `EU_868`
 - `{YOUR_NODE_DECIMAL}` — your node's decimal number (unquoted integer)
 - `{INTERVAL}` — how often to send, e.g., `/5` (every 5 min) or `/1` (every 1 min)
@@ -144,32 +126,7 @@ action:
 mode: single
 ```
 
-Fields: `IMP` (cumulative import, kWh), `EXP` (cumulative export, kWh), `SOC` (battery state of charge, %). Omit any field you don't have.
-
-### Text format (legacy)
-
-```yaml
-alias: "Meter Data → LoRa Mesh (text)"
-description: "Send meter readings as pipe-delimited text into the LoRa mesh"
-trigger:
-  - platform: time_pattern
-    minutes: "/{INTERVAL}"
-    seconds: 0
-condition: []
-action:
-  - service: mqtt.publish
-    data:
-      qos: 0
-      retain: false
-      topic: "msh/{YOUR_REGION}/2/json/mqtt/"
-      payload: >
-        {
-          "from": {YOUR_NODE_DECIMAL},
-          "type": "sendtext",
-          "payload": "PWR:{{ states('sensor.your_power_sensor')|int(0) }}|IMP:{{ states('sensor.your_imp_sensor')|float(0) }}|EXP:{{ states('sensor.your_exp_sensor')|float(0) }}"
-        }
-mode: single
-```
+Fields: `IMP` (current import power, kW), `EXP` (export power, kW), `SOC` (battery state of charge, %). Omit any field you don't have.
 
 **How it works:** Your node receives this MQTT message. It checks `from` — matches its own decimal number. It checks the channel is `"mqtt"` with downlink enabled. It injects the payload into the LoRa mesh. All other nodes receive it.
 
@@ -188,7 +145,7 @@ From each neighbor's Meshtastic Web UI or from an observed MQTT message, collect
 
 ### 4.2 Subscribe to Their Messages
 
-All neighbor messages arrive on a single topic: your node's uplink topic. The `from` field distinguishes who sent each message. Choose the template style matching your payload format.
+All neighbor messages arrive on a single topic: your node's uplink topic. The `from` field distinguishes who sent each message.
 
 **Replace:**
 - `{YOUR_REGION}` — your region string (e.g., `EU_868`)
@@ -248,56 +205,6 @@ mqtt:
       unit_of_measurement: "%"
       device_class: "battery"
       state_class: "measurement"
-```
-
-#### Text payload (legacy)
-
-For the pipe-delimited format (`PWR:\|IMP:\|EXP:`):
-
-```yaml
-mqtt:
-  sensor:
-    - name: "Neighbor A Power"
-      unique_id: "neighbor_a_power"
-      state_topic: "{STATE_TOPIC}"
-      value_template: >
-        {% if value_json.from == NEIGHBOR_A_DECIMAL %}
-          {% set parts = value_json.payload.text.split('|') %}
-          {% for p in parts %}
-            {% if p.startswith('PWR:') %}{{ p.split(':')[1] | int }}{% endif %}
-          {% endfor %}
-        {% else %}
-          {{ this.state }}
-        {% endif %}
-      unit_of_measurement: "W"
-
-    - name: "Neighbor A Import"
-      unique_id: "neighbor_a_import"
-      state_topic: "{STATE_TOPIC}"
-      value_template: >
-        {% if value_json.from == NEIGHBOR_A_DECIMAL %}
-          {% set parts = value_json.payload.text.split('|') %}
-          {% for p in parts %}
-            {% if p.startswith('IMP:') %}{{ p.split(':')[1] | float }}{% endif %}
-          {% endfor %}
-        {% else %}
-          {{ this.state }}
-        {% endif %}
-      unit_of_measurement: "kWh"
-
-    - name: "Neighbor A Export"
-      unique_id: "neighbor_a_export"
-      state_topic: "{STATE_TOPIC}"
-      value_template: >
-        {% if value_json.from == NEIGHBOR_A_DECIMAL %}
-          {% set parts = value_json.payload.text.split('|') %}
-          {% for p in parts %}
-            {% if p.startswith('EXP:') %}{{ p.split(':')[1] | float }}{% endif %}
-          {% endfor %}
-        {% else %}
-          {{ this.state }}
-        {% endif %}
-      unit_of_measurement: "kWh"
 ```
 
 **Why `{YOUR_NODE_HEX}` in the topic?** Your node publishes received LoRa messages to `msh/{R}/2/json/mqtt/{YOUR_NODE_HEX}` (or `LongFast/` if using the primary channel). Every neighbor's messages arrive on this same topic. The `from` field distinguishes who sent each message.
