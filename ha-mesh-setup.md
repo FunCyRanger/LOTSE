@@ -82,7 +82,7 @@ After your Heltec V3 is configured (step 1 above), set up Home Assistant:
 ### Step 2 — Install Auto-Discovery
 
 1. Find the auto-discovery automation template further down in this guide (section "Auto-Discovery via MQTT")
-2. Copy it and replace `{YOUR_REGION}` with your region
+2. Copy it and paste into HA — no edits needed (the automation extracts the region from the MQTT topic dynamically)
 3. In HA: **Settings → Automations → Create → Edit in YAML**, paste and save
 
 Neighbor sensors appear automatically when the first message arrives. No need to add sensors manually.
@@ -431,7 +431,7 @@ alias: "Mesh: Auto-discover neighbors"
 description: "Creates sensors via MQTT discovery for each new mesh node"
 trigger:
   - platform: mqtt
-    topic: "msh/{YOUR_REGION}/2/json/mqtt/+"
+    topic: "msh/+/2/json/mqtt/+"
 condition:
   - condition: template
     value_template: >
@@ -440,6 +440,7 @@ condition:
 variables:
   from: "{{ trigger.payload_json.from }}"
   sender: "{{ trigger.payload_json.sender }}"
+  region: "{{ trigger.topic.split('/')[1] }}"
 action:
   # GRID
 
@@ -450,7 +451,7 @@ action:
       topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-gp/config"
       payload: >
         {"name": "Node {{ from }} gP",
-         "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/{{ sender }}",
+         "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
          "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ (value_json.payload | from_json({})).gP | float(0) }}{% endif %}{% endraw %}",
          "unit_of_measurement": "kW", "device_class": "power", "state_class": "measurement",
          "unique_id": "mesh_{{ from }}_gp",
@@ -470,7 +471,7 @@ action:
           topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-gp1/config"
           payload: >
             {"name": "Node {{ from }} gP1",
-             "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/{{ sender }}",
+             "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
              "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ (value_json.payload | from_json({})).gP1 | float(0) }}{% endif %}{% endraw %}",
              "unit_of_measurement": "kW", "device_class": "power", "state_class": "measurement",
              "unique_id": "mesh_{{ from }}_gp1",
@@ -490,7 +491,7 @@ action:
           topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-gp2/config"
           payload: >
             {"name": "Node {{ from }} gP2",
-             "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/{{ sender }}",
+             "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
              "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ (value_json.payload | from_json({})).gP2 | float(0) }}{% endif %}{% endraw %}",
              "unit_of_measurement": "kW", "device_class": "power", "state_class": "measurement",
              "unique_id": "mesh_{{ from }}_gp2",
@@ -510,7 +511,7 @@ action:
           topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-gp3/config"
           payload: >
             {"name": "Node {{ from }} gP3",
-             "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/{{ sender }}",
+             "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
              "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ (value_json.payload | from_json({})).gP3 | float(0) }}{% endif %}{% endraw %}",
              "unit_of_measurement": "kW", "device_class": "power", "state_class": "measurement",
              "unique_id": "mesh_{{ from }}_gp3",
@@ -530,7 +531,7 @@ action:
           topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-gv1/config"
           payload: >
             {"name": "Node {{ from }} gV1",
-             "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/{{ sender }}",
+             "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
              "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ (value_json.payload | from_json({})).gV1 | float(0) }}{% endif %}{% endraw %}",
              "unit_of_measurement": "V", "device_class": "voltage", "state_class": "measurement",
              "unique_id": "mesh_{{ from }}_gv1",
@@ -550,7 +551,7 @@ action:
           topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-gv2/config"
           payload: >
             {"name": "Node {{ from }} gV2",
-             "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/{{ sender }}",
+             "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
              "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ (value_json.payload | from_json({})).gV2 | float(0) }}{% endif %}{% endraw %}",
              "unit_of_measurement": "V", "device_class": "voltage", "state_class": "measurement",
              "unique_id": "mesh_{{ from }}_gv2",
@@ -570,7 +571,7 @@ action:
           topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-gv3/config"
           payload: >
             {"name": "Node {{ from }} gV3",
-             "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/{{ sender }}",
+             "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
              "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ (value_json.payload | from_json({})).gV3 | float(0) }}{% endif %}{% endraw %}",
              "unit_of_measurement": "V", "device_class": "voltage", "state_class": "measurement",
              "unique_id": "mesh_{{ from }}_gv3",
@@ -590,7 +591,7 @@ action:
           topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-gip/config"
           payload: >
             {"name": "Node {{ from }} gIP",
-             "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/{{ sender }}",
+             "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
              "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ (value_json.payload | from_json({})).gIP | float(0) }}{% endif %}{% endraw %}",
              "unit_of_measurement": "kW", "device_class": "power", "state_class": "measurement",
              "unique_id": "mesh_{{ from }}_gip",
@@ -610,7 +611,7 @@ action:
           topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-gep/config"
           payload: >
             {"name": "Node {{ from }} gEP",
-             "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/{{ sender }}",
+             "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
              "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ (value_json.payload | from_json({})).gEP | float(0) }}{% endif %}{% endraw %}",
              "unit_of_measurement": "kW", "device_class": "power", "state_class": "measurement",
              "unique_id": "mesh_{{ from }}_gep",
@@ -630,7 +631,7 @@ action:
           topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-gei/config"
           payload: >
             {"name": "Node {{ from }} gEI",
-             "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/{{ sender }}",
+             "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
              "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ (value_json.payload | from_json({})).gEI | float(0) }}{% endif %}{% endraw %}",
              "unit_of_measurement": "kWh", "device_class": "energy", "state_class": "total_increasing",
              "unique_id": "mesh_{{ from }}_gei",
@@ -650,7 +651,7 @@ action:
           topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-geo/config"
           payload: >
             {"name": "Node {{ from }} gEO",
-             "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/{{ sender }}",
+             "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
              "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ (value_json.payload | from_json({})).gEO | float(0) }}{% endif %}{% endraw %}",
              "unit_of_measurement": "kWh", "device_class": "energy", "state_class": "total_increasing",
              "unique_id": "mesh_{{ from }}_geo",
@@ -672,7 +673,7 @@ action:
           topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-sp/config"
           payload: >
             {"name": "Node {{ from }} sP",
-             "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/{{ sender }}",
+             "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
              "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ (value_json.payload | from_json({})).sP | float(0) }}{% endif %}{% endraw %}",
              "unit_of_measurement": "kW", "device_class": "power", "state_class": "measurement",
              "unique_id": "mesh_{{ from }}_sp",
@@ -692,7 +693,7 @@ action:
           topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-se/config"
           payload: >
             {"name": "Node {{ from }} sE",
-             "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/{{ sender }}",
+             "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
              "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ (value_json.payload | from_json({})).sE | float(0) }}{% endif %}{% endraw %}",
              "unit_of_measurement": "kWh", "device_class": "energy", "state_class": "total_increasing",
              "unique_id": "mesh_{{ from }}_se",
@@ -710,7 +711,7 @@ action:
       topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-bp/config"
       payload: >
         {"name": "Node {{ from }} bP",
-         "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/{{ sender }}",
+         "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
          "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ (value_json.payload | from_json({})).bP | float(0) }}{% endif %}{% endraw %}",
          "unit_of_measurement": "kW", "device_class": "power", "state_class": "measurement",
          "unique_id": "mesh_{{ from }}_bp",
@@ -726,7 +727,7 @@ action:
       topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-bs/config"
       payload: >
         {"name": "Node {{ from }} bS",
-         "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/{{ sender }}",
+         "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
          "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ (value_json.payload | from_json({})).bS | int(0) }}{% endif %}{% endraw %}",
          "unit_of_measurement": "%", "device_class": "battery", "state_class": "measurement",
          "unique_id": "mesh_{{ from }}_bs",
@@ -746,7 +747,7 @@ action:
           topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-bei/config"
           payload: >
             {"name": "Node {{ from }} bEI",
-             "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/{{ sender }}",
+             "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
              "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ (value_json.payload | from_json({})).bEI | float(0) }}{% endif %}{% endraw %}",
              "unit_of_measurement": "kWh", "device_class": "energy", "state_class": "total_increasing",
              "unique_id": "mesh_{{ from }}_bei",
@@ -766,7 +767,7 @@ action:
           topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-beo/config"
           payload: >
             {"name": "Node {{ from }} bEO",
-             "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/{{ sender }}",
+             "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
              "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ (value_json.payload | from_json({})).bEO | float(0) }}{% endif %}{% endraw %}",
              "unit_of_measurement": "kWh", "device_class": "energy", "state_class": "total_increasing",
              "unique_id": "mesh_{{ from }}_beo",
@@ -788,7 +789,7 @@ action:
           topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-wp/config"
           payload: >
             {"name": "Node {{ from }} wP",
-             "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/{{ sender }}",
+             "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
              "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ (value_json.payload | from_json({})).wP | float(0) }}{% endif %}{% endraw %}",
              "unit_of_measurement": "kW", "device_class": "power", "state_class": "measurement",
              "unique_id": "mesh_{{ from }}_wp",
@@ -808,7 +809,7 @@ action:
           topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-we/config"
           payload: >
             {"name": "Node {{ from }} wE",
-             "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/{{ sender }}",
+             "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
              "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ (value_json.payload | from_json({})).wE | float(0) }}{% endif %}{% endraw %}",
              "unit_of_measurement": "kWh", "device_class": "energy", "state_class": "total_increasing",
              "unique_id": "mesh_{{ from }}_we",
@@ -828,7 +829,7 @@ action:
           topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-ws/config"
           payload: >
             {"name": "Node {{ from }} wS",
-             "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/{{ sender }}",
+             "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
              "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ (value_json.payload | from_json({})).wS | int(0) }}{% endif %}{% endraw %}",
              "unit_of_measurement": "%", "device_class": "battery", "state_class": "measurement",
              "unique_id": "mesh_{{ from }}_ws",
@@ -836,8 +837,7 @@ action:
 mode: single
 ```
 
-**Replace** the placeholder with your own value before importing:
-- `{YOUR_REGION}` — e.g., `EU_868`
+**No placeholders to replace.** The automation dynamically extracts the region from the MQTT topic.
 
 **How it works:**
 1. Every message with a payload triggers the automation (triggers on wildcard `+`)
