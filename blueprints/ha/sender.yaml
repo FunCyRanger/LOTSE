@@ -244,15 +244,16 @@ action:
         {% if wS %}  {% set items = items + [("wS", states(wS)|int(0))] %}              {% endif %}
         {{ dict(items) | to_json }}
   - variables:
-      outer:
-        from: "{{ node | int(0) }}"
-        type: "sendtext"
-        payload: "{{ inner }}"
-        channel: "{{ channel_input | int(0) }}"
+      outer_payload: >
+        {% set o = {"from": node|int(0), "type": "sendtext",
+                     "payload": inner,
+                     "channel": channel_input|int(0)} %}
+        {{ o | to_json }}
   - service: mqtt.publish
     data:
       qos: 0
       retain: false
+      evaluate_payload: false
       topic: "msh/{{ region }}/2/json/mqtt/"
-      payload: "{{ outer | to_json }}"
+      payload: "{{ outer_payload }}"
 mode: single
