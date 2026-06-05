@@ -8,11 +8,6 @@ blueprint:
   source_url: >
     https://github.com/FunCyRanger/LOTSE/blob/main/blueprints/ha/sender.yaml
   input:
-    required:
-      - node_decimal
-      - region
-      - gIP_entity
-      - channel
     node_decimal:
       name: Node Number
       description: >
@@ -46,6 +41,7 @@ blueprint:
     gP_entity:
       name: Grid Net Power (gP)
       description: Signed net power in kW (+import, -export)
+      default: ""
       selector:
         entity:
           domain: sensor
@@ -58,54 +54,63 @@ blueprint:
     gEP_entity:
       name: Grid Export Power (gEP)
       description: Export power in kW (always ≥0)
+      default: ""
       selector:
         entity:
           domain: sensor
     gP1_entity:
       name: Phase 1 Power (gP1)
       description: Phase 1 power in kW
+      default: ""
       selector:
         entity:
           domain: sensor
     gP2_entity:
       name: Phase 2 Power (gP2)
       description: Phase 2 power in kW
+      default: ""
       selector:
         entity:
           domain: sensor
     gP3_entity:
       name: Phase 3 Power (gP3)
       description: Phase 3 power in kW
+      default: ""
       selector:
         entity:
           domain: sensor
     gV1_entity:
       name: Phase 1 Voltage (gV1)
       description: Phase 1 voltage in V
+      default: ""
       selector:
         entity:
           domain: sensor
     gV2_entity:
       name: Phase 2 Voltage (gV2)
       description: Phase 2 voltage in V
+      default: ""
       selector:
         entity:
           domain: sensor
     gV3_entity:
       name: Phase 3 Voltage (gV3)
       description: Phase 3 voltage in V
+      default: ""
       selector:
         entity:
           domain: sensor
     gEI_entity:
       name: Grid Energy Import (gEI)
       description: Cumulative energy import in kWh
+      default: ""
       selector:
         entity:
           domain: sensor
     gEO_entity:
       name: Grid Energy Export (gEO)
       description: Cumulative energy export in kWh
+      default: ""
       selector:
         entity:
           domain: sensor
@@ -113,12 +118,14 @@ blueprint:
     sP_entity:
       name: Solar Power (sP)
       description: Solar power in kW
+      default: ""
       selector:
         entity:
           domain: sensor
     sE_entity:
       name: Solar Energy (sE)
       description: Solar cumulative energy in kWh
+      default: ""
       selector:
         entity:
           domain: sensor
@@ -126,24 +133,28 @@ blueprint:
     bP_entity:
       name: Battery Power (bP)
       description: Battery power in kW (+charge, -discharge)
+      default: ""
       selector:
         entity:
           domain: sensor
     bS_entity:
       name: Battery State of Charge (bS)
       description: Battery state of charge in %
+      default: ""
       selector:
         entity:
           domain: sensor
     bEI_entity:
       name: Battery Energy In (bEI)
       description: Cumulative energy into battery in kWh
+      default: ""
       selector:
         entity:
           domain: sensor
     bEO_entity:
       name: Battery Energy Out (bEO)
       description: Cumulative energy out of battery in kWh
+      default: ""
       selector:
         entity:
           domain: sensor
@@ -151,18 +162,21 @@ blueprint:
     wP_entity:
       name: Wallbox Power (wP)
       description: Wallbox power in kW
+      default: ""
       selector:
         entity:
           domain: sensor
     wE_entity:
       name: Wallbox Energy (wE)
       description: Wallbox cumulative energy in kWh
+      default: ""
       selector:
         entity:
           domain: sensor
     wS_entity:
       name: Wallbox State of Charge (wS)
       description: Wallbox state of charge in %
+      default: ""
       selector:
         entity:
           domain: sensor
