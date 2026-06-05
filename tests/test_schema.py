@@ -95,13 +95,13 @@ def ha_int(value, default=0):
         return int(default)
 
 
-def ha_from_json(value):
+def ha_from_json(value, default=None):
     if isinstance(value, Undefined):
-        return value
+        return default if default is not None else Undefined()
     try:
         return json.loads(value)
     except (ValueError, TypeError, json.JSONDecodeError):
-        return Undefined()
+        return default if default is not None else Undefined()
 
 
 def ha_environment():
@@ -249,7 +249,7 @@ def test_receiver_excludes_self():
     env = ha_environment()
     template = """\
 {% if value_json.from == NEIGHBOR_DECIMAL %}\
-{{ (value_json.payload | from_json).gP | float(0) }}\
+{{ (value_json.payload | replace("'", '"') | from_json({})).gP | float(0) }}\
 {% else %}\
 {{ this.state }}\
 {% endif %}"""

@@ -108,14 +108,18 @@ def ha_int(value, default=0):
         return int(default)
 
 
-def ha_from_json(value):
-    """Parse a JSON string; return Undefined on failure."""
+def ha_from_json(value, default=None):
+    """Parse a JSON string; return Undefined on failure.
+
+    Supports the HA pattern ``| from_json(default)`` where ``default``
+    is returned (or Undefined if omitted) when parsing fails.
+    """
     if isinstance(value, Undefined):
-        return value
+        return default if default is not None else Undefined()
     try:
         return json.loads(value)
     except (ValueError, TypeError, json.JSONDecodeError):
-        return Undefined()
+        return default if default is not None else Undefined()
 
 
 # ─── Create HA-like Jinja environment ─────────────────────────────────────
@@ -202,7 +206,7 @@ def make_sender_vars(**overrides):
 
 RECEIVER_TEMPLATE = """\
 {% if value_json.from == NEIGHBOR_DECIMAL %}\
-{{ (value_json.payload | from_json).KEY | FILTER }}\
+{{ (value_json.payload | replace("'", '"') | from_json({})).KEY | FILTER }}\
 {% else %}\
 {{ this.state }}\
 {% endif %}"""
@@ -411,6 +415,22 @@ def test_roundtrip():
             assert int(r) == expected, f"Roundtrip {key}: {r} != {expected}"
         else:
             assert abs(float(r) - float(expected)) < 0.01, f"Roundtrip {key}: {r} != {expected}"
+
+
+def test_receiver_old_single_quote_format():
+    """Receiver handles old-style single-quote Python dict payloads.
+
+    Legacy devices (IMP/EXP/SOC era) sent ``{'IMP':711}`` which is
+    not valid JSON.  The ``| replace("'", '"')`` filter normalises it.
+    """
+    p = {"from": 2712679380,
+         "payload": "{'EXP': 0, 'IMP': 711, 'SOC': 0}"}
+    r = render_receiver(p, 2712679380, "IMP", "float(0)")
+    assert float(r) == 711.0
+    r = render_receiver(p, 2712679380, "EXP", "float(0)")
+    assert float(r) == 0.0
+    r = render_receiver(p, 2712679380, "SOC", "int(0)")
+    assert int(r) == 0
 
 
 # ═══════════════════════════════════════════════════════════════════════════
