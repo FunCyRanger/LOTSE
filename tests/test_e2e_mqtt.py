@@ -15,37 +15,64 @@ import traceback
 
 MESHTASTIC_PAYLOAD_MAX_BYTES = 220
 
-# ─── Detect availability ───────────────────────────────────────────────────
-
-SKIP_REASON = None
-
-if shutil.which("docker") is None:
-    SKIP_REASON = "docker not found in PATH"
-else:
-    try:
-        subprocess.run(["docker", "info"],
-                       capture_output=True, timeout=10, check=True)
-    except Exception:
-        SKIP_REASON = "docker daemon not reachable"
-
-try:
-    import paho.mqtt.client as mqtt
-except ImportError:
-    SKIP_REASON = "paho-mqtt not installed"
-
 MQTT_PORT = 1883
 REGION = "EU_868"
 NODE_DECIMAL = 2892010904
 NODE_HEX = "!acaad598"
 
 
+def _probe_mqtt():
+    """Return True if a Mosquitto broker is already listening on MQTT_PORT."""
+    try:
+        c = mqtt.Client()
+        c.connect("localhost", MQTT_PORT, timeout=3)
+        c.disconnect()
+        return True
+    except Exception:
+        return False
+
+
+# ─── Detect availability ───────────────────────────────────────────────────
+
+SKIP_REASON = None
+_MQTT_AVAILABLE = False
+
+try:
+    import paho.mqtt.client as mqtt
+    _MQTT_AVAILABLE = True
+except ImportError:
+    SKIP_REASON = "paho-mqtt not installed"
+
+# Docker is optional — only needed if no broker is already running
+if _MQTT_AVAILABLE and not _probe_mqtt():
+    if shutil.which("docker") is None:
+        SKIP_REASON = "no MQTT broker on :1883 and docker not found"
+    else:
+        try:
+            subprocess.run(["docker", "info"],
+                           capture_output=True, timeout=10, check=True)
+        except Exception:
+            SKIP_REASON = "no MQTT broker on :1883 and docker daemon unreachable"
+
+
 class MosquittoManager:
-    """Context manager for a local Mosquitto container."""
+    """Context manager providing a Mosquitto broker.
+
+    Uses an existing broker on MQTT_PORT if available (e.g. CI service
+    container).  Falls back to starting a Docker container.
+    """
 
     def __init__(self):
         self.container_id = None
+        self._external = False
 
     def __enter__(self):
+        # Already running?  Use it directly.
+        if _probe_mqtt():
+            self._external = True
+            return self
+
+        # Start a fresh container.
         result = subprocess.run(
             ["docker", "run", "-d", "--rm",
              "-p", f"{MQTT_PORT}:1883",
@@ -55,16 +82,10 @@ class MosquittoManager:
         if result.returncode != 0:
             raise RuntimeError(f"Failed to start Mosquitto: {result.stderr}")
         self.container_id = result.stdout.strip()
-        # Wait for Mosquitto to accept connections
         for _ in range(10):
-            try:
-                import paho.mqtt.client as mqtt
-                c = mqtt.Client()
-                c.connect("localhost", MQTT_PORT, timeout=2)
-                c.disconnect()
+            if _probe_mqtt():
                 return self
-            except Exception:
-                time.sleep(1)
+            time.sleep(1)
         raise RuntimeError("Mosquitto did not become ready in time")
 
     def __exit__(self, *args):

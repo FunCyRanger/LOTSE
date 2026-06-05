@@ -29,10 +29,14 @@ jobs:
         run: |
           python3 -c "
           import yaml, pathlib, sys
+          # Handle !input YAML tags used by HA blueprints
+          yaml.FullLoader.add_constructor(
+              '!input', lambda loader, node: node.value
+          )
           errors = 0
           for f in sorted(pathlib.Path().rglob('*.yaml')):
               try:
-                  yaml.safe_load(f.read_text())
+                  yaml.load(f.read_text(), Loader=yaml.FullLoader)
               except yaml.YAMLError as e:
                   print(f'YAML ERROR: {f}: {e}')
                   errors += 1
