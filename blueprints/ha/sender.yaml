@@ -8,6 +8,11 @@ blueprint:
   source_url: >
     https://github.com/FunCyRanger/LOTSE/blob/main/blueprints/ha/sender.yaml
   input:
+    required:
+      - node_decimal
+      - region
+      - gIP_entity
+      - channel
     node_decimal:
       name: Node Number
       description: >
@@ -29,6 +34,14 @@ blueprint:
           min: 1
           max: 60
           unit_of_measurement: minutes
+    channel:
+      name: MQTT Channel
+      description: Channel index for the mqtt downlink (0=LongFast, 1=first non-primary)
+      default: 1
+      selector:
+        number:
+          min: 0
+          max: 7
     # --- Grid ---
     gP_entity:
       name: Grid Net Power (gP)
@@ -167,6 +180,7 @@ action:
   - variables:
       node: !input node_decimal
       region: !input region
+      channel_input: !input channel
       gP: !input gP_entity
       gIP: !input gIP_entity
       gEP: !input gEP_entity
@@ -219,7 +233,7 @@ action:
         from: "{{ node | int(0) }}"
         type: "sendtext"
         payload: "{{ inner }}"
-        channel: 1
+        channel: "{{ channel_input | int(0) }}"
   - service: mqtt.publish
     data:
       qos: 0
