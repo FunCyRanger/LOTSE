@@ -74,6 +74,7 @@ After your Heltec V3 is configured (step 1 above), set up Home Assistant:
 3. Click **Create Automation**, fill in the form:
    - **Node Number** — from the Web UI (required)
    - **Grid Net Power (gP)** — pick your sensor (required)
+   - **Grid Import Power (gIP)** — pick your sensor (required)
    - **Battery SOC (bS)** — pick your sensor (required)
    - All other fields are optional — leave empty to exclude from the payload
 4. Save — your node publishes on the next interval automatically
@@ -194,6 +195,7 @@ instead of editing YAML by hand.
    - **Node Number** — your decimal node number from Meshtastic Web UI
    - **Send Interval** — how often to publish (default 5 min)
    - **Grid Net Power (gP)** — pick your grid power sensor (required)
+   - **Grid Import Power (gIP)** — pick your grid import sensor (required)
    - **Battery SOC (bS)** — pick your battery sensor (required)
    - All other fields are optional — leave empty to exclude from the payload
 6. Click **Save** — your node will start publishing on the next interval

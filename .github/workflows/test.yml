@@ -1,0 +1,33 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pyyaml jinja2
+      - run: python3 tests/test_mesh.py
+      - name: Validate all YAML files
+        run: |
+          python3 -c "
+          import yaml, pathlib, sys
+          errors = 0
+          for f in sorted(pathlib.Path().rglob('*.yaml')):
+              try:
+                  yaml.safe_load(f.read_text())
+              except yaml.YAMLError as e:
+                  print(f'YAML ERROR: {f}: {e}')
+                  errors += 1
+          if errors:
+              sys.exit(1)
+          print('All YAML files valid')
+          "

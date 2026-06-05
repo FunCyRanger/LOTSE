@@ -22,7 +22,7 @@ blueprint:
         text:
     interval:
       name: Send Interval (minutes)
-      description: How often to publish into the mesh
+      description: How often to publish (in minutes)
       default: 5
       selector:
         number:
@@ -32,109 +32,124 @@ blueprint:
     # --- Grid ---
     gP_entity:
       name: Grid Net Power (gP)
-      description: Signed net power (+import, -export) — required
+      description: Signed net power in kW (+import, -export)
       selector:
         entity:
           domain: sensor
     gIP_entity:
       name: Grid Import Power (gIP)
-      description: Import power only (always ≥0) — optional
+      description: Import power in kW (always ≥0)
       selector:
         entity:
           domain: sensor
     gEP_entity:
       name: Grid Export Power (gEP)
-      description: Export power only (always ≥0) — optional
+      description: Export power in kW (always ≥0)
       selector:
         entity:
           domain: sensor
     gP1_entity:
       name: Phase 1 Power (gP1)
+      description: Phase 1 power in kW
       selector:
         entity:
           domain: sensor
     gP2_entity:
       name: Phase 2 Power (gP2)
+      description: Phase 2 power in kW
       selector:
         entity:
           domain: sensor
     gP3_entity:
       name: Phase 3 Power (gP3)
+      description: Phase 3 power in kW
       selector:
         entity:
           domain: sensor
     gV1_entity:
       name: Phase 1 Voltage (gV1)
+      description: Phase 1 voltage in V
       selector:
         entity:
           domain: sensor
     gV2_entity:
       name: Phase 2 Voltage (gV2)
+      description: Phase 2 voltage in V
       selector:
         entity:
           domain: sensor
     gV3_entity:
       name: Phase 3 Voltage (gV3)
+      description: Phase 3 voltage in V
       selector:
         entity:
           domain: sensor
     gEI_entity:
       name: Grid Energy Import (gEI)
+      description: Cumulative energy import in kWh
       selector:
         entity:
           domain: sensor
     gEO_entity:
       name: Grid Energy Export (gEO)
+      description: Cumulative energy export in kWh
       selector:
         entity:
           domain: sensor
     # --- Solar ---
     sP_entity:
       name: Solar Power (sP)
+      description: Solar power in kW
       selector:
         entity:
           domain: sensor
     sE_entity:
       name: Solar Energy (sE)
+      description: Solar cumulative energy in kWh
       selector:
         entity:
           domain: sensor
     # --- Battery ---
     bP_entity:
       name: Battery Power (bP)
-      description: Power (+charge, -discharge) — optional
+      description: Battery power in kW (+charge, -discharge)
       selector:
         entity:
           domain: sensor
     bS_entity:
       name: Battery State of Charge (bS)
-      description: Battery percentage — required
+      description: Battery state of charge in %
       selector:
         entity:
           domain: sensor
     bEI_entity:
       name: Battery Energy In (bEI)
+      description: Cumulative energy into battery in kWh
       selector:
         entity:
           domain: sensor
     bEO_entity:
       name: Battery Energy Out (bEO)
+      description: Cumulative energy out of battery in kWh
       selector:
         entity:
           domain: sensor
     # --- Wallbox ---
     wP_entity:
       name: Wallbox Power (wP)
+      description: Wallbox power in kW
       selector:
         entity:
           domain: sensor
     wE_entity:
       name: Wallbox Energy (wE)
+      description: Wallbox cumulative energy in kWh
       selector:
         entity:
           domain: sensor
     wS_entity:
       name: Wallbox State of Charge (wS)
+      description: Wallbox state of charge in %
       selector:
         entity:
           domain: sensor
@@ -174,26 +189,29 @@ action:
       wS: !input wS_entity
   - variables:
       inner: >
+        {% set kW = {'W': 0.001, 'kW': 1, 'MW': 1000} %}
+        {% set kWh = {'Wh': 0.001, 'kWh': 1, 'MWh': 1000} %}
+        {% set V_dict = {'mV': 0.001, 'V': 1, 'kV': 1000} %}
         {% set items = [] %}
-        {% if gP %}  {% set items = items + [("gP", states(gP)|float(0)|round(2))] %}  {% endif %}
-        {% if gIP %} {% set items = items + [("gIP", states(gIP)|float(0)|round(2))] %} {% endif %}
-        {% if gEP %} {% set items = items + [("gEP", states(gEP)|float(0)|round(2))] %} {% endif %}
-        {% if gP1 %} {% set items = items + [("gP1", states(gP1)|float(0)|round(2))] %} {% endif %}
-        {% if gP2 %} {% set items = items + [("gP2", states(gP2)|float(0)|round(2))] %} {% endif %}
-        {% if gP3 %} {% set items = items + [("gP3", states(gP3)|float(0)|round(2))] %} {% endif %}
-        {% if gV1 %} {% set items = items + [("gV1", states(gV1)|float(0)|round(1))] %} {% endif %}
-        {% if gV2 %} {% set items = items + [("gV2", states(gV2)|float(0)|round(1))] %} {% endif %}
-        {% if gV3 %} {% set items = items + [("gV3", states(gV3)|float(0)|round(1))] %} {% endif %}
-        {% if gEI %} {% set items = items + [("gEI", states(gEI)|float(0)|round(2))] %} {% endif %}
-        {% if gEO %} {% set items = items + [("gEO", states(gEO)|float(0)|round(2))] %} {% endif %}
-        {% if sP %}  {% set items = items + [("sP", states(sP)|float(0)|round(2))] %}  {% endif %}
-        {% if sE %}  {% set items = items + [("sE", states(sE)|float(0)|round(2))] %}  {% endif %}
-        {% if bP %}  {% set items = items + [("bP", states(bP)|float(0)|round(2))] %}  {% endif %}
+        {% if gP %}  {% set items = items + [("gP", (states(gP)|float(0)*kW.get(state_attr(gP,'unit_of_measurement'),1))|round(2))] %}  {% endif %}
+        {% if gIP %} {% set items = items + [("gIP", (states(gIP)|float(0)*kW.get(state_attr(gIP,'unit_of_measurement'),1))|round(2))] %} {% endif %}
+        {% if gEP %} {% set items = items + [("gEP", (states(gEP)|float(0)*kW.get(state_attr(gEP,'unit_of_measurement'),1))|round(2))] %} {% endif %}
+        {% if gP1 %} {% set items = items + [("gP1", (states(gP1)|float(0)*kW.get(state_attr(gP1,'unit_of_measurement'),1))|round(2))] %} {% endif %}
+        {% if gP2 %} {% set items = items + [("gP2", (states(gP2)|float(0)*kW.get(state_attr(gP2,'unit_of_measurement'),1))|round(2))] %} {% endif %}
+        {% if gP3 %} {% set items = items + [("gP3", (states(gP3)|float(0)*kW.get(state_attr(gP3,'unit_of_measurement'),1))|round(2))] %} {% endif %}
+        {% if gV1 %} {% set items = items + [("gV1", (states(gV1)|float(0)*V_dict.get(state_attr(gV1,'unit_of_measurement'),1))|round(1))] %} {% endif %}
+        {% if gV2 %} {% set items = items + [("gV2", (states(gV2)|float(0)*V_dict.get(state_attr(gV2,'unit_of_measurement'),1))|round(1))] %} {% endif %}
+        {% if gV3 %} {% set items = items + [("gV3", (states(gV3)|float(0)*V_dict.get(state_attr(gV3,'unit_of_measurement'),1))|round(1))] %} {% endif %}
+        {% if gEI %} {% set items = items + [("gEI", (states(gEI)|float(0)*kWh.get(state_attr(gEI,'unit_of_measurement'),1))|round(2))] %} {% endif %}
+        {% if gEO %} {% set items = items + [("gEO", (states(gEO)|float(0)*kWh.get(state_attr(gEO,'unit_of_measurement'),1))|round(2))] %} {% endif %}
+        {% if sP %}  {% set items = items + [("sP", (states(sP)|float(0)*kW.get(state_attr(sP,'unit_of_measurement'),1))|round(2))] %}  {% endif %}
+        {% if sE %}  {% set items = items + [("sE", (states(sE)|float(0)*kWh.get(state_attr(sE,'unit_of_measurement'),1))|round(2))] %}  {% endif %}
+        {% if bP %}  {% set items = items + [("bP", (states(bP)|float(0)*kW.get(state_attr(bP,'unit_of_measurement'),1))|round(2))] %}  {% endif %}
         {% if bS %}  {% set items = items + [("bS", states(bS)|int(0))] %}              {% endif %}
-        {% if bEI %} {% set items = items + [("bEI", states(bEI)|float(0)|round(2))] %} {% endif %}
-        {% if bEO %} {% set items = items + [("bEO", states(bEO)|float(0)|round(2))] %} {% endif %}
-        {% if wP %}  {% set items = items + [("wP", states(wP)|float(0)|round(2))] %}  {% endif %}
-        {% if wE %}  {% set items = items + [("wE", states(wE)|float(0)|round(2))] %}  {% endif %}
+        {% if bEI %} {% set items = items + [("bEI", (states(bEI)|float(0)*kWh.get(state_attr(bEI,'unit_of_measurement'),1))|round(2))] %} {% endif %}
+        {% if bEO %} {% set items = items + [("bEO", (states(bEO)|float(0)*kWh.get(state_attr(bEO,'unit_of_measurement'),1))|round(2))] %} {% endif %}
+        {% if wP %}  {% set items = items + [("wP", (states(wP)|float(0)*kW.get(state_attr(wP,'unit_of_measurement'),1))|round(2))] %}  {% endif %}
+        {% if wE %}  {% set items = items + [("wE", (states(wE)|float(0)*kWh.get(state_attr(wE,'unit_of_measurement'),1))|round(2))] %}  {% endif %}
         {% if wS %}  {% set items = items + [("wS", states(wS)|int(0))] %}              {% endif %}
         {{ dict(items) | to_json }}
   - variables:
