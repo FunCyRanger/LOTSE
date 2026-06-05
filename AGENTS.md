@@ -15,6 +15,23 @@ Neighborhood energy coordination project — specification/planning phase.
 - Two AI reviews at `20260517 AI review/` (Claude, Grok) list concrete firmware errors —
   **read both before writing firmware**
 
+## Critical: HA Jinja NativeEnvironment `ast.literal_eval` gotcha
+
+HA uses Jinja2 `NativeEnvironment` which auto-converts template output
+back to Python types via `ast.literal_eval`. This means:
+- `{{ {"gIP":0} | to_json }}` outputs string `'{"gIP":0}'`, but
+  NativeEnvironment parses it back to Python dict `{"gIP": 0}`.
+- If that dict is then used in another `| to_json`, it serializes as
+  a nested object, not a JSON string — **breaks Meshtastic envelope**.
+
+**Fix**: apply `| to_json` twice to produce a JSON string literal:
+`{{ dict(items) | to_json | to_json }}` → output `'"{\\"gIP\\":0}"'` →
+NativeEnvironment unwraps to Python string `'{"gIP":0}'` (not a dict).
+
+This applies anywhere the final template output must be a JSON string
+rather than a parsed object. Standard `Environment` (used in tests)
+does NOT have this behavior.
+
 ## No tests / lint / build
 
 Zero CI workflows, test files, linters, formatters, typecheckers, `package.json`,

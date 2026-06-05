@@ -242,18 +242,18 @@ action:
         {% if wP %}  {% set items = items + [("wP", (states(wP)|float(0)*kW.get(state_attr(wP,'unit_of_measurement'),1))|round(2))] %}  {% endif %}
         {% if wE %}  {% set items = items + [("wE", (states(wE)|float(0)*kWh.get(state_attr(wE,'unit_of_measurement'),1))|round(2))] %}  {% endif %}
         {% if wS %}  {% set items = items + [("wS", states(wS)|int(0))] %}              {% endif %}
-        {{ dict(items) | to_json }}
+        {{ dict(items) | to_json | to_json }}
   - variables:
-      outer_payload: >
-        {% set o = {"from": node|int(0), "type": "sendtext",
-                     "payload": inner,
-                     "channel": channel_input|int(0)} %}
-        {{ o | to_json }}
+      outer:
+        from: "{{ node | int(0) }}"
+        type: "sendtext"
+        payload: "{{ inner }}"
+        channel: "{{ channel_input | int(0) }}"
   - service: mqtt.publish
     data:
       qos: 0
       retain: false
       evaluate_payload: false
       topic: "msh/{{ region }}/2/json/mqtt/"
-      payload: "{{ outer_payload }}"
+      payload: "{{ outer | to_json }}"
 mode: single
