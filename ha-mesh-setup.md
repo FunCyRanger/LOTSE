@@ -77,15 +77,15 @@ JSON payload with keys grouped by category. Sign convention: import/charge = pos
 | gV1 | Phase 1 voltage | V | optional |
 | gV2 | Phase 2 voltage | V | optional |
 | gV3 | Phase 3 voltage | V | optional |
-| gIE | Cumulative energy import | kWh | optional |
-| gEE | Cumulative energy export | kWh | optional |
+| gEI | Cumulative energy import | kWh | **important** |
+| gEO | Cumulative energy export | kWh | **important** |
 
 ### Solar
 
 | Key | Meaning | Unit | Priority |
 |-----|---------|------|----------|
 | sP | Power | kW | important |
-| sE | Cumulative energy | kWh | optional |
+| sE | Cumulative energy | kWh | important |
 
 ### Battery
 
@@ -106,10 +106,16 @@ JSON payload with keys grouped by category. Sign convention: import/charge = pos
 
 **Example payload (all keys):**
 ```
-{"gP":-1.2,"gP1":-0.4,"gP2":-0.4,"gP3":-0.4,"gV1":230,"gV2":229,"gV3":231,"gIE":12.5,"gEE":3.2,"sP":3.5,"sE":15.2,"bP":1.0,"bS":85,"bEI":8.5,"bEO":2.3,"wP":0.0,"wE":2.1,"wS":80}
+{"gP":-1.2,"gP1":-0.4,"gP2":-0.4,"gP3":-0.4,"gV1":230,"gV2":229,"gV3":231,"gEI":12.5,"gEO":3.2,"sP":3.5,"sE":15.2,"bP":1.0,"bS":85,"bEI":8.5,"bEO":2.3,"wP":0.0,"wE":2.1,"wS":80}
 ```
 
 **Size:** ~170 bytes with all keys — fits within Meshtastic's ~220-byte limit.
+
+> **Energy Dashboard:** HA's energy dashboard requires cumulative energy sensors (kWh, `total_increasing`).
+> Use `gEI` (grid import), `gEO` (grid export), and `sE` (solar) as the primary inputs.
+> Power sensors (`gP`, `sP`) can work via Riemann sum helper but need extra configuration
+> (unit: kW, and signed `gP` must be split into separate import/export sensors).
+> Cumulative sensors are simpler and more accurate — **include them if your meter provides them.**
 
 ---
 
@@ -151,8 +157,8 @@ action:
          "\"gV1\":{{ states('sensor.p1_voltage')|float(0)|round(1) }},"
          "\"gV2\":{{ states('sensor.p2_voltage')|float(0)|round(1) }},"
          "\"gV3\":{{ states('sensor.p3_voltage')|float(0)|round(1) }},"
-         "\"gIE\":{{ states('sensor.grid_energy_import')|float(0)|round(2) }},"
-         "\"gEE\":{{ states('sensor.grid_energy_export')|float(0)|round(2) }},"
+         "\"gEI\":{{ states('sensor.grid_energy_import')|float(0)|round(2) }},"
+         "\"gEO\":{{ states('sensor.grid_energy_export')|float(0)|round(2) }},"
          "\"sP\":{{ states('sensor.solar_power')|float(0)|round(2) }},"
          "\"sE\":{{ states('sensor.solar_energy')|float(0)|round(2) }},"
          "\"bP\":{{ states('sensor.battery_power')|float(0)|round(2) }},"
@@ -167,7 +173,9 @@ action:
 mode: single
 ```
 
-**Delete lines** for sensors your household doesn't have (e.g., remove the five wallbox lines if you have no EV charger). Keep at minimum `gP` and `bS`.
+**Delete lines** for sensors your household doesn't have (e.g., remove the five wallbox lines if you have no EV charger). Keep at minimum `gP` and `bS`; for energy dashboard support include `gEI`, `gEO`, and `sE` if available.
+
+> **Channel index:** The template uses `"channel": 1` — this must match the `mqtt` channel's index in your Meshtastic channel list (the primary `LongFast` is 0, your first non-primary is 1). If you reorder channels, update this value.
 
 **How it works:** Your node receives this MQTT message. It checks `from` — matches its own decimal number. It checks the channel is `"mqtt"` with downlink enabled. It injects the payload into the LoRa mesh. All other nodes receive it.
 
@@ -292,12 +300,12 @@ mqtt:
       device_class: "voltage"
       state_class: "measurement"
 
-    - name: "Neighbor A gIE"
-      unique_id: "neighbor_a_gie"
+    - name: "Neighbor A gEI"
+      unique_id: "neighbor_a_gei"
       state_topic: "{STATE_TOPIC}"
       value_template: >
         {% if value_json.from == NEIGHBOR_A_DECIMAL %}
-          {{ value_json.payload.gIE | float(0) }}
+          {{ value_json.payload.gEI | float(0) }}
         {% else %}
           {{ this.state }}
         {% endif %}
@@ -305,12 +313,12 @@ mqtt:
       device_class: "energy"
       state_class: "total_increasing"
 
-    - name: "Neighbor A gEE"
-      unique_id: "neighbor_a_gee"
+    - name: "Neighbor A gEO"
+      unique_id: "neighbor_a_geo"
       state_topic: "{STATE_TOPIC}"
       value_template: >
         {% if value_json.from == NEIGHBOR_A_DECIMAL %}
-          {{ value_json.payload.gEE | float(0) }}
+          {{ value_json.payload.gEO | float(0) }}
         {% else %}
           {{ this.state }}
         {% endif %}
@@ -488,19 +496,19 @@ action:
 
   - if:
       - condition: template
-        value_template: "{{ trigger.payload_json.payload.gIE is defined }}"
+        value_template: "{{ trigger.payload_json.payload.gEI is defined }}"
     then:
       - service: mqtt.publish
         data:
           qos: 0
           retain: true
-          topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-gie/config"
+          topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-gei/config"
           payload: >
-            {"name": "Node {{ from }} gIE",
+            {"name": "Node {{ from }} gEI",
              "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/!{YOUR_NODE_HEX}",
-             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.gIE | float(0) }}{% endif %}{% endraw %}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.gEI | float(0) }}{% endif %}{% endraw %}",
              "unit_of_measurement": "kWh", "device_class": "energy", "state_class": "total_increasing",
-             "unique_id": "mesh_{{ from }}_gie",
+             "unique_id": "mesh_{{ from }}_gei",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
 
   - delay:
@@ -508,19 +516,19 @@ action:
 
   - if:
       - condition: template
-        value_template: "{{ trigger.payload_json.payload.gEE is defined }}"
+        value_template: "{{ trigger.payload_json.payload.gEO is defined }}"
     then:
       - service: mqtt.publish
         data:
           qos: 0
           retain: true
-          topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-gee/config"
+          topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-geo/config"
           payload: >
-            {"name": "Node {{ from }} gEE",
+            {"name": "Node {{ from }} gEO",
              "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/!{YOUR_NODE_HEX}",
-             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.gEE | float(0) }}{% endif %}{% endraw %}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.gEO | float(0) }}{% endif %}{% endraw %}",
              "unit_of_measurement": "kWh", "device_class": "energy", "state_class": "total_increasing",
-             "unique_id": "mesh_{{ from }}_gee",
+             "unique_id": "mesh_{{ from }}_geo",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
 
   - delay:
@@ -807,4 +815,76 @@ Your HA receives it, checks from == NEIGHBOR_DECIMAL,
   value_json.payload.gP → sensor value
 ```
 
+---
+
+## 7. Energy Dashboard Configuration
+
+### 7.1 Which sensors to use
+
+The energy dashboard works best with **cumulative energy sensors** (`total_increasing`, kWh):
+
+| Dashboard section | Sensor from mesh | Aggregate (optional) |
+|-------------------|-----------------|---------------------|
+| Grid consumption | `gEI` per neighbor | `Combined Mesh Grid Import` |
+| Grid return/production | `gEO` per neighbor | `Combined Mesh Grid Export` |
+| Solar production | `sE` per neighbor | `Combined Mesh Solar Energy` |
+
+Power sensors (`gP`, `sP`) can be used via Riemann sum helpers, but need three extra steps:
+1. **Split `gP` by sign** — create two template sensors (consumption-only, production-only)
+2. **Set unit to kW** in the Riemann sum helper (default is W)
+3. **Accept integration drift** — cumulative sensors are more accurate
+
+### 7.2 Combined energy sensors (template)
+
+Add to `configuration.yaml` to sum cumulative energy across all neighbors:
+
+```yaml
+template:
+  - sensor:
+      - name: "Combined Mesh Grid Import"
+        unique_id: "combined_mesh_gei"
+        unit_of_measurement: "kWh"
+        device_class: "energy"
+        state_class: "total_increasing"
+        state: >
+          {% set entities = expand(states.sensor)
+             | selectattr('entity_id', 'search', 'node_\\d+_gei$') | list %}
+          {{ entities | map(attribute='state') | map('float', 0) | sum | round(2) }}
+
+      - name: "Combined Mesh Grid Export"
+        unique_id: "combined_mesh_geo"
+        unit_of_measurement: "kWh"
+        device_class: "energy"
+        state_class: "total_increasing"
+        state: >
+          {% set entities = expand(states.sensor)
+             | selectattr('entity_id', 'search', 'node_\\d+_geo$') | list %}
+          {{ entities | map(attribute='state') | map('float', 0) | sum | round(2) }}
+
+      - name: "Combined Mesh Solar Energy"
+        unique_id: "combined_mesh_se"
+        unit_of_measurement: "kWh"
+        device_class: "energy"
+        state_class: "total_increasing"
+        state: >
+          {% set entities = expand(states.sensor)
+             | selectattr('entity_id', 'search', 'node_\\d+_se$') | list %}
+          {{ entities | map(attribute='state') | map('float', 0) | sum | round(2) }}
+```
+
+### 7.3 Sign convention reminder
+
+The mesh uses **import/charge = positive, export/discharge = negative**. For the energy dashboard:
+- `gEI` is always positive (cumulative import) — use as-is for grid consumption
+- `gEO` is always positive (cumulative export) — use as-is for grid return
+- `sE` is always positive (cumulative solar) — use as-is for solar production
+- No sign adjustment needed for cumulative sensors
+
+### 7.4 Linking in the Energy Dashboard
+
+In HA Settings → Energy:
+1. **Grid consumption** → `Combined Mesh Grid Import` (or per-neighbor `gEI`)
+2. **Return to grid** → `Combined Mesh Grid Export` (or per-neighbor `gEO`)
+3. **Solar production** → `Combined Mesh Solar Energy` (or per-neighbor `sE`)
+4. **Battery** → `Combined Mesh Grid Import` as the grid sensor (battery in/out is already included in net grid energy)
 
