@@ -70,7 +70,9 @@ JSON payload with keys grouped by category. Sign convention: import/charge = pos
 
 | Key | Meaning | Unit | Priority |
 |-----|---------|------|----------|
-| gP | Total power (+import, -export) | kW | **mandatory** |
+| gP | Net power (+import, -export) | kW | **mandatory** |
+| gIP | Import power only (always ≥0) | kW | important |
+| gEP | Export power only (always ≥0) | kW | important |
 | gP1 | Phase 1 power | kW | important |
 | gP2 | Phase 2 power | kW | important |
 | gP3 | Phase 3 power | kW | important |
@@ -106,16 +108,16 @@ JSON payload with keys grouped by category. Sign convention: import/charge = pos
 
 **Example payload (all keys):**
 ```
-{"gP":-1.2,"gP1":-0.4,"gP2":-0.4,"gP3":-0.4,"gV1":230,"gV2":229,"gV3":231,"gEI":12.5,"gEO":3.2,"sP":3.5,"sE":15.2,"bP":1.0,"bS":85,"bEI":8.5,"bEO":2.3,"wP":0.0,"wE":2.1,"wS":80}
+{"gP":-1.2,"gIP":0.0,"gEP":1.2,"gP1":-0.4,"gP2":-0.4,"gP3":-0.4,"gV1":230,"gV2":229,"gV3":231,"gEI":12.5,"gEO":3.2,"sP":3.5,"sE":15.2,"bP":1.0,"bS":85,"bEI":8.5,"bEO":2.3,"wP":0.0,"wE":2.1,"wS":80}
 ```
 
 **Size:** ~170 bytes with all keys — fits within Meshtastic's ~220-byte limit.
 
 > **Energy Dashboard:** HA's energy dashboard requires cumulative energy sensors (kWh, `total_increasing`).
 > Use `gEI` (grid import), `gEO` (grid export), and `sE` (solar) as the primary inputs.
-> Power sensors (`gP`, `sP`) can work via Riemann sum helper but need extra configuration
-> (unit: kW, and signed `gP` must be split into separate import/export sensors).
-> Cumulative sensors are simpler and more accurate — **include them if your meter provides them.**
+> Power sensors can work via Riemann sum helper (unit: kW). Use `gIP` for consumption,
+> `gEP` for production — no sign-splitting needed. Cumulative sensors are still more accurate.
+> **Include cumulative sensors (`gEI`, `gEO`, `sE`) if your meter provides them.**
 
 ---
 
@@ -150,8 +152,10 @@ action:
       payload: >
         {"from": {YOUR_NODE_DECIMAL}, "type": "sendtext",
          "payload": "{"
-         "\"gP\":{{ states('sensor.grid_power')|float(0)|round(2) }},"
-         "\"gP1\":{{ states('sensor.p1_power')|float(0)|round(2) }},"
+          "\"gP\":{{ states('sensor.grid_power')|float(0)|round(2) }},"
+          "\"gIP\":{{ states('sensor.grid_import_power')|float(0)|round(2) }},"
+          "\"gEP\":{{ states('sensor.grid_export_power')|float(0)|round(2) }},"
+          "\"gP1\":{{ states('sensor.p1_power')|float(0)|round(2) }},"
          "\"gP2\":{{ states('sensor.p2_power')|float(0)|round(2) }},"
          "\"gP3\":{{ states('sensor.p3_power')|float(0)|round(2) }},"
          "\"gV1\":{{ states('sensor.p1_voltage')|float(0)|round(1) }},"
@@ -173,7 +177,7 @@ action:
 mode: single
 ```
 
-**Delete lines** for sensors your household doesn't have (e.g., remove the five wallbox lines if you have no EV charger). Keep at minimum `gP` and `bS`; for energy dashboard support include `gEI`, `gEO`, and `sE` if available.
+**Delete lines** for sensors your household doesn't have (e.g., remove the five wallbox lines if you have no EV charger). Keep at minimum `gP` and `bS`; for energy dashboard support include `gEI`, `gEO`, `sE`, `gIP`, and `gEP` if available.
 
 > **Channel index:** The template uses `"channel": 1` — this must match the `mqtt` channel's index in your Meshtastic channel list (the primary `LongFast` is 0, your first non-primary is 1). If you reorder channels, update this value.
 
@@ -204,7 +208,7 @@ All neighbor messages arrive on a single topic: your node's uplink topic. The `f
 
 The state topic is `msh/{YOUR_REGION}/2/json/mqtt/!{YOUR_NODE_HEX}`.
 
-Add to `configuration.yaml`. One block per field per neighbor. Below is the grid section as an example — repeat the same pattern for solar, battery, and wallbox keys (changing the key, unit, and device_class per §2).
+Add to `configuration.yaml`. One block per field per neighbor. Below is the grid section as an example — repeat the same pattern for `gIP`, `gEP`, solar (`sP`, `sE`), battery (`bP`, `bS`, `bEI`, `bEO`), and wallbox (`wP`, `wE`, `wS`) keys (changing the key, unit, and device_class per §2). Or use the auto-discovery automation (§4.4) instead.
 
 ```yaml
 mqtt:
@@ -496,6 +500,46 @@ action:
 
   - if:
       - condition: template
+        value_template: "{{ trigger.payload_json.payload.gIP is defined }}"
+    then:
+      - service: mqtt.publish
+        data:
+          qos: 0
+          retain: true
+          topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-gip/config"
+          payload: >
+            {"name": "Node {{ from }} gIP",
+             "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/!{YOUR_NODE_HEX}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.gIP | float(0) }}{% endif %}{% endraw %}",
+             "unit_of_measurement": "kW", "device_class": "power", "state_class": "measurement",
+             "unique_id": "mesh_{{ from }}_gip",
+             "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
+
+  - delay:
+      seconds: 1
+
+  - if:
+      - condition: template
+        value_template: "{{ trigger.payload_json.payload.gEP is defined }}"
+    then:
+      - service: mqtt.publish
+        data:
+          qos: 0
+          retain: true
+          topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-gep/config"
+          payload: >
+            {"name": "Node {{ from }} gEP",
+             "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/!{YOUR_NODE_HEX}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.gEP | float(0) }}{% endif %}{% endraw %}",
+             "unit_of_measurement": "kW", "device_class": "power", "state_class": "measurement",
+             "unique_id": "mesh_{{ from }}_gep",
+             "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
+
+  - delay:
+      seconds: 1
+
+  - if:
+      - condition: template
         value_template: "{{ trigger.payload_json.payload.gEI is defined }}"
     then:
       - service: mqtt.publish
@@ -728,9 +772,9 @@ mode: single
 
 ---
 
-### 4.5 Combined Power Sensors
+### 4.5 Combined Sensors
 
-Add to `configuration.yaml` to sum all neighbors' grid total power and battery SOC into single sensors. New neighbors are included automatically.
+Add to `configuration.yaml` to aggregate all neighbors' readings into single sensors. New neighbors are included automatically.
 
 ```yaml
 template:
@@ -743,6 +787,26 @@ template:
         state: >
           {% set entities = expand(states.sensor)
              | selectattr('entity_id', 'search', 'node_\\d+_gp$') | list %}
+          {{ entities | map(attribute='state') | map('float', 0) | sum | round(2) }}
+
+      - name: "Combined Mesh Grid Import Power"
+        unique_id: "combined_mesh_gip"
+        unit_of_measurement: "kW"
+        device_class: "power"
+        state_class: "measurement"
+        state: >
+          {% set entities = expand(states.sensor)
+             | selectattr('entity_id', 'search', 'node_\\d+_gip$') | list %}
+          {{ entities | map(attribute='state') | map('float', 0) | sum | round(2) }}
+
+      - name: "Combined Mesh Grid Export Power"
+        unique_id: "combined_mesh_gep"
+        unit_of_measurement: "kW"
+        device_class: "power"
+        state_class: "measurement"
+        state: >
+          {% set entities = expand(states.sensor)
+             | selectattr('entity_id', 'search', 'node_\\d+_gep$') | list %}
           {{ entities | map(attribute='state') | map('float', 0) | sum | round(2) }}
 
       - name: "Combined Mesh Solar Power"
@@ -829,10 +893,10 @@ The energy dashboard works best with **cumulative energy sensors** (`total_incre
 | Grid return/production | `gEO` per neighbor | `Combined Mesh Grid Export` |
 | Solar production | `sE` per neighbor | `Combined Mesh Solar Energy` |
 
-Power sensors (`gP`, `sP`) can be used via Riemann sum helpers, but need three extra steps:
-1. **Split `gP` by sign** — create two template sensors (consumption-only, production-only)
-2. **Set unit to kW** in the Riemann sum helper (default is W)
-3. **Accept integration drift** — cumulative sensors are more accurate
+Power sensors can be used via Riemann sum helpers (set unit to kW in the helper — default is W):
+- Use `gIP` for grid consumption, `gEP` for grid return/production — no sign-splitting needed
+- `sP` for solar production
+Cumulative sensors are still more accurate — **prefer `gEI`, `gEO`, `sE` where available.**
 
 ### 7.2 Combined energy sensors (template)
 
@@ -875,16 +939,16 @@ template:
 ### 7.3 Sign convention reminder
 
 The mesh uses **import/charge = positive, export/discharge = negative**. For the energy dashboard:
-- `gEI` is always positive (cumulative import) — use as-is for grid consumption
-- `gEO` is always positive (cumulative export) — use as-is for grid return
-- `sE` is always positive (cumulative solar) — use as-is for solar production
-- No sign adjustment needed for cumulative sensors
+- `gEI` (cumulative import) and `gIP` (import power) are always ≥0 — use as-is for grid consumption
+- `gEO` (cumulative export) and `gEP` (export power) are always ≥0 — use as-is for grid return/production
+- `sE` (cumulative solar) is always ≥0 — use as-is for solar production
+- No sign adjustment needed
 
 ### 7.4 Linking in the Energy Dashboard
 
 In HA Settings → Energy:
-1. **Grid consumption** → `Combined Mesh Grid Import` (or per-neighbor `gEI`)
-2. **Return to grid** → `Combined Mesh Grid Export` (or per-neighbor `gEO`)
-3. **Solar production** → `Combined Mesh Solar Energy` (or per-neighbor `sE`)
+1. **Grid consumption** → `Combined Mesh Grid Import` (cumulative, preferred) or `Combined Mesh Grid Import Power` (Riemann sum)
+2. **Return to grid** → `Combined Mesh Grid Export` (cumulative, preferred) or `Combined Mesh Grid Export Power` (Riemann sum)
+3. **Solar production** → `Combined Mesh Solar Energy` (cumulative, preferred) or per-neighbor `sP` (Riemann sum)
 4. **Battery** → `Combined Mesh Grid Import` as the grid sensor (battery in/out is already included in net grid energy)
 
