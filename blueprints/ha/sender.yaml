@@ -1,0 +1,229 @@
+blueprint:
+  name: LOTSE Mesh — Send Meter Data to LoRa
+  description: >
+    Periodically publish your household's meter readings into the LoRa mesh
+    via MQTT downlink to a Heltec V3 node. Only sensors you select will be
+    included in the payload — delete unused entity selectors or leave them empty.
+  domain: automation
+  source_url: >
+    https://github.com/FunCyRanger/LOTSE/blob/main/blueprints/ha/sender.yaml
+  input:
+    node_decimal:
+      name: Node Number
+      description: >
+        Your Heltec V3's decimal node number (Meshtastic Web UI > About page)
+      selector:
+        text:
+    region:
+      name: LoRa Region
+      description: Region code (e.g. EU_868, US_915)
+      default: EU_868
+      selector:
+        text:
+    interval:
+      name: Send Interval (minutes)
+      description: How often to publish into the mesh
+      default: 5
+      selector:
+        number:
+          min: 1
+          max: 60
+          unit_of_measurement: minutes
+    # --- Grid ---
+    gP_entity:
+      name: Grid Net Power (gP)
+      description: Signed net power (+import, -export) — required
+      selector:
+        entity:
+          domain: sensor
+    gIP_entity:
+      name: Grid Import Power (gIP)
+      description: Import power only (always ≥0) — optional
+      required: false
+      selector:
+        entity:
+          domain: sensor
+    gEP_entity:
+      name: Grid Export Power (gEP)
+      description: Export power only (always ≥0) — optional
+      required: false
+      selector:
+        entity:
+          domain: sensor
+    gP1_entity:
+      name: Phase 1 Power (gP1)
+      required: false
+      selector:
+        entity:
+          domain: sensor
+    gP2_entity:
+      name: Phase 2 Power (gP2)
+      required: false
+      selector:
+        entity:
+          domain: sensor
+    gP3_entity:
+      name: Phase 3 Power (gP3)
+      required: false
+      selector:
+        entity:
+          domain: sensor
+    gV1_entity:
+      name: Phase 1 Voltage (gV1)
+      required: false
+      selector:
+        entity:
+          domain: sensor
+    gV2_entity:
+      name: Phase 2 Voltage (gV2)
+      required: false
+      selector:
+        entity:
+          domain: sensor
+    gV3_entity:
+      name: Phase 3 Voltage (gV3)
+      required: false
+      selector:
+        entity:
+          domain: sensor
+    gEI_entity:
+      name: Grid Energy Import (gEI)
+      required: false
+      selector:
+        entity:
+          domain: sensor
+    gEO_entity:
+      name: Grid Energy Export (gEO)
+      required: false
+      selector:
+        entity:
+          domain: sensor
+    # --- Solar ---
+    sP_entity:
+      name: Solar Power (sP)
+      required: false
+      selector:
+        entity:
+          domain: sensor
+    sE_entity:
+      name: Solar Energy (sE)
+      required: false
+      selector:
+        entity:
+          domain: sensor
+    # --- Battery ---
+    bP_entity:
+      name: Battery Power (bP)
+      description: Power (+charge, -discharge) — optional
+      required: false
+      selector:
+        entity:
+          domain: sensor
+    bS_entity:
+      name: Battery State of Charge (bS)
+      description: Battery percentage — required
+      selector:
+        entity:
+          domain: sensor
+    bEI_entity:
+      name: Battery Energy In (bEI)
+      required: false
+      selector:
+        entity:
+          domain: sensor
+    bEO_entity:
+      name: Battery Energy Out (bEO)
+      required: false
+      selector:
+        entity:
+          domain: sensor
+    # --- Wallbox ---
+    wP_entity:
+      name: Wallbox Power (wP)
+      required: false
+      selector:
+        entity:
+          domain: sensor
+    wE_entity:
+      name: Wallbox Energy (wE)
+      required: false
+      selector:
+        entity:
+          domain: sensor
+    wS_entity:
+      name: Wallbox State of Charge (wS)
+      required: false
+      selector:
+        entity:
+          domain: sensor
+
+trigger_variables:
+  interval: !input interval
+trigger:
+  - platform: time_pattern
+    minutes: "/{{ interval }}"
+    seconds: 0
+
+condition: []
+
+action:
+  - variables:
+      node: !input node_decimal
+      region: !input region
+      gP: !input gP_entity
+      gIP: !input gIP_entity
+      gEP: !input gEP_entity
+      gP1: !input gP1_entity
+      gP2: !input gP2_entity
+      gP3: !input gP3_entity
+      gV1: !input gV1_entity
+      gV2: !input gV2_entity
+      gV3: !input gV3_entity
+      gEI: !input gEI_entity
+      gEO: !input gEO_entity
+      sP: !input sP_entity
+      sE: !input sE_entity
+      bP: !input bP_entity
+      bS: !input bS_entity
+      bEI: !input bEI_entity
+      bEO: !input bEO_entity
+      wP: !input wP_entity
+      wE: !input wE_entity
+      wS: !input wS_entity
+  - variables:
+      inner: >
+        {% set items = [] %}
+        {% if gP %}  {% set items = items + [("gP", states(gP)|float(0)|round(2))] %}  {% endif %}
+        {% if gIP %} {% set items = items + [("gIP", states(gIP)|float(0)|round(2))] %} {% endif %}
+        {% if gEP %} {% set items = items + [("gEP", states(gEP)|float(0)|round(2))] %} {% endif %}
+        {% if gP1 %} {% set items = items + [("gP1", states(gP1)|float(0)|round(2))] %} {% endif %}
+        {% if gP2 %} {% set items = items + [("gP2", states(gP2)|float(0)|round(2))] %} {% endif %}
+        {% if gP3 %} {% set items = items + [("gP3", states(gP3)|float(0)|round(2))] %} {% endif %}
+        {% if gV1 %} {% set items = items + [("gV1", states(gV1)|float(0)|round(1))] %} {% endif %}
+        {% if gV2 %} {% set items = items + [("gV2", states(gV2)|float(0)|round(1))] %} {% endif %}
+        {% if gV3 %} {% set items = items + [("gV3", states(gV3)|float(0)|round(1))] %} {% endif %}
+        {% if gEI %} {% set items = items + [("gEI", states(gEI)|float(0)|round(2))] %} {% endif %}
+        {% if gEO %} {% set items = items + [("gEO", states(gEO)|float(0)|round(2))] %} {% endif %}
+        {% if sP %}  {% set items = items + [("sP", states(sP)|float(0)|round(2))] %}  {% endif %}
+        {% if sE %}  {% set items = items + [("sE", states(sE)|float(0)|round(2))] %}  {% endif %}
+        {% if bP %}  {% set items = items + [("bP", states(bP)|float(0)|round(2))] %}  {% endif %}
+        {% if bS %}  {% set items = items + [("bS", states(bS)|int(0))] %}              {% endif %}
+        {% if bEI %} {% set items = items + [("bEI", states(bEI)|float(0)|round(2))] %} {% endif %}
+        {% if bEO %} {% set items = items + [("bEO", states(bEO)|float(0)|round(2))] %} {% endif %}
+        {% if wP %}  {% set items = items + [("wP", states(wP)|float(0)|round(2))] %}  {% endif %}
+        {% if wE %}  {% set items = items + [("wE", states(wE)|float(0)|round(2))] %}  {% endif %}
+        {% if wS %}  {% set items = items + [("wS", states(wS)|int(0))] %}              {% endif %}
+        {{ dict(items) | to_json }}
+  - variables:
+      outer:
+        from: "{{ node | int(0) }}"
+        type: "sendtext"
+        payload: "{{ inner }}"
+        channel: 1
+  - service: mqtt.publish
+    data:
+      qos: 0
+      retain: false
+      topic: "msh/{{ region }}/2/json/mqtt/"
+      payload: "{{ outer | to_json }}"
+mode: single

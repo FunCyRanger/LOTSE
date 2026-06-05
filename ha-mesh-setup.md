@@ -125,6 +125,31 @@ JSON payload with keys grouped by category. Sign convention: import/charge = pos
 
 Create one automation that triggers periodically and publishes your meter data to your node's downlink topic.
 
+### 3.1 Install the Blueprint (recommended)
+
+A pre-built automation blueprint is available at `blueprints/ha/sender.yaml`. It lets you select
+your sensors from a dropdown instead of editing YAML by hand.
+
+**Setup:**
+
+1. Open `blueprints/ha/sender.yaml` from this repo and copy its full contents
+2. In HA go to: **Settings → Automations → Blueprints → Import Blueprint**
+3. Paste the YAML and click **Import**
+4. Click **Create Automation** from the newly imported blueprint
+5. Fill in the form:
+   - **Node Number** — your decimal node number from Meshtastic Web UI
+   - **Send Interval** — how often to publish (default 5 min)
+   - **Grid Net Power (gP)** — pick your grid power sensor (required)
+   - **Battery SOC (bS)** — pick your battery sensor (required)
+   - All other fields are optional — leave empty to exclude from the payload
+6. Click **Save** — your node will start publishing on the next interval
+
+The blueprint automatically handles the `from` field, channel index, and trailing slash.
+
+### 3.2 Manual fallback
+
+If you prefer to edit YAML directly, copy the template below and replace the placeholders.
+
 **Replace these values** for your household in the template:
 - `{YOUR_REGION}` — e.g., `EU_868`
 - `{YOUR_NODE_DECIMAL}` — your node's decimal number (unquoted integer)
@@ -776,6 +801,9 @@ mode: single
 
 Add to `configuration.yaml` to aggregate all neighbors' readings into single sensors. New neighbors are included automatically.
 
+> **Quick start:** A ready-to-use HA package with all combined sensors (power + energy) is at
+> `packages/mesh_combined.yaml`. Drop it into `config/packages/` and restart HA — no replacements needed.
+
 ```yaml
 template:
   - sensor:
@@ -839,8 +867,8 @@ template:
 
 | Step | What to do |
 |------|-----------|
-| New neighbor joins | They install a Heltec V3 + Tasmota, configure their node per §1, add the send automation per §3 |
-| Existing households see them | Either: add a sensor block per §4.2 with their decimal number, or use the auto-discovery automation (§4.4) |
+| New neighbor joins | Heltec V3 per §1, install the sender blueprint (§3.1) or use the manual template (§3.2) |
+| Existing households see them | Auto-discovery (§4.4) creates sensors automatically from the first received message |
 | No changes needed on the mesh | The new node is already on the shared LoRa channel; all existing nodes will receive its messages automatically |
 
 ---
@@ -900,6 +928,9 @@ Cumulative sensors are still more accurate — **prefer `gEI`, `gEO`, `sE` where
 
 ### 7.2 Combined energy sensors (template)
 
+> The `packages/mesh_combined.yaml` package includes these sensors plus all power aggregates —
+> drop it into `config/packages/` instead of copying individual YAML blocks below.
+
 Add to `configuration.yaml` to sum cumulative energy across all neighbors:
 
 ```yaml
@@ -945,6 +976,8 @@ The mesh uses **import/charge = positive, export/discharge = negative**. For the
 - No sign adjustment needed
 
 ### 7.4 Linking in the Energy Dashboard
+
+All three combined sensors are available from `packages/mesh_combined.yaml`.
 
 In HA Settings → Energy:
 1. **Grid consumption** → `Combined Mesh Grid Import` (cumulative, preferred) or `Combined Mesh Grid Import Power` (Riemann sum)

@@ -1,0 +1,96 @@
+# LOTSE Mesh — Combined Sensors
+#
+# Drop this file into config/packages/ and restart HA.
+# It aggregates all neighbor readings into single sensors for monitoring
+# and the energy dashboard. New neighbors are included automatically.
+#
+# No customisation needed — the regex patterns match auto-discovered sensors
+# from the mesh auto-discovery automation (§4.4 in ha-mesh-setup.md).
+
+template:
+  - sensor:
+
+      # --- Grid Power ---
+      - name: "Combined Mesh Grid Power"
+        unique_id: "combined_mesh_gp"
+        unit_of_measurement: "kW"
+        device_class: "power"
+        state_class: "measurement"
+        state: >
+          {% set entities = expand(states.sensor)
+             | selectattr('entity_id', 'search', 'node_\\d+_gp$') | list %}
+          {{ entities | map(attribute='state') | map('float', 0) | sum | round(2) }}
+
+      - name: "Combined Mesh Grid Import Power"
+        unique_id: "combined_mesh_gip"
+        unit_of_measurement: "kW"
+        device_class: "power"
+        state_class: "measurement"
+        state: >
+          {% set entities = expand(states.sensor)
+             | selectattr('entity_id', 'search', 'node_\\d+_gip$') | list %}
+          {{ entities | map(attribute='state') | map('float', 0) | sum | round(2) }}
+
+      - name: "Combined Mesh Grid Export Power"
+        unique_id: "combined_mesh_gep"
+        unit_of_measurement: "kW"
+        device_class: "power"
+        state_class: "measurement"
+        state: >
+          {% set entities = expand(states.sensor)
+             | selectattr('entity_id', 'search', 'node_\\d+_gep$') | list %}
+          {{ entities | map(attribute='state') | map('float', 0) | sum | round(2) }}
+
+      # --- Solar Power ---
+      - name: "Combined Mesh Solar Power"
+        unique_id: "combined_mesh_sp"
+        unit_of_measurement: "kW"
+        device_class: "power"
+        state_class: "measurement"
+        state: >
+          {% set entities = expand(states.sensor)
+             | selectattr('entity_id', 'search', 'node_\\d+_sp$') | list %}
+          {{ entities | map(attribute='state') | map('float', 0) | sum | round(2) }}
+
+      # --- Battery ---
+      - name: "Average Neighbor SOC"
+        unique_id: "avg_neighbor_soc"
+        unit_of_measurement: "%"
+        device_class: "battery"
+        state_class: "measurement"
+        state: >
+          {% set entities = expand(states.sensor)
+             | selectattr('entity_id', 'search', 'node_\\d+_bs$') | list %}
+          {% set vals = entities | map(attribute='state') | map('int', 0) | list %}
+          {{ (vals | sum / vals | length) | round(0) if vals | length > 0 else 0 }}
+
+      # --- Grid Cumulative Energy (for Energy Dashboard) ---
+      - name: "Combined Mesh Grid Import"
+        unique_id: "combined_mesh_gei"
+        unit_of_measurement: "kWh"
+        device_class: "energy"
+        state_class: "total_increasing"
+        state: >
+          {% set entities = expand(states.sensor)
+             | selectattr('entity_id', 'search', 'node_\\d+_gei$') | list %}
+          {{ entities | map(attribute='state') | map('float', 0) | sum | round(2) }}
+
+      - name: "Combined Mesh Grid Export"
+        unique_id: "combined_mesh_geo"
+        unit_of_measurement: "kWh"
+        device_class: "energy"
+        state_class: "total_increasing"
+        state: >
+          {% set entities = expand(states.sensor)
+             | selectattr('entity_id', 'search', 'node_\\d+_geo$') | list %}
+          {{ entities | map(attribute='state') | map('float', 0) | sum | round(2) }}
+
+      - name: "Combined Mesh Solar Energy"
+        unique_id: "combined_mesh_se"
+        unit_of_measurement: "kWh"
+        device_class: "energy"
+        state_class: "total_increasing"
+        state: >
+          {% set entities = expand(states.sensor)
+             | selectattr('entity_id', 'search', 'node_\\d+_se$') | list %}
+          {{ entities | map(attribute='state') | map('float', 0) | sum | round(2) }}
