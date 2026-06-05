@@ -68,8 +68,9 @@ After your Heltec V3 is configured (step 1 above), set up Home Assistant:
 
 ### Step 1 — Install Sender Blueprint
 
-1. Open `blueprints/ha/sender.yaml` from this repo, copy the full contents
-2. In HA: **Settings → Automations → Blueprints → Import Blueprint**, paste and import
+1. In HA: **Settings → Automations → Blueprints → Import Blueprint**
+2. Paste this URL and click **Import**:
+   `https://raw.githubusercontent.com/FunCyRanger/LOTSE/refs/heads/main/blueprints/ha/sender.yaml`
 3. Click **Create Automation**, fill in the form:
    - **Node Number** — from the Web UI (required)
    - **Grid Net Power (gP)** — pick your sensor (required)
@@ -175,14 +176,19 @@ Create one automation that triggers periodically and publishes your meter data t
 
 ### 3.1 Install the Blueprint (recommended)
 
-A pre-built automation blueprint is available at `blueprints/ha/sender.yaml`. It lets you select
-your sensors from a dropdown instead of editing YAML by hand.
+A pre-built automation blueprint is available at:
+`https://raw.githubusercontent.com/FunCyRanger/LOTSE/refs/heads/main/blueprints/ha/sender.yaml`
+
+Import it via **Settings → Automations → Blueprints → Import Blueprint** (paste the URL
+or copy the file contents directly). It lets you select your sensors from a dropdown
+instead of editing YAML by hand.
 
 **Setup:**
 
-1. Open `blueprints/ha/sender.yaml` from this repo and copy its full contents
-2. In HA go to: **Settings → Automations → Blueprints → Import Blueprint**
-3. Paste the YAML and click **Import**
+1. In HA: **Settings → Automations → Blueprints → Import Blueprint**
+2. Paste the URL or copy the file contents from
+   `https://raw.githubusercontent.com/FunCyRanger/LOTSE/refs/heads/main/blueprints/ha/sender.yaml`
+3. Click **Import**
 4. Click **Create Automation** from the newly imported blueprint
 5. Fill in the form:
    - **Node Number** — your decimal node number from Meshtastic Web UI

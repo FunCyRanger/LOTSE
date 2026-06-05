@@ -39,75 +39,63 @@ blueprint:
     gIP_entity:
       name: Grid Import Power (gIP)
       description: Import power only (always ≥0) — optional
-      required: false
       selector:
         entity:
           domain: sensor
     gEP_entity:
       name: Grid Export Power (gEP)
       description: Export power only (always ≥0) — optional
-      required: false
       selector:
         entity:
           domain: sensor
     gP1_entity:
       name: Phase 1 Power (gP1)
-      required: false
       selector:
         entity:
           domain: sensor
     gP2_entity:
       name: Phase 2 Power (gP2)
-      required: false
       selector:
         entity:
           domain: sensor
     gP3_entity:
       name: Phase 3 Power (gP3)
-      required: false
       selector:
         entity:
           domain: sensor
     gV1_entity:
       name: Phase 1 Voltage (gV1)
-      required: false
       selector:
         entity:
           domain: sensor
     gV2_entity:
       name: Phase 2 Voltage (gV2)
-      required: false
       selector:
         entity:
           domain: sensor
     gV3_entity:
       name: Phase 3 Voltage (gV3)
-      required: false
       selector:
         entity:
           domain: sensor
     gEI_entity:
       name: Grid Energy Import (gEI)
-      required: false
       selector:
         entity:
           domain: sensor
     gEO_entity:
       name: Grid Energy Export (gEO)
-      required: false
       selector:
         entity:
           domain: sensor
     # --- Solar ---
     sP_entity:
       name: Solar Power (sP)
-      required: false
       selector:
         entity:
           domain: sensor
     sE_entity:
       name: Solar Energy (sE)
-      required: false
       selector:
         entity:
           domain: sensor
@@ -115,7 +103,6 @@ blueprint:
     bP_entity:
       name: Battery Power (bP)
       description: Power (+charge, -discharge) — optional
-      required: false
       selector:
         entity:
           domain: sensor
@@ -127,32 +114,27 @@ blueprint:
           domain: sensor
     bEI_entity:
       name: Battery Energy In (bEI)
-      required: false
       selector:
         entity:
           domain: sensor
     bEO_entity:
       name: Battery Energy Out (bEO)
-      required: false
       selector:
         entity:
           domain: sensor
     # --- Wallbox ---
     wP_entity:
       name: Wallbox Power (wP)
-      required: false
       selector:
         entity:
           domain: sensor
     wE_entity:
       name: Wallbox Energy (wE)
-      required: false
       selector:
         entity:
           domain: sensor
     wS_entity:
       name: Wallbox State of Charge (wS)
-      required: false
       selector:
         entity:
           domain: sensor
