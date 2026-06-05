@@ -62,7 +62,55 @@ From Web UI → **About** page, note:
 
 ---
 
-## 2. Data Format
+## Quick Start: HA Setup in 5 Steps
+
+After your Heltec V3 is configured (step 1 above), set up Home Assistant:
+
+### Step 1 — Install Sender Blueprint
+
+1. Open `blueprints/ha/sender.yaml` from this repo, copy the full contents
+2. In HA: **Settings → Automations → Blueprints → Import Blueprint**, paste and import
+3. Click **Create Automation**, fill in the form:
+   - **Node Number** — from the Web UI (required)
+   - **Grid Net Power (gP)** — pick your sensor (required)
+   - **Battery SOC (bS)** — pick your sensor (required)
+   - All other fields are optional — leave empty to exclude from the payload
+4. Save — your node publishes on the next interval automatically
+
+### Step 2 — Install Auto-Discovery
+
+1. Find the auto-discovery automation template further down in this guide (section "Auto-Discovery via MQTT")
+2. Copy it and replace `{YOUR_REGION}`, `{YOUR_NODE_HEX}`, and `{YOUR_NODE_DECIMAL}` with your values
+3. In HA: **Settings → Automations → Create → Edit in YAML**, paste and save
+
+Neighbor sensors appear automatically when the first message arrives. No need to add sensors manually.
+
+### Step 3 — Install Combined Package
+
+1. Copy `packages/mesh_combined.yaml` into your HA `config/packages/` directory
+2. Restart Home Assistant
+
+All aggregate sensors (combined grid power, solar, battery SOC, energy imports/exports) appear in HA.
+
+### Step 4 — Configure Energy Dashboard
+
+1. In HA: **Settings → Energy**
+2. **Grid consumption** → search `combined import` → select `Combined Mesh Grid Import`
+3. **Return to grid** → search `combined export` → select `Combined Mesh Grid Export`
+4. **Solar production** → search `combined solar` → select `Combined Mesh Solar Energy`
+
+### Step 5 — Verify
+
+After the first send interval (default 5 minutes) elapses:
+- Your neighbor's sensors appear under **Settings → Devices & Services → Devices**
+- Combined sensors show summed values on the **Overview** dashboard
+- The **Energy** dashboard shows your first recorded data point
+
+New neighbors that join later are handled automatically — no additional setup needed.
+
+---
+
+## Data Format (Reference)
 
 JSON payload with keys grouped by category. Sign convention: import/charge = positive, export/discharge = negative.
 
@@ -121,7 +169,7 @@ JSON payload with keys grouped by category. Sign convention: import/charge = pos
 
 ---
 
-## 3. Home Assistant: Sender Automation (per household)
+## Sender Automation (Reference)
 
 Create one automation that triggers periodically and publishes your meter data to your node's downlink topic.
 
@@ -210,7 +258,7 @@ mode: single
 
 ---
 
-## 4. Home Assistant: Receiver Sensors (per neighbor)
+## Receiver Sensors (Reference)
 
 ### 4.1 Find Neighbors' Identifiers
 
@@ -909,7 +957,7 @@ Your HA receives it, checks from == NEIGHBOR_DECIMAL,
 
 ---
 
-## 7. Energy Dashboard Configuration
+## Energy Dashboard (Reference)
 
 ### 7.1 Which sensors to use
 
