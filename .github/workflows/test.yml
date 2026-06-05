@@ -9,13 +9,22 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+
+    services:
+      mosquitto:
+        image: eclipse-mosquitto
+        ports:
+          - 1883:1883
+
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install pyyaml jinja2
+      - run: pip install -r tests/requirements.txt
       - run: python3 tests/test_mesh.py
+      - run: python3 tests/test_schema.py
+      - run: python3 tests/test_e2e_mqtt.py
       - name: Validate all YAML files
         run: |
           python3 -c "
