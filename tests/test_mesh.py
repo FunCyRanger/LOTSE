@@ -108,6 +108,16 @@ def ha_int(value, default=0):
         return int(default)
 
 
+def ha_from_json(value):
+    """Parse a JSON string; return Undefined on failure."""
+    if isinstance(value, Undefined):
+        return value
+    try:
+        return json.loads(value)
+    except (ValueError, TypeError, json.JSONDecodeError):
+        return Undefined()
+
+
 # ─── Create HA-like Jinja environment ─────────────────────────────────────
 
 def ha_environment():
@@ -117,6 +127,7 @@ def ha_environment():
         extensions=[],
     )
     env.filters["to_json"] = ha_to_json
+    env.filters["from_json"] = ha_from_json
     env.filters["float"] = ha_float
     env.filters["int"] = ha_int
     env.tests["search"] = ha_search
@@ -191,7 +202,7 @@ def make_sender_vars(**overrides):
 
 RECEIVER_TEMPLATE = """\
 {% if value_json.from == NEIGHBOR_DECIMAL %}\
-{{ value_json.payload.KEY | FILTER }}\
+{{ (value_json.payload | from_json).KEY | FILTER }}\
 {% else %}\
 {{ this.state }}\
 {% endif %}"""
@@ -199,7 +210,12 @@ RECEIVER_TEMPLATE = """\
 
 def render_receiver(mqtt_payload, neighbor_decimal, key, filter_="float(0)",
                     this_state="0"):
-    """Render a receiver value_template for a single sensor."""
+    """Render a receiver value_template for a single sensor.
+
+    ``mqtt_payload`` should be a dict with ``payload`` as a JSON string
+    (matching Meshtastic uplink: the inner payload is JSON-encoded inside
+    the outer envelope).
+    """
     env = ha_environment()
     tpl_str = RECEIVER_TEMPLATE.replace("KEY", key).replace("FILTER", filter_)
     tpl = env.from_string(tpl_str)
@@ -345,35 +361,35 @@ def test_sender_mixed_units():
 
 def test_receiver_match():
     """from matches → sensor value extracted."""
-    p = {"from": 2712679380, "payload": {"gP": -1.2, "bS": 85}}
+    p = {"from": 2712679380, "payload": '{"gP": -1.2, "bS": 85}'}
     r = render_receiver(p, 2712679380, "gP", "float(0)")
     assert float(r) == -1.2, f"Expected -1.2, got {r}"
 
 
 def test_receiver_mismatch():
     """from doesn't match → fallback state."""
-    p = {"from": 999, "payload": {"gP": -1.2}}
+    p = {"from": 999, "payload": '{"gP": -1.2}'}
     r = render_receiver(p, 2712679380, "gP", "float(0)", this_state="-5.0")
     assert r == "-5.0", f"Expected '-5.0', got {r}"
 
 
 def test_receiver_int_filter():
     """bS via |int(0) → integer."""
-    p = {"from": 2712679380, "payload": {"bS": 85}}
+    p = {"from": 2712679380, "payload": '{"bS": 85}'}
     r = render_receiver(p, 2712679380, "bS", "int(0)")
     assert int(r) == 85, f"Expected 85, got {r}"
 
 
 def test_receiver_missing_key():
     """Payload missing the key → float(0) returns 0."""
-    p = {"from": 2712679380, "payload": {"gP": -1.2}}
+    p = {"from": 2712679380, "payload": '{"gP": -1.2}'}
     r = render_receiver(p, 2712679380, "nonexistent", "float(0)")
     assert float(r) == 0.0, f"Expected 0.0, got {r}"
 
 
 def test_receiver_voltage_rounding():
     """gV1 with 1 decimal preserved."""
-    p = {"from": 2712679380, "payload": {"gV1": 230.456}}
+    p = {"from": 2712679380, "payload": '{"gV1": 230.456}'}
     r = render_receiver(p, 2712679380, "gV1", "float(0)")
     assert float(r) == 230.456
 
@@ -386,7 +402,7 @@ def test_roundtrip():
     """Send payload → receive-parsed → correct values."""
     tpl = load_sender_template()
     out = render_sender(tpl, make_sender_vars())
-    msg = {"from": 12345, "payload": out}
+    msg = {"from": 12345, "payload": json.dumps(out, separators=(",", ":"))}
     for key in ("gP", "gIP", "gEP", "bS"):
         flt = "int(0)" if key == "bS" else "float(0)"
         r = render_receiver(msg, 12345, key, flt)
