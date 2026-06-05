@@ -32,23 +32,10 @@ Tasmota ──MQTT──► HA automation          Tasmota ──MQTT──► H
 
 ### Channel Configuration
 
-Choose one of two approaches:
-
-**Option 1: mqtt channel for everything (recommended)**
-
 | Channel | Role | Uplink | Downlink |
 |---------|------|--------|----------|
 | Primary (LongFast) | Default LoRa | ✅ Leave checked (for mesh discovery) | ☐ Unchecked |
 | `mqtt` (index 1) | All meter data | ✅ **Check this** | ✅ **Check this** |
-
-With this setup, your node receives MQTT downlink on the `mqtt` channel and publishes received LoRa meter data to MQTT on the same channel.
-
-**Option 2: primary channel for receive (legacy)**
-
-| Channel | Role | Uplink | Downlink |
-|---------|------|--------|----------|
-| Primary (LongFast) | Receive LoRa → MQTT | ✅ Check | ☐ Unchecked |
-| `mqtt` (index 1) | MQTT → LoRa send | ☐ Unchecked | ✅ Check |
 
 ### Creating the `mqtt` channel
 
@@ -58,8 +45,8 @@ Create a NEW channel with these settings:
 |---------|-------|
 | Name | **`mqtt`** (exactly this, lowercase) |
 | PSK | Default/random |
-| Uplink Enabled | See table above |
-| Downlink Enabled | See table above |
+| Uplink Enabled | ✅ Check |
+| Downlink Enabled | ✅ Check |
 
 **Reboot the node** — channel changes don't take effect until reboot.
 
@@ -207,12 +194,7 @@ All neighbor messages arrive on a single topic: your node's uplink topic. The `f
 - `NEIGHBOR_A_DECIMAL` — neighbor's decimal number (unquoted integer)
 - `{STATE_TOPIC}` — see note below
 
-#### State topic depends on your uplink channel
-
-| If you use... | State topic is... |
-|---------------|-------------------|
-| mqtt channel (recommended) | `msh/{YOUR_REGION}/2/json/mqtt/!{YOUR_NODE_HEX}` |
-| primary (LongFast) channel | `msh/{YOUR_REGION}/2/json/LongFast/!{YOUR_NODE_HEX}` |
+The state topic is `msh/{YOUR_REGION}/2/json/mqtt/!{YOUR_NODE_HEX}`.
 
 Add to `configuration.yaml`. One block per field per neighbor. Below is the grid section as an example — repeat the same pattern for solar, battery, and wallbox keys (changing the key, unit, and device_class per §2).
 
@@ -339,7 +321,7 @@ mqtt:
 
 Repeat for solar (`sP`, `sE`), battery (`bP`, `bS`, `bEI`, `bEO`), and wallbox (`wP`, `wE`, `wS`) using the units and device classes from §2.
 
-**Why `{YOUR_NODE_HEX}` in the topic?** Your node publishes received LoRa messages to `msh/{R}/2/json/mqtt/{YOUR_NODE_HEX}` (or `LongFast/` if using the primary channel). Every neighbor's messages arrive on this same topic. The `from` field distinguishes who sent each message.
+**Why `{YOUR_NODE_HEX}` in the topic?** Your node publishes received LoRa messages to `msh/{R}/2/json/mqtt/{YOUR_NODE_HEX}`. Every neighbor's messages arrive on this same topic. The `from` field distinguishes who sent each message.
 
 ### 4.3 Filter Out Your Own Messages
 
