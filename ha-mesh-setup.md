@@ -834,7 +834,7 @@ action:
              "unit_of_measurement": "%", "device_class": "battery", "state_class": "measurement",
              "unique_id": "mesh_{{ from }}_ws",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
-mode: single
+mode: queued
 ```
 
 **No placeholders to replace.** The automation dynamically extracts the region from the MQTT topic.
