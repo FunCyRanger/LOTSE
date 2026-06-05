@@ -77,17 +77,52 @@ From Web UI → **About** page, note:
 
 ## 2. Data Format
 
-JSON payload with three fields:
+JSON payload with keys grouped by category. Sign convention: import/charge = positive, export/discharge = negative.
 
-| Field | Meaning | Type | Unit |
-|-------|---------|------|------|
-| IMP | Current import power from grid | float | kW |
-| EXP | Export power to grid | float | kW |
-| SOC | Battery state of charge | int | % |
+### Grid
 
-**Example payload:** `{"IMP":0.3,"EXP":0.0,"SOC":85}`
+| Key | Meaning | Unit | Priority |
+|-----|---------|------|----------|
+| gP | Total power (+import, -export) | kW | **mandatory** |
+| gP1 | Phase 1 power | kW | important |
+| gP2 | Phase 2 power | kW | important |
+| gP3 | Phase 3 power | kW | important |
+| gV1 | Phase 1 voltage | V | optional |
+| gV2 | Phase 2 voltage | V | optional |
+| gV3 | Phase 3 voltage | V | optional |
+| gIE | Cumulative energy import | kWh | optional |
+| gEE | Cumulative energy export | kWh | optional |
 
-**Size:** ~35-50 bytes — well within Meshtastic's ~220-byte limit.
+### Solar
+
+| Key | Meaning | Unit | Priority |
+|-----|---------|------|----------|
+| sP | Power | kW | important |
+| sE | Cumulative energy | kWh | optional |
+
+### Battery
+
+| Key | Meaning | Unit | Priority |
+|-----|---------|------|----------|
+| bP | Power (+charge, -discharge) | kW | important |
+| bS | State of charge | % | **mandatory** |
+| bEI | Cumulative energy in | kWh | optional |
+| bEO | Cumulative energy out | kWh | optional |
+
+### Wallbox (EV charger)
+
+| Key | Meaning | Unit | Priority |
+|-----|---------|------|----------|
+| wP | Power | kW | optional |
+| wE | Cumulative energy | kWh | optional |
+| wS | State of charge | % | optional |
+
+**Example payload (all keys):**
+```
+{"gP":-1.2,"gP1":-0.4,"gP2":-0.4,"gP3":-0.4,"gV1":230,"gV2":229,"gV3":231,"gIE":12.5,"gEE":3.2,"sP":3.5,"sE":15.2,"bP":1.0,"bS":85,"bEI":8.5,"bEO":2.3,"wP":0.0,"wE":2.1,"wS":80}
+```
+
+**Size:** ~170 bytes with all keys — fits within Meshtastic's ~220-byte limit.
 
 ---
 
@@ -103,10 +138,10 @@ Create one automation that triggers periodically and publishes your meter data t
 
 > ⚠️ **Critical:** The topic must end with `/` — `msh/{YOUR_REGION}/2/json/mqtt/`. Omitting the trailing `/` will silently fail; the node will not receive the message.
 
-### JSON format (recommended)
+### Template
 
 ```yaml
-alias: "Meter Data → LoRa Mesh (JSON)"
+alias: "Meter Data → LoRa Mesh"
 description: "Send meter readings as JSON into the LoRa mesh"
 trigger:
   - platform: time_pattern
@@ -121,12 +156,31 @@ action:
       topic: "msh/{YOUR_REGION}/2/json/mqtt/"
       payload: >
         {"from": {YOUR_NODE_DECIMAL}, "type": "sendtext",
-         "payload": "{\"IMP\":{{ states('sensor.your_imp_sensor')|float(0)|round(2) }},\"EXP\":{{ states('sensor.your_exp_sensor')|float(0)|round(2) }},\"SOC\":{{ states('sensor.your_soc_sensor')|int(0) }}",
+         "payload": "{"
+         "\"gP\":{{ states('sensor.grid_power')|float(0)|round(2) }},"
+         "\"gP1\":{{ states('sensor.p1_power')|float(0)|round(2) }},"
+         "\"gP2\":{{ states('sensor.p2_power')|float(0)|round(2) }},"
+         "\"gP3\":{{ states('sensor.p3_power')|float(0)|round(2) }},"
+         "\"gV1\":{{ states('sensor.p1_voltage')|float(0)|round(1) }},"
+         "\"gV2\":{{ states('sensor.p2_voltage')|float(0)|round(1) }},"
+         "\"gV3\":{{ states('sensor.p3_voltage')|float(0)|round(1) }},"
+         "\"gIE\":{{ states('sensor.grid_energy_import')|float(0)|round(2) }},"
+         "\"gEE\":{{ states('sensor.grid_energy_export')|float(0)|round(2) }},"
+         "\"sP\":{{ states('sensor.solar_power')|float(0)|round(2) }},"
+         "\"sE\":{{ states('sensor.solar_energy')|float(0)|round(2) }},"
+         "\"bP\":{{ states('sensor.battery_power')|float(0)|round(2) }},"
+         "\"bS\":{{ states('sensor.battery_soc')|int(0) }},"
+         "\"bEI\":{{ states('sensor.battery_energy_in')|float(0)|round(2) }},"
+         "\"bEO\":{{ states('sensor.battery_energy_out')|float(0)|round(2) }},"
+         "\"wP\":{{ states('sensor.wallbox_power')|float(0)|round(2) }},"
+         "\"wE\":{{ states('sensor.wallbox_energy')|float(0)|round(2) }},"
+         "\"wS\":{{ states('sensor.wallbox_soc')|int(0) }}"
+         "}",
          "channel": 1}
 mode: single
 ```
 
-Fields: `IMP` (current import power, kW), `EXP` (export power, kW), `SOC` (battery state of charge, %). Omit any field you don't have.
+**Delete lines** for sensors your household doesn't have (e.g., remove the five wallbox lines if you have no EV charger). Keep at minimum `gP` and `bS`.
 
 **How it works:** Your node receives this MQTT message. It checks `from` — matches its own decimal number. It checks the channel is `"mqtt"` with downlink enabled. It injects the payload into the LoRa mesh. All other nodes receive it.
 
@@ -160,19 +214,17 @@ All neighbor messages arrive on a single topic: your node's uplink topic. The `f
 | mqtt channel (recommended) | `msh/{YOUR_REGION}/2/json/mqtt/!{YOUR_NODE_HEX}` |
 | primary (LongFast) channel | `msh/{YOUR_REGION}/2/json/LongFast/!{YOUR_NODE_HEX}` |
 
-#### JSON payload (recommended)
-
-Add to `configuration.yaml`. One block per field per neighbor.
+Add to `configuration.yaml`. One block per field per neighbor. Below is the grid section as an example — repeat the same pattern for solar, battery, and wallbox keys (changing the key, unit, and device_class per §2).
 
 ```yaml
 mqtt:
   sensor:
-    - name: "Neighbor A IMP"
-      unique_id: "neighbor_a_imp"
+    - name: "Neighbor A gP"
+      unique_id: "neighbor_a_gp"
       state_topic: "{STATE_TOPIC}"
       value_template: >
         {% if value_json.from == NEIGHBOR_A_DECIMAL %}
-          {{ value_json.payload.IMP | float(0) }}
+          {{ value_json.payload.gP | float(0) }}
         {% else %}
           {{ this.state }}
         {% endif %}
@@ -180,12 +232,12 @@ mqtt:
       device_class: "power"
       state_class: "measurement"
 
-    - name: "Neighbor A EXP"
-      unique_id: "neighbor_a_exp"
+    - name: "Neighbor A gP1"
+      unique_id: "neighbor_a_gp1"
       state_topic: "{STATE_TOPIC}"
       value_template: >
         {% if value_json.from == NEIGHBOR_A_DECIMAL %}
-          {{ value_json.payload.EXP | float(0) }}
+          {{ value_json.payload.gP1 | float(0) }}
         {% else %}
           {{ this.state }}
         {% endif %}
@@ -193,19 +245,99 @@ mqtt:
       device_class: "power"
       state_class: "measurement"
 
-    - name: "Neighbor A SOC"
-      unique_id: "neighbor_a_soc"
+    - name: "Neighbor A gP2"
+      unique_id: "neighbor_a_gp2"
       state_topic: "{STATE_TOPIC}"
       value_template: >
         {% if value_json.from == NEIGHBOR_A_DECIMAL %}
-          {{ value_json.payload.SOC | int(0) }}
+          {{ value_json.payload.gP2 | float(0) }}
         {% else %}
           {{ this.state }}
         {% endif %}
-      unit_of_measurement: "%"
-      device_class: "battery"
+      unit_of_measurement: "kW"
+      device_class: "power"
       state_class: "measurement"
+
+    - name: "Neighbor A gP3"
+      unique_id: "neighbor_a_gp3"
+      state_topic: "{STATE_TOPIC}"
+      value_template: >
+        {% if value_json.from == NEIGHBOR_A_DECIMAL %}
+          {{ value_json.payload.gP3 | float(0) }}
+        {% else %}
+          {{ this.state }}
+        {% endif %}
+      unit_of_measurement: "kW"
+      device_class: "power"
+      state_class: "measurement"
+
+    - name: "Neighbor A gV1"
+      unique_id: "neighbor_a_gv1"
+      state_topic: "{STATE_TOPIC}"
+      value_template: >
+        {% if value_json.from == NEIGHBOR_A_DECIMAL %}
+          {{ value_json.payload.gV1 | float(0) }}
+        {% else %}
+          {{ this.state }}
+        {% endif %}
+      unit_of_measurement: "V"
+      device_class: "voltage"
+      state_class: "measurement"
+
+    - name: "Neighbor A gV2"
+      unique_id: "neighbor_a_gv2"
+      state_topic: "{STATE_TOPIC}"
+      value_template: >
+        {% if value_json.from == NEIGHBOR_A_DECIMAL %}
+          {{ value_json.payload.gV2 | float(0) }}
+        {% else %}
+          {{ this.state }}
+        {% endif %}
+      unit_of_measurement: "V"
+      device_class: "voltage"
+      state_class: "measurement"
+
+    - name: "Neighbor A gV3"
+      unique_id: "neighbor_a_gv3"
+      state_topic: "{STATE_TOPIC}"
+      value_template: >
+        {% if value_json.from == NEIGHBOR_A_DECIMAL %}
+          {{ value_json.payload.gV3 | float(0) }}
+        {% else %}
+          {{ this.state }}
+        {% endif %}
+      unit_of_measurement: "V"
+      device_class: "voltage"
+      state_class: "measurement"
+
+    - name: "Neighbor A gIE"
+      unique_id: "neighbor_a_gie"
+      state_topic: "{STATE_TOPIC}"
+      value_template: >
+        {% if value_json.from == NEIGHBOR_A_DECIMAL %}
+          {{ value_json.payload.gIE | float(0) }}
+        {% else %}
+          {{ this.state }}
+        {% endif %}
+      unit_of_measurement: "kWh"
+      device_class: "energy"
+      state_class: "total_increasing"
+
+    - name: "Neighbor A gEE"
+      unique_id: "neighbor_a_gee"
+      state_topic: "{STATE_TOPIC}"
+      value_template: >
+        {% if value_json.from == NEIGHBOR_A_DECIMAL %}
+          {{ value_json.payload.gEE | float(0) }}
+        {% else %}
+          {{ this.state }}
+        {% endif %}
+      unit_of_measurement: "kWh"
+      device_class: "energy"
+      state_class: "total_increasing"
 ```
+
+Repeat for solar (`sP`, `sE`), battery (`bP`, `bS`, `bEI`, `bEO`), and wallbox (`wP`, `wE`, `wS`) using the units and device classes from §2.
 
 **Why `{YOUR_NODE_HEX}` in the topic?** Your node publishes received LoRa messages to `msh/{R}/2/json/mqtt/{YOUR_NODE_HEX}` (or `LongFast/` if using the primary channel). Every neighbor's messages arrive on this same topic. The `from` field distinguishes who sent each message.
 
@@ -213,15 +345,15 @@ mqtt:
 
 Your own node also publishes its received traffic — including your own messages echoed back. The `if value_json.from == NEIGHBOR_A_DECIMAL` check ensures you only create sensors for actual neighbors, not yourself. Add no sensor block for your own decimal number.
 
-### 4.4 Optional: Auto-Discovery via MQTT (JSON payload)
+### 4.4 Optional: Auto-Discovery via MQTT
 
-If you use the JSON payload format (`IMP`, `EXP`, `SOC`) and want to avoid manually adding sensor blocks for each new neighbor, create this automation. It watches your uplink topic and uses MQTT discovery to auto-generate sensors for every new `from` it sees.
+Create this automation to avoid manually adding sensor blocks per §4.2. It watches your uplink topic and uses MQTT discovery to auto-generate sensors for every new neighbor. Only fields present in the payload get a sensor — no useless 0-value entries.
 
 **Add this automation in HA Settings → Automations → Create Automation → Edit in YAML:**
 
 ```yaml
 alias: "Mesh: Auto-discover neighbors"
-description: "Creates IMP/EXP/SOC sensors via MQTT discovery for each new mesh node"
+description: "Creates sensors via MQTT discovery for each new mesh node"
 trigger:
   - platform: mqtt
     topic: "msh/{YOUR_REGION}/2/json/mqtt/!{YOUR_NODE_HEX}"
@@ -229,24 +361,244 @@ condition:
   - condition: template
     value_template: >
       {{ trigger.payload_json.from is defined
-         and trigger.payload_json.payload.IMP is defined
+         and trigger.payload_json.payload.gP is defined
          and trigger.payload_json.from | string != '{YOUR_NODE_DECIMAL}' }}
 variables:
   from: "{{ trigger.payload_json.from }}"
 action:
+  # GRID
+
   - service: mqtt.publish
     data:
       qos: 0
       retain: true
-      topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-imp/config"
+      topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-gp/config"
       payload: >
-        {"name": "Node {{ from }} IMP",
+        {"name": "Node {{ from }} gP",
          "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/!{YOUR_NODE_HEX}",
-         "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.IMP | float(0) }}{% endif %}{% endraw %}",
-         "unit_of_measurement": "kW",
-         "device_class": "power",
-         "state_class": "measurement",
-         "unique_id": "mesh_{{ from }}_imp",
+         "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.gP | float(0) }}{% endif %}{% endraw %}",
+         "unit_of_measurement": "kW", "device_class": "power", "state_class": "measurement",
+         "unique_id": "mesh_{{ from }}_gp",
+         "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
+
+  - delay:
+      seconds: 1
+
+  - if:
+      - condition: template
+        value_template: "{{ trigger.payload_json.payload.gP1 is defined }}"
+    then:
+      - service: mqtt.publish
+        data:
+          qos: 0
+          retain: true
+          topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-gp1/config"
+          payload: >
+            {"name": "Node {{ from }} gP1",
+             "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/!{YOUR_NODE_HEX}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.gP1 | float(0) }}{% endif %}{% endraw %}",
+             "unit_of_measurement": "kW", "device_class": "power", "state_class": "measurement",
+             "unique_id": "mesh_{{ from }}_gp1",
+             "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
+
+  - delay:
+      seconds: 1
+
+  - if:
+      - condition: template
+        value_template: "{{ trigger.payload_json.payload.gP2 is defined }}"
+    then:
+      - service: mqtt.publish
+        data:
+          qos: 0
+          retain: true
+          topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-gp2/config"
+          payload: >
+            {"name": "Node {{ from }} gP2",
+             "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/!{YOUR_NODE_HEX}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.gP2 | float(0) }}{% endif %}{% endraw %}",
+             "unit_of_measurement": "kW", "device_class": "power", "state_class": "measurement",
+             "unique_id": "mesh_{{ from }}_gp2",
+             "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
+
+  - delay:
+      seconds: 1
+
+  - if:
+      - condition: template
+        value_template: "{{ trigger.payload_json.payload.gP3 is defined }}"
+    then:
+      - service: mqtt.publish
+        data:
+          qos: 0
+          retain: true
+          topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-gp3/config"
+          payload: >
+            {"name": "Node {{ from }} gP3",
+             "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/!{YOUR_NODE_HEX}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.gP3 | float(0) }}{% endif %}{% endraw %}",
+             "unit_of_measurement": "kW", "device_class": "power", "state_class": "measurement",
+             "unique_id": "mesh_{{ from }}_gp3",
+             "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
+
+  - delay:
+      seconds: 1
+
+  - if:
+      - condition: template
+        value_template: "{{ trigger.payload_json.payload.gV1 is defined }}"
+    then:
+      - service: mqtt.publish
+        data:
+          qos: 0
+          retain: true
+          topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-gv1/config"
+          payload: >
+            {"name": "Node {{ from }} gV1",
+             "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/!{YOUR_NODE_HEX}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.gV1 | float(0) }}{% endif %}{% endraw %}",
+             "unit_of_measurement": "V", "device_class": "voltage", "state_class": "measurement",
+             "unique_id": "mesh_{{ from }}_gv1",
+             "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
+
+  - delay:
+      seconds: 1
+
+  - if:
+      - condition: template
+        value_template: "{{ trigger.payload_json.payload.gV2 is defined }}"
+    then:
+      - service: mqtt.publish
+        data:
+          qos: 0
+          retain: true
+          topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-gv2/config"
+          payload: >
+            {"name": "Node {{ from }} gV2",
+             "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/!{YOUR_NODE_HEX}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.gV2 | float(0) }}{% endif %}{% endraw %}",
+             "unit_of_measurement": "V", "device_class": "voltage", "state_class": "measurement",
+             "unique_id": "mesh_{{ from }}_gv2",
+             "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
+
+  - delay:
+      seconds: 1
+
+  - if:
+      - condition: template
+        value_template: "{{ trigger.payload_json.payload.gV3 is defined }}"
+    then:
+      - service: mqtt.publish
+        data:
+          qos: 0
+          retain: true
+          topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-gv3/config"
+          payload: >
+            {"name": "Node {{ from }} gV3",
+             "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/!{YOUR_NODE_HEX}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.gV3 | float(0) }}{% endif %}{% endraw %}",
+             "unit_of_measurement": "V", "device_class": "voltage", "state_class": "measurement",
+             "unique_id": "mesh_{{ from }}_gv3",
+             "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
+
+  - delay:
+      seconds: 1
+
+  - if:
+      - condition: template
+        value_template: "{{ trigger.payload_json.payload.gIE is defined }}"
+    then:
+      - service: mqtt.publish
+        data:
+          qos: 0
+          retain: true
+          topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-gie/config"
+          payload: >
+            {"name": "Node {{ from }} gIE",
+             "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/!{YOUR_NODE_HEX}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.gIE | float(0) }}{% endif %}{% endraw %}",
+             "unit_of_measurement": "kWh", "device_class": "energy", "state_class": "total_increasing",
+             "unique_id": "mesh_{{ from }}_gie",
+             "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
+
+  - delay:
+      seconds: 1
+
+  - if:
+      - condition: template
+        value_template: "{{ trigger.payload_json.payload.gEE is defined }}"
+    then:
+      - service: mqtt.publish
+        data:
+          qos: 0
+          retain: true
+          topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-gee/config"
+          payload: >
+            {"name": "Node {{ from }} gEE",
+             "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/!{YOUR_NODE_HEX}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.gEE | float(0) }}{% endif %}{% endraw %}",
+             "unit_of_measurement": "kWh", "device_class": "energy", "state_class": "total_increasing",
+             "unique_id": "mesh_{{ from }}_gee",
+             "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
+
+  - delay:
+      seconds: 1
+
+  # SOLAR
+
+  - if:
+      - condition: template
+        value_template: "{{ trigger.payload_json.payload.sP is defined }}"
+    then:
+      - service: mqtt.publish
+        data:
+          qos: 0
+          retain: true
+          topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-sp/config"
+          payload: >
+            {"name": "Node {{ from }} sP",
+             "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/!{YOUR_NODE_HEX}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.sP | float(0) }}{% endif %}{% endraw %}",
+             "unit_of_measurement": "kW", "device_class": "power", "state_class": "measurement",
+             "unique_id": "mesh_{{ from }}_sp",
+             "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
+
+  - delay:
+      seconds: 1
+
+  - if:
+      - condition: template
+        value_template: "{{ trigger.payload_json.payload.sE is defined }}"
+    then:
+      - service: mqtt.publish
+        data:
+          qos: 0
+          retain: true
+          topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-se/config"
+          payload: >
+            {"name": "Node {{ from }} sE",
+             "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/!{YOUR_NODE_HEX}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.sE | float(0) }}{% endif %}{% endraw %}",
+             "unit_of_measurement": "kWh", "device_class": "energy", "state_class": "total_increasing",
+             "unique_id": "mesh_{{ from }}_se",
+             "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
+
+  - delay:
+      seconds: 1
+
+  # BATTERY
+
+  - service: mqtt.publish
+    data:
+      qos: 0
+      retain: true
+      topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-bp/config"
+      payload: >
+        {"name": "Node {{ from }} bP",
+         "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/!{YOUR_NODE_HEX}",
+         "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.bP | float(0) }}{% endif %}{% endraw %}",
+         "unit_of_measurement": "kW", "device_class": "power", "state_class": "measurement",
+         "unique_id": "mesh_{{ from }}_bp",
          "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
 
   - delay:
@@ -256,34 +608,116 @@ action:
     data:
       qos: 0
       retain: true
-      topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-exp/config"
+      topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-bs/config"
       payload: >
-        {"name": "Node {{ from }} EXP",
+        {"name": "Node {{ from }} bS",
          "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/!{YOUR_NODE_HEX}",
-         "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.EXP | float(0) }}{% endif %}{% endraw %}",
-         "unit_of_measurement": "kW",
-         "device_class": "power",
-         "state_class": "measurement",
-         "unique_id": "mesh_{{ from }}_exp",
+         "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.bS | int(0) }}{% endif %}{% endraw %}",
+         "unit_of_measurement": "%", "device_class": "battery", "state_class": "measurement",
+         "unique_id": "mesh_{{ from }}_bs",
          "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
 
   - delay:
       seconds: 1
 
-  - service: mqtt.publish
-    data:
-      qos: 0
-      retain: true
-      topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-soc/config"
-      payload: >
-        {"name": "Node {{ from }} SOC",
-         "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/!{YOUR_NODE_HEX}",
-         "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.SOC | int(0) }}{% endif %}{% endraw %}",
-         "unit_of_measurement": "%",
-         "device_class": "battery",
-         "state_class": "measurement",
-         "unique_id": "mesh_{{ from }}_soc",
-         "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
+  - if:
+      - condition: template
+        value_template: "{{ trigger.payload_json.payload.bEI is defined }}"
+    then:
+      - service: mqtt.publish
+        data:
+          qos: 0
+          retain: true
+          topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-bei/config"
+          payload: >
+            {"name": "Node {{ from }} bEI",
+             "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/!{YOUR_NODE_HEX}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.bEI | float(0) }}{% endif %}{% endraw %}",
+             "unit_of_measurement": "kWh", "device_class": "energy", "state_class": "total_increasing",
+             "unique_id": "mesh_{{ from }}_bei",
+             "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
+
+  - delay:
+      seconds: 1
+
+  - if:
+      - condition: template
+        value_template: "{{ trigger.payload_json.payload.bEO is defined }}"
+    then:
+      - service: mqtt.publish
+        data:
+          qos: 0
+          retain: true
+          topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-beo/config"
+          payload: >
+            {"name": "Node {{ from }} bEO",
+             "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/!{YOUR_NODE_HEX}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.bEO | float(0) }}{% endif %}{% endraw %}",
+             "unit_of_measurement": "kWh", "device_class": "energy", "state_class": "total_increasing",
+             "unique_id": "mesh_{{ from }}_beo",
+             "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
+
+  - delay:
+      seconds: 1
+
+  # WALLBOX
+
+  - if:
+      - condition: template
+        value_template: "{{ trigger.payload_json.payload.wP is defined }}"
+    then:
+      - service: mqtt.publish
+        data:
+          qos: 0
+          retain: true
+          topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-wp/config"
+          payload: >
+            {"name": "Node {{ from }} wP",
+             "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/!{YOUR_NODE_HEX}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.wP | float(0) }}{% endif %}{% endraw %}",
+             "unit_of_measurement": "kW", "device_class": "power", "state_class": "measurement",
+             "unique_id": "mesh_{{ from }}_wp",
+             "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
+
+  - delay:
+      seconds: 1
+
+  - if:
+      - condition: template
+        value_template: "{{ trigger.payload_json.payload.wE is defined }}"
+    then:
+      - service: mqtt.publish
+        data:
+          qos: 0
+          retain: true
+          topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-we/config"
+          payload: >
+            {"name": "Node {{ from }} wE",
+             "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/!{YOUR_NODE_HEX}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.wE | float(0) }}{% endif %}{% endraw %}",
+             "unit_of_measurement": "kWh", "device_class": "energy", "state_class": "total_increasing",
+             "unique_id": "mesh_{{ from }}_we",
+             "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
+
+  - delay:
+      seconds: 1
+
+  - if:
+      - condition: template
+        value_template: "{{ trigger.payload_json.payload.wS is defined }}"
+    then:
+      - service: mqtt.publish
+        data:
+          qos: 0
+          retain: true
+          topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-ws/config"
+          payload: >
+            {"name": "Node {{ from }} wS",
+             "state_topic": "msh/{YOUR_REGION}/2/json/mqtt/!{YOUR_NODE_HEX}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.wS | int(0) }}{% endif %}{% endraw %}",
+             "unit_of_measurement": "%", "device_class": "battery", "state_class": "measurement",
+             "unique_id": "mesh_{{ from }}_ws",
+             "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
 mode: single
 ```
 
@@ -293,46 +727,57 @@ mode: single
 - `{YOUR_NODE_DECIMAL}` — your decimal node number (unquoted integer) to exclude your own messages
 
 **How it works:**
-1. Every message triggers the automation
-2. The condition skips your own messages (`from == YOUR_NUM`) and non-meter messages
-3. Publishes 3 retained MQTT discovery configs (IMP, EXP, SOC) for the node's `from` number
-4. HA auto-creates 3 sensors, all grouped under one device per node
+1. Every message with `gP` in the payload triggers the automation
+2. The condition skips your own messages (`from == YOUR_NUM`)
+3. Publishes retained MQTT discovery configs for `gP`, `bP`, `bS` (always) plus any other fields present in the payload
+4. HA auto-creates sensors, all grouped under one device per node
 5. The 1-second delays between each publish prevent HA from creating separate device entries for each sensor
 6. Sensors are permanent — retained configs survive HA and node restarts
 
-**Result in HA:** For each neighbor you see 3 sensors (`IMP`, `EXP`, `SOC`) under one device entry (e.g., "Node 2712679380").
+**Result in HA:** Each neighbor appears as one device with only the sensors their household actually sends.
 
 ---
 
-## 4.5 Combined Power Sensors
+### 4.5 Combined Power Sensors
 
-Add to `configuration.yaml` to sum all neighbors' import and export power into two total sensors. New neighbors are included automatically.
+Add to `configuration.yaml` to sum all neighbors' grid total power and battery SOC into single sensors. New neighbors are included automatically.
 
 ```yaml
 template:
   - sensor:
-      - name: "Combined Mesh Import Power"
-        unique_id: "combined_mesh_imp"
+      - name: "Combined Mesh Grid Power"
+        unique_id: "combined_mesh_gp"
         unit_of_measurement: "kW"
         device_class: "power"
         state_class: "measurement"
         state: >
           {% set entities = expand(states.sensor)
-             | selectattr('entity_id', 'search', 'node_\\d+_imp$') | list %}
+             | selectattr('entity_id', 'search', 'node_\\d+_gp$') | list %}
           {{ entities | map(attribute='state') | map('float', 0) | sum | round(2) }}
 
-      - name: "Combined Mesh Export Power"
-        unique_id: "combined_mesh_exp"
+      - name: "Combined Mesh Solar Power"
+        unique_id: "combined_mesh_sp"
         unit_of_measurement: "kW"
         device_class: "power"
         state_class: "measurement"
         state: >
           {% set entities = expand(states.sensor)
-             | selectattr('entity_id', 'search', 'node_\\d+_exp$') | list %}
+             | selectattr('entity_id', 'search', 'node_\\d+_sp$') | list %}
           {{ entities | map(attribute='state') | map('float', 0) | sum | round(2) }}
+
+      - name: "Average Neighbor SOC"
+        unique_id: "avg_neighbor_soc"
+        unit_of_measurement: "%"
+        device_class: "battery"
+        state_class: "measurement"
+        state: >
+          {% set entities = expand(states.sensor)
+             | selectattr('entity_id', 'search', 'node_\\d+_bs$') | list %}
+          {% set vals = entities | map(attribute='state') | map('int', 0) | list %}
+          {{ (vals | sum / vals | length) | round(0) if vals | length > 0 else 0 }}
 ```
 
-**How it works:** The regex `node_\d+_imp$` matches every auto-discovered import sensor (`sensor.node_2896876952_imp`). The same for `_exp$`. `map('float', 0)` handles `unknown`/`unavailable` without errors.
+**How it works:** Regex `node_\d+_gp$` matches every auto-discovered grid power sensor (`sensor.node_2896876952_gp`). `map('float', 0)` handles `unknown`/`unavailable` without errors. SOC uses `| int` and averages instead of summing.
 
 ---
 
@@ -348,15 +793,13 @@ template:
 
 ## 6. Expected Message Flow
 
-Examples use the JSON format (recommended).
-
 ### Send direction
 
 ```
 HA publishes to:        msh/EU_868/2/json/mqtt/
 Payload (JSON):
   {"from": 2892010904, "type": "sendtext",
-   "payload": "{\"IMP\":0.3,\"EXP\":0.0,\"SOC\":85}",
+   "payload": "{\"gP\":-1.2,\"gP1\":-0.4,\"gP2\":-0.4,\"gP3\":-0.4,\"bS\":85,\"sP\":3.5}",
    "channel": 1}
 
 Your node receives MQTT:
@@ -370,16 +813,16 @@ Your node receives MQTT:
 ```
 LoRa message arrives at your node:
   from: 2712679380 (neighbor's decimal)
-  payload: {"IMP": 0.3, "EXP": 0.0, "SOC": 85}
+  payload: {"gP": -1.2, "gP1": -0.4, "gP2": -0.4, "gP3": -0.4, "bS": 85, "sP": 3.5}
 
 Your node publishes to MQTT:
   Topic: msh/EU_868/2/json/mqtt/!your_node_hex
   Payload: {"from": 2712679380, "type": "text",
-            "payload": {"IMP": 0.3, "EXP": 0.0, "SOC": 85},
+            "payload": {"gP": -1.2, "gP1": -0.4, "gP2": -0.4, "gP3": -0.4, "bS": 85, "sP": 3.5},
             "channel": 1, ...}
 
 Your HA receives it, checks from == NEIGHBOR_DECIMAL,
-  valued_json.payload.IMP → sensor value
+  value_json.payload.gP → sensor value
 ```
 
 
