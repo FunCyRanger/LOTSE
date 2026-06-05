@@ -249,7 +249,7 @@ def test_receiver_excludes_self():
     env = ha_environment()
     template = """\
 {% if value_json.from == NEIGHBOR_DECIMAL %}\
-{{ (value_json.payload | replace("'", '"') | from_json({})).gP | float(0) }}\
+{{ (value_json.payload | from_json({})).gP | float(0) }}\
 {% else %}\
 {{ this.state }}\
 {% endif %}"""
