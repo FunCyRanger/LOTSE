@@ -444,21 +444,22 @@ variables:
 action:
   # GRID
 
-  - service: mqtt.publish
-    data:
-      qos: 0
-      retain: true
-      topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-gp/config"
-      payload: >
-        {"name": "Node {{ from }} gP",
-         "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
-         "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ (value_json.payload | from_json({})).gP | float(0) }}{% endif %}{% endraw %}",
-         "unit_of_measurement": "kW", "device_class": "power", "state_class": "measurement",
-         "unique_id": "mesh_{{ from }}_gp",
-         "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
-
-  - delay:
-      seconds: 1
+  - if:
+      - condition: template
+        value_template: "{{ (trigger.payload_json.payload | from_json({})).gP is defined }}"
+    then:
+      - service: mqtt.publish
+        data:
+          qos: 0
+          retain: true
+          topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-gp/config"
+          payload: >
+            {"name": "Node {{ from }} gP",
+             "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ (value_json.payload | from_json({})).gP | float(0) }}{% endif %}{% endraw %}",
+             "unit_of_measurement": "kW", "device_class": "power", "state_class": "measurement",
+             "unique_id": "mesh_{{ from }}_gp",
+             "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
 
   - if:
       - condition: template
@@ -477,9 +478,6 @@ action:
              "unique_id": "mesh_{{ from }}_gp1",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
 
-  - delay:
-      seconds: 1
-
   - if:
       - condition: template
         value_template: "{{ (trigger.payload_json.payload | from_json({})).gP2 is defined }}"
@@ -496,9 +494,6 @@ action:
              "unit_of_measurement": "kW", "device_class": "power", "state_class": "measurement",
              "unique_id": "mesh_{{ from }}_gp2",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
-
-  - delay:
-      seconds: 1
 
   - if:
       - condition: template
@@ -517,9 +512,6 @@ action:
              "unique_id": "mesh_{{ from }}_gp3",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
 
-  - delay:
-      seconds: 1
-
   - if:
       - condition: template
         value_template: "{{ (trigger.payload_json.payload | from_json({})).gV1 is defined }}"
@@ -536,9 +528,6 @@ action:
              "unit_of_measurement": "V", "device_class": "voltage", "state_class": "measurement",
              "unique_id": "mesh_{{ from }}_gv1",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
-
-  - delay:
-      seconds: 1
 
   - if:
       - condition: template
@@ -557,9 +546,6 @@ action:
              "unique_id": "mesh_{{ from }}_gv2",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
 
-  - delay:
-      seconds: 1
-
   - if:
       - condition: template
         value_template: "{{ (trigger.payload_json.payload | from_json({})).gV3 is defined }}"
@@ -576,9 +562,6 @@ action:
              "unit_of_measurement": "V", "device_class": "voltage", "state_class": "measurement",
              "unique_id": "mesh_{{ from }}_gv3",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
-
-  - delay:
-      seconds: 1
 
   - if:
       - condition: template
@@ -597,9 +580,6 @@ action:
              "unique_id": "mesh_{{ from }}_gip",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
 
-  - delay:
-      seconds: 1
-
   - if:
       - condition: template
         value_template: "{{ (trigger.payload_json.payload | from_json({})).gEP is defined }}"
@@ -616,9 +596,6 @@ action:
              "unit_of_measurement": "kW", "device_class": "power", "state_class": "measurement",
              "unique_id": "mesh_{{ from }}_gep",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
-
-  - delay:
-      seconds: 1
 
   - if:
       - condition: template
@@ -637,9 +614,6 @@ action:
              "unique_id": "mesh_{{ from }}_gei",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
 
-  - delay:
-      seconds: 1
-
   - if:
       - condition: template
         value_template: "{{ (trigger.payload_json.payload | from_json({})).gEO is defined }}"
@@ -656,9 +630,6 @@ action:
              "unit_of_measurement": "kWh", "device_class": "energy", "state_class": "total_increasing",
              "unique_id": "mesh_{{ from }}_geo",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
-
-  - delay:
-      seconds: 1
 
   # SOLAR
 
@@ -679,9 +650,6 @@ action:
              "unique_id": "mesh_{{ from }}_sp",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
 
-  - delay:
-      seconds: 1
-
   - if:
       - condition: template
         value_template: "{{ (trigger.payload_json.payload | from_json({})).sE is defined }}"
@@ -699,42 +667,41 @@ action:
              "unique_id": "mesh_{{ from }}_se",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
 
-  - delay:
-      seconds: 1
-
   # BATTERY
 
-  - service: mqtt.publish
-    data:
-      qos: 0
-      retain: true
-      topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-bp/config"
-      payload: >
-        {"name": "Node {{ from }} bP",
-         "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
-         "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ (value_json.payload | from_json({})).bP | float(0) }}{% endif %}{% endraw %}",
-         "unit_of_measurement": "kW", "device_class": "power", "state_class": "measurement",
-         "unique_id": "mesh_{{ from }}_bp",
-         "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
+  - if:
+      - condition: template
+        value_template: "{{ (trigger.payload_json.payload | from_json({})).bP is defined }}"
+    then:
+      - service: mqtt.publish
+        data:
+          qos: 0
+          retain: true
+          topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-bp/config"
+          payload: >
+            {"name": "Node {{ from }} bP",
+             "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ (value_json.payload | from_json({})).bP | float(0) }}{% endif %}{% endraw %}",
+             "unit_of_measurement": "kW", "device_class": "power", "state_class": "measurement",
+             "unique_id": "mesh_{{ from }}_bp",
+             "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
 
-  - delay:
-      seconds: 1
-
-  - service: mqtt.publish
-    data:
-      qos: 0
-      retain: true
-      topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-bs/config"
-      payload: >
-        {"name": "Node {{ from }} bS",
-         "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
-         "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ (value_json.payload | from_json({})).bS | int(0) }}{% endif %}{% endraw %}",
-         "unit_of_measurement": "%", "device_class": "battery", "state_class": "measurement",
-         "unique_id": "mesh_{{ from }}_bs",
-         "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
-
-  - delay:
-      seconds: 1
+  - if:
+      - condition: template
+        value_template: "{{ (trigger.payload_json.payload | from_json({})).bS is defined }}"
+    then:
+      - service: mqtt.publish
+        data:
+          qos: 0
+          retain: true
+          topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-bs/config"
+          payload: >
+            {"name": "Node {{ from }} bS",
+             "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ (value_json.payload | from_json({})).bS | int(0) }}{% endif %}{% endraw %}",
+             "unit_of_measurement": "%", "device_class": "battery", "state_class": "measurement",
+             "unique_id": "mesh_{{ from }}_bs",
+             "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
 
   - if:
       - condition: template
@@ -753,9 +720,6 @@ action:
              "unique_id": "mesh_{{ from }}_bei",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
 
-  - delay:
-      seconds: 1
-
   - if:
       - condition: template
         value_template: "{{ (trigger.payload_json.payload | from_json({})).bEO is defined }}"
@@ -772,9 +736,6 @@ action:
              "unit_of_measurement": "kWh", "device_class": "energy", "state_class": "total_increasing",
              "unique_id": "mesh_{{ from }}_beo",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
-
-  - delay:
-      seconds: 1
 
   # WALLBOX
 
@@ -795,9 +756,6 @@ action:
              "unique_id": "mesh_{{ from }}_wp",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
 
-  - delay:
-      seconds: 1
-
   - if:
       - condition: template
         value_template: "{{ (trigger.payload_json.payload | from_json({})).wE is defined }}"
@@ -814,9 +772,6 @@ action:
              "unit_of_measurement": "kWh", "device_class": "energy", "state_class": "total_increasing",
              "unique_id": "mesh_{{ from }}_we",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
-
-  - delay:
-      seconds: 1
 
   - if:
       - condition: template
@@ -842,9 +797,9 @@ mode: queued
 **How it works:**
 1. Every message with a payload triggers the automation (triggers on wildcard `+`)
 2. The `sender` field from the message dynamically fills each sensor's `state_topic`
-3. Publishes retained MQTT discovery configs for `gP`, `bP`, `bS` (always) plus any other fields present in the payload
+3. Publishes retained MQTT discovery configs for only the keys actually present in the payload
 4. HA auto-creates sensors, all grouped under one device per node
-5. The 1-second delays between each publish prevent HA from creating separate device entries for each sensor
+5. All discovery configs publish instantly — no delays between them
 6. Sensors are permanent — retained configs survive HA and node restarts
 
 **Result in HA:** Each neighbor appears as one device with only the sensors their household actually sends.
