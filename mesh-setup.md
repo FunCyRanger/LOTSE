@@ -39,7 +39,6 @@ This dedicated `mqtt` channel carries your meter data separately from the defaul
 
 | Channel | Role | Uplink | Downlink |
 |---------|------|--------|----------|
-| Primary (LongFast) | Default LoRa | ✅ Leave checked (mesh discovery) | ☐ Unchecked |
 | `mqtt` (index 1) | All meter data | ✅ **Check this** | ✅ **Check this** |
 
 Create a **new** channel with these settings:
