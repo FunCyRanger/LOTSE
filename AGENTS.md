@@ -5,14 +5,12 @@ or in `main` branch history. Directories (`firmware/`, `meshtastic-fork-clean/`,
 `simulation_v2/`) referenced in root `.md` files and `.gitignore` were planned but never
 committed, or were deleted.
 
-Exception: `bridge/lotse-bridge.py` is a working Python MQTT bridge script (see below).
-
 ## Project state
 
 Neighborhood energy coordination project — specification/planning phase.
 
 - **Active guides:** `mesh-setup.md` — Heltec V3 configuration; `ha-setup.md` — HA automation integration
-- Two AI reviews at `20260517 AI review/` (Claude, Grok) list concrete firmware errors —
+- Two AI reviews at `archive/20260517 AI review/` (Claude, Grok) list concrete firmware errors —
   **read both before writing firmware**
 
 ## Critical: HA Jinja NativeEnvironment `ast.literal_eval` gotcha
@@ -55,18 +53,7 @@ messages without it). The `from` field must match the node's own decimal number.
 | `Requirements.md` | Reqs, household types (T1–T10), device priority |
 | `archive/` | Legacy design docs, superseded specs, old brainstorming |
 
-## Bridge (only runnable code — superseded by pure-HA approach)
-
-```bash
-pip install -r bridge/requirements.txt
-export MQTT_BROKER=192.168.1.100 INGRESS_NODE_NUM=2892010904
-python3 bridge/lotse-bridge.py
-```
-
-See `bridge/README.md` for all flags and node-address discovery. Every option is also
-settable as an env var (uppercased).
-
-## Known errors (from AI review; apply to `prototype-build.md`)
+## Known errors (from AI review; apply to `archive/prototype-build.md`)
 
 - OBIS code `36.7.0` is non-standard; correct for active power feed-in is `-1:16.7.0`
 - SML library PlatformIO identifier `m-/SML` is invalid; use `mzi_/sml` or git URL

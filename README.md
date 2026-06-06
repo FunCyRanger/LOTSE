@@ -24,7 +24,7 @@ Every node runs stock Meshtastic firmware with the `mqtt` channel enabled. Each 
 
 | Component | Purpose |
 |-----------|---------|
-| Heltec V3 (ESP32-S3 + SX1262 868 MHz) | LoRa mesh node with MQTT bridge |
+| Heltec V3 (ESP32-S3 + SX1262 868 MHz) | LoRa mesh node with MQTT downlink |
 | Tasmota IR reader | Reads smart meter via optical interface |
 | Home Assistant + MQTT broker | Automates sending and receiving |
 | USB-C power supply | Existing phone charger works |
@@ -60,10 +60,8 @@ That's it. Each neighbor that does the same becomes visible automatically — no
 
 | Directory | Contents |
 |-----------|----------|
-| `bridge/` | Python MQTT bridge script (superseded by pure-HA approach) |
 | `tests/` | Jinja template rendering tests, schema checks, MQTT roundtrip tests |
-| `archive/` | Legacy design docs and superseded specifications |
-| `20260517 AI review/` | AI firmware code reviews (read before writing firmware) |
+| `archive/` | Legacy design docs, superseded specs, AI firmware reviews |
 
 ---
 
