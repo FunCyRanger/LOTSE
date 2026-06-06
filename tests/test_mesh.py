@@ -152,7 +152,7 @@ yaml.FullLoader.add_constructor("!input", _input_constructor)
 
 
 def load_sender_template():
-    path = ROOT / "blueprints" / "ha" / "sender.yaml"
+    path = ROOT / "sender-blueprint.yaml"
     with open(path) as f:
         blueprint = yaml.load(f, Loader=yaml.FullLoader)
     raw = blueprint["action"][1]["variables"]["inner"]

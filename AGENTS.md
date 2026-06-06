@@ -11,7 +11,7 @@ Exception: `bridge/lotse-bridge.py` is a working Python MQTT bridge script (see 
 
 Neighborhood energy coordination project — specification/planning phase.
 
-- **Active guide:** `ha-mesh-setup.md` — per-household mesh with HA automations (working)
+- **Active guides:** `mesh-setup.md` — Heltec V3 configuration; `ha-setup.md` — HA automation integration
 - Two AI reviews at `20260517 AI review/` (Claude, Grok) list concrete firmware errors —
   **read both before writing firmware**
 
@@ -32,11 +32,6 @@ This applies anywhere the final template output must be a JSON string
 rather than a parsed object. Standard `Environment` (used in tests)
 does NOT have this behavior.
 
-## No tests / lint / build
-
-Zero CI workflows, test files, linters, formatters, typecheckers, `package.json`,
-`platformio.ini`, or `Makefile`. Don't look for or run test/lint commands.
-
 ## Architecture (chosen)
 
 ```
@@ -55,15 +50,10 @@ messages without it). The `from` field must match the node's own decimal number.
 
 | File | Content |
 |------|---------|
-| `ha-mesh-setup.md` | **Active: per-household mesh with HA automations** |
+| `mesh-setup.md` | Heltec V3 flashing, MQTT config, channel setup |
+| `ha-setup.md` | **Active: full HA integration — sender, receiver, combined sensors, energy dashboard** |
 | `Requirements.md` | Reqs, household types (T1–T10), device priority |
-| `Brainstorming.md` | Architecture evaluation, decision matrix, open questions |
-| `prototype-build.md` | BOM, flashing guide — **no `platformio.ini`** (known gap) |
-| `simulation-spec.md` | V2 grid utilization simulation (active spec) |
-| `HA-integration.md` | Older round-trip test (legacy reference) |
-| `data-communication-brainstorming.md` | Architecture comparison (legacy reference) |
-| `fairness-analysis.md` | FR-06 analysis — **superseded** |
-| `simulation-plan.md` | Original simulation plan v1 (legacy reference) |
+| `archive/` | Legacy design docs, superseded specs, old brainstorming |
 
 ## Bridge (only runnable code — superseded by pure-HA approach)
 
@@ -86,6 +76,6 @@ settable as an env var (uppercased).
 ## If building firmware
 
 Reference hardware: Heltec V3 (ESP32-S3 + SX1262 868 MHz). Target was Meshtastic v2.7.9
-fork. No build config or fork code exists on disk. `phase1-summary.md` notes BLE/Ethernet/
+fork. No build config or fork code exists on disk. `archive/phase1-summary.md` notes BLE/Ethernet/
 nRF52 platform code must be excluded from a Meshtastic build. Pinout assumptions vary by
 doc — verify against board before coding.

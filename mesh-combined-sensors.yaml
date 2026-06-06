@@ -5,7 +5,7 @@
 # and the energy dashboard. New neighbors are included automatically.
 #
 # No customisation needed — the regex patterns match auto-discovered sensors
-# from the mesh auto-discovery automation (§4.4 in ha-mesh-setup.md).
+# from the mesh auto-discovery automation (§4.4 in ha-setup.md).
 
 template:
   - sensor:

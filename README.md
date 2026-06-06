@@ -1,54 +1,87 @@
-# Local Energy Coordination
+# LOTSE — Local Energy Coordination
 
 > Reducing transformer peaks through local coordination — respecting each household's individual pricing model.
 
-An experimental open-source project exploring how residential loads — EV chargers, batteries, heat pumps, PV surplus — can be coordinated locally to reduce stress on low-voltage distribution grids. No energy trading between households, no cloud dependency, no billing. Each household keeps full control over its own devices and pricing — coordination never forces an action that financially disadvantages a household relative to its baseline (FR-06).
+An experimental open-source project exploring how residential loads — EV chargers, batteries, heat pumps, PV surplus — can be coordinated locally to reduce stress on low-voltage distribution grids. No energy trading between households, no cloud dependency, no billing. Each household keeps full control over its own devices and pricing.
 
 ---
 
-## Architecture (Phase 1 — Data Bridge)
+## Architecture
 
 ```
-IR sensor --WiFi (SoftAP HTTP)--> Heltec V3 (ingress) --LoRa mesh--> Heltec V3 (egress) --WiFi station--> Home Assistant
+Each household:
+Tasmota ──MQTT──► HA automation ──MQTT──► Heltec V3 (stock Meshtastic, mqtt ch+downlink)
+                                              │
+                                              ▼ LoRa 868 MHz
+                                         all neighbors
 ```
 
-Phase 1 is a **data transport pipeline**: relay smart meter IR readings from sensor to Home Assistant via LoRa. No local limit enforcement, no inter-household coordination.
-
-**Phase 2** — Optional neighborhood coordination (flex offers, load shedding). See [Brainstorming.md](Brainstorming.md).
+Every node runs stock Meshtastic firmware with the `mqtt` channel enabled. Each Home Assistant publishes its own meter data into the LoRa mesh, and receives data from all neighbors. No custom firmware, no shared infrastructure, no single point of failure.
 
 ---
 
-## Repository
+## What you need (per household)
+
+| Component | Purpose |
+|-----------|---------|
+| Heltec V3 (ESP32-S3 + SX1262 868 MHz) | LoRa mesh node with MQTT bridge |
+| Tasmota IR reader | Reads smart meter via optical interface |
+| Home Assistant + MQTT broker | Automates sending and receiving |
+| USB-C power supply | Existing phone charger works |
+
+---
+
+## Getting started
+
+1. **Configure your Heltec V3** → [`mesh-setup.md`](mesh-setup.md)
+   Flash stock Meshtastic, set up MQTT, create the `mqtt` channel, find your node number.
+
+2. **Set up Home Assistant** → [`ha-setup.md`](ha-setup.md)
+   Import the sender blueprint, configure auto-discovery, install combined sensors, link the Energy Dashboard.
+
+That's it. Each neighbor that does the same becomes visible automatically — no central server, no registration.
+
+---
+
+## Key files
 
 | File | Content |
 |------|---------|
-| [`Requirements.md`](Requirements.md) | Requirements, use cases, priority hierarchy |
-| [`Brainstorming.md`](Brainstorming.md) | Architecture, hardware evaluation, open decisions |
-| [`prototype-build.md`](prototype-build.md) | BOM, circuit, PlatformIO flashing guide |
-| [`phase1-summary.md`](phase1-summary.md) | Phase 1 data bridge status |
-| [`AGENTS.md`](AGENTS.md) | Architecture invariants & constraints (AI agent reference) |
+| [`mesh-setup.md`](mesh-setup.md) | Hardware BOM, flashing, Heltec V3 configuration |
+| [`ha-setup.md`](ha-setup.md) | Full HA integration — sender, receiver, combined sensors, energy dashboard |
+| [`sender-blueprint.yaml`](sender-blueprint.yaml) | HA automation blueprint (import directly) |
+| [`mesh-combined-sensors.yaml`](mesh-combined-sensors.yaml) | Combined neighborhood sensor package |
+| [`Requirements.md`](Requirements.md) | Requirements, household types, device priority |
+| [`AGENTS.md`](AGENTS.md) | Architecture invariants for AI coding agents |
 
-## Technical Direction
+---
 
-| Layer | Choice |
-|-------|--------|
-| Transport | LoRa 868 MHz + WiFi |
-| Ingress HW | Heltec V3 (ESP32-S3 + SX1262) |
-| Egress HW | Heltec V3 (ESP32-S3 + SX1262) |
-| Sensor IF | Tasmota IR → WiFi (SoftAP HTTP) |
-| HA IF | MQTT or REST API |
-| Build | PlatformIO + Arduino ESP32 core |
-| LoRa stack | Meshtastic firmware |
+## Repository structure
+
+| Directory | Contents |
+|-----------|----------|
+| `bridge/` | Python MQTT bridge script (superseded by pure-HA approach) |
+| `tests/` | Jinja template rendering tests, schema checks, MQTT roundtrip tests |
+| `archive/` | Legacy design docs and superseded specifications |
+| `20260517 AI review/` | AI firmware code reviews (read before writing firmware) |
+
+---
 
 ## Status
 
-Phase 1 data bridge: specification complete, build in progress.
+Phase 1 (neighborhood data sharing) — working and documented. Phase 2 (coordinated load shedding, flex offers) — deferred pending field experience.
 
 ---
 
 ## Contributing
 
 Feedback from: low-voltage infrastructure, embedded systems, MQTT/LoRa, energy management, operational safety.
+
+---
+
+## License
+
+See [LICENSE](LICENSE).
 
 ---
 

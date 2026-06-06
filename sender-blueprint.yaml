@@ -6,7 +6,7 @@ blueprint:
     included in the payload — delete unused entity selectors or leave them empty.
   domain: automation
   source_url: >
-    https://github.com/FunCyRanger/LOTSE/blob/main/blueprints/ha/sender.yaml
+    https://github.com/FunCyRanger/LOTSE/blob/main/sender-blueprint.yaml
   input:
     node_decimal:
       name: Node Number

@@ -1,6 +1,6 @@
-# HA-Mesh Setup — Per-Household LoRa Data Sharing
+# HA Setup — Per-Household LoRa Data Sharing
 
-**Architecture:** Every household runs its own Home Assistant + MQTT broker. Each Heltec V3 has the `mqtt` channel with downlink enabled. Each HA publishes its own meter data into the LoRa mesh using its own node's decimal number — no single point of failure, no extra hardware beyond the node and Tasmota sensor.
+Every household runs its own Home Assistant + MQTT broker. Each Heltec V3 has the `mqtt` channel with downlink enabled. Each HA publishes its own meter data into the LoRa mesh using its own node's decimal number — no single point of failure, no extra hardware beyond the node and Tasmota sensor.
 
 ```
 Household 1:                        Household 2:
@@ -17,63 +17,24 @@ Tasmota ──MQTT──► HA automation          Tasmota ──MQTT──► H
 
 ---
 
-## 1. Node Configuration (Web UI — do this on EVERY node)
+## Prerequisites
 
-### MQTT Settings
-
-| Field | Value |
-|-------|-------|
-| MQTT Enabled | ✅ Check |
-| Address | Your local MQTT broker IP (e.g., `192.168.1.100`) |
-| Port | `1883` |
-| JSON Output Enabled | ✅ Check |
-| Username/Password | If your broker requires auth |
-| TLS | Uncheck (local network) |
-
-### Channel Configuration
-
-| Channel | Role | Uplink | Downlink |
-|---------|------|--------|----------|
-| Primary (LongFast) | Default LoRa | ✅ Leave checked (for mesh discovery) | ☐ Unchecked |
-| `mqtt` (index 1) | All meter data | ✅ **Check this** | ✅ **Check this** |
-
-### Creating the `mqtt` channel
-
-Create a NEW channel with these settings:
-
-| Setting | Value |
-|---------|-------|
-| Name | **`mqtt`** (exactly this, lowercase) |
-| PSK | Default/random |
-| Uplink Enabled | ✅ Check |
-| Downlink Enabled | ✅ Check |
-
-**Reboot the node** — channel changes don't take effect until reboot.
-
-### Find Your Node Number
-
-From Web UI → **About** page, note:
-
-| Identifier | Example | Where used |
-|------------|---------|------------|
-| Decimal Node Number | `2892010904` | `from` field in send automation |
-| Hex Node ID (with `!`) | `!acaad598` | Topic path (for receive) |
-| Region string | `EU_868` | Part of MQTT topic |
+- Heltec V3 flashed with stock Meshtastic and connected to your local MQTT broker ([mesh-setup.md](mesh-setup.md))
+- MQTT broker running in your Home Assistant instance (Mosquitto add-on or standalone)
+- Your node's decimal number and hex ID from the Meshtastic Web UI (**About** page)
 
 ---
 
-## Quick Start: HA Setup in 5 Steps
-
-After your Heltec V3 is configured (step 1 above), set up Home Assistant:
+## Quick Start
 
 ### Step 1 — Install Sender Blueprint
 
 1. In HA: **Settings → Automations → Blueprints → Import Blueprint**
 2. Paste this URL and click **Import**:
-   `https://raw.githubusercontent.com/FunCyRanger/LOTSE/refs/heads/main/blueprints/ha/sender.yaml`
+   `https://raw.githubusercontent.com/FunCyRanger/LOTSE/refs/heads/main/sender-blueprint.yaml`
 3. Click **Create Automation**, fill in the form:
    - **Node Number** — from the Web UI (required)
-   - **LoRa Region** — pre-filled to EU_868, change for your country (required)
+   - **LoRa Region** — pre-filled to `EU_868`, change for your country (required)
    - **Grid Import Power (gIP)** — pick your sensor (required)
    - **MQTT Channel** — pre-filled to 1 (required)
    - All other fields are optional — leave empty to exclude from the payload
@@ -81,30 +42,30 @@ After your Heltec V3 is configured (step 1 above), set up Home Assistant:
 
 ### Step 2 — Install Auto-Discovery
 
-1. Find the auto-discovery automation template further down in this guide (section "Auto-Discovery via MQTT")
-2. Copy it and paste into HA — no edits needed (the automation extracts the region from the MQTT topic dynamically)
-3. In HA: **Settings → Automations → Create → Edit in YAML**, paste and save
+1. Find the auto-discovery automation template in [Receiving Neighbor Data](#43-receiving-neighbor-data) below
+2. Copy it and paste into HA: **Settings → Automations → Create → Edit in YAML**
+3. No edits needed — the automation extracts the region from the MQTT topic dynamically
 
-Neighbor sensors appear automatically when the first message arrives. No need to add sensors manually.
+Neighbor sensors appear automatically when the first message arrives.
 
 ### Step 3 — Install Combined Package
 
-1. Copy `packages/mesh_combined.yaml` into your HA `config/packages/` directory
+1. Copy `mesh-combined-sensors.yaml` into your HA `config/packages/` directory
 2. Restart Home Assistant
 
-All aggregate sensors (combined grid power, solar, battery SOC, energy imports/exports) appear in HA.
+All aggregate sensors (combined grid power, solar, battery SOC, energy) appear in HA.
 
 ### Step 4 — Configure Energy Dashboard
 
 1. In HA: **Settings → Energy**
-2. **Grid consumption** → search `combined import` → select `Combined Mesh Grid Import`
-3. **Return to grid** → search `combined export` → select `Combined Mesh Grid Export`
-4. **Solar production** → search `combined solar` → select `Combined Mesh Solar Energy`
+2. **Grid consumption** → select `Combined Mesh Grid Import`
+3. **Return to grid** → select `Combined Mesh Grid Export`
+4. **Solar production** → select `Combined Mesh Solar Energy`
 
 ### Step 5 — Verify
 
 After the first send interval (default 5 minutes) elapses:
-- Your neighbor's sensors appear under **Settings → Devices & Services → Devices**
+- Neighbor sensors appear under **Settings → Devices & Services → Devices**
 - Combined sensors show summed values on the **Overview** dashboard
 - The **Energy** dashboard shows your first recorded data point
 
@@ -112,7 +73,7 @@ New neighbors that join later are handled automatically — no additional setup 
 
 ---
 
-## Data Format (Reference)
+## Data Format
 
 JSON payload with keys grouped by category. Sign convention: import/charge = positive, export/discharge = negative.
 
@@ -163,32 +124,25 @@ JSON payload with keys grouped by category. Sign convention: import/charge = pos
 
 **Size:** ~170 bytes with all keys — fits within Meshtastic's ~220-byte limit.
 
-> **Energy Dashboard:** HA's energy dashboard requires cumulative energy sensors (kWh, `total_increasing`).
-> Use `gEI` (grid import), `gEO` (grid export), and `sE` (solar) as the primary inputs.
-> Power sensors can work via Riemann sum helper (unit: kW). Use `gIP` for consumption,
-> `gEP` for production — no sign-splitting needed. Cumulative sensors are still more accurate.
-> **Include cumulative sensors (`gEI`, `gEO`, `sE`) if your meter provides them.**
+> **Energy Dashboard:** HA's energy dashboard requires cumulative energy sensors (kWh, `total_increasing`). Use `gEI` (grid import), `gEO` (grid export), and `sE` (solar) as the primary inputs. Power sensors can work via Riemann sum helper (unit: kW). Use `gIP` for consumption, `gEP` for production — no sign-splitting needed. Cumulative sensors are still more accurate. **Include cumulative sensors (`gEI`, `gEO`, `sE`) if your meter provides them.**
 
 ---
 
-## Sender Automation (Reference)
+## Sender Automation
 
 Create one automation that triggers periodically and publishes your meter data to your node's downlink topic.
 
 ### 3.1 Install the Blueprint (recommended)
 
 A pre-built automation blueprint is available at:
-`https://raw.githubusercontent.com/FunCyRanger/LOTSE/refs/heads/main/blueprints/ha/sender.yaml`
+`https://raw.githubusercontent.com/FunCyRanger/LOTSE/refs/heads/main/sender-blueprint.yaml`
 
-Import it via **Settings → Automations → Blueprints → Import Blueprint** (paste the URL
-or copy the file contents directly). It lets you select your sensors from a dropdown
-instead of editing YAML by hand.
+Import it via **Settings → Automations → Blueprints → Import Blueprint** (paste the URL or copy the file contents directly). It lets you select your sensors from a dropdown instead of editing YAML by hand.
 
 **Setup:**
 
 1. In HA: **Settings → Automations → Blueprints → Import Blueprint**
-2. Paste the URL or copy the file contents from
-   `https://raw.githubusercontent.com/FunCyRanger/LOTSE/refs/heads/main/blueprints/ha/sender.yaml`
+2. Paste the URL or copy the file contents from the link above
 3. Click **Import**
 4. Click **Create Automation** from the newly imported blueprint
 5. Fill in the form:
@@ -212,9 +166,9 @@ If you prefer to edit YAML directly, copy the template below and replace the pla
 - `{INTERVAL}` — how often to send, e.g., `/5` (every 5 min) or `/1` (every 1 min)
 - Entity IDs — replace with your HA sensor entities
 
-> ⚠️ **Critical:** The topic must end with `/` — `msh/{YOUR_REGION}/2/json/mqtt/`. Omitting the trailing `/` will silently fail; the node will not receive the message.
+> **Critical:** The topic must end with `/` — `msh/{YOUR_REGION}/2/json/mqtt/`. Omitting the trailing `/` will silently fail; the node will not receive the message.
 
-### Template
+#### Template
 
 ```yaml
 alias: "Meter Data → LoRa Mesh"
@@ -266,7 +220,7 @@ mode: single
 
 ---
 
-## Receiver Sensors (Reference)
+## Receiving Neighbor Data
 
 ### 4.1 Find Neighbors' Identifiers
 
@@ -287,9 +241,9 @@ All neighbor messages arrive on a single topic: your node's uplink topic. The `f
 - `NEIGHBOR_A_DECIMAL` — neighbor's decimal number (unquoted integer)
 - `{STATE_TOPIC}` — see note below
 
-The state topic is `msh/{YOUR_REGION}/2/json/mqtt/!{YOUR_NODE_HEX}`.
+The state topic is `msh/{YOUR_REGION}/2/json/mqtt/{YOUR_NODE_HEX}`.
 
-Add to `configuration.yaml`. One block per field per neighbor. Below is the grid section as an example — repeat the same pattern for `gIP`, `gEP`, solar (`sP`, `sE`), battery (`bP`, `bS`, `bEI`, `bEO`), and wallbox (`wP`, `wE`, `wS`) keys (changing the key, unit, and device_class per §2). Or use the auto-discovery automation (§4.4) instead.
+Add to `configuration.yaml`. One block per field per neighbor:
 
 ```yaml
 mqtt:
@@ -306,113 +260,9 @@ mqtt:
       unit_of_measurement: "kW"
       device_class: "power"
       state_class: "measurement"
-
-    - name: "Neighbor A gP1"
-      unique_id: "neighbor_a_gp1"
-      state_topic: "{STATE_TOPIC}"
-      value_template: >
-        {% if value_json.from == NEIGHBOR_A_DECIMAL %}
-          {{ (value_json.payload | from_json({})).gP1 | float(0) }}
-        {% else %}
-          {{ this.state }}
-        {% endif %}
-      unit_of_measurement: "kW"
-      device_class: "power"
-      state_class: "measurement"
-
-    - name: "Neighbor A gP2"
-      unique_id: "neighbor_a_gp2"
-      state_topic: "{STATE_TOPIC}"
-      value_template: >
-        {% if value_json.from == NEIGHBOR_A_DECIMAL %}
-          {{ (value_json.payload | from_json({})).gP2 | float(0) }}
-        {% else %}
-          {{ this.state }}
-        {% endif %}
-      unit_of_measurement: "kW"
-      device_class: "power"
-      state_class: "measurement"
-
-    - name: "Neighbor A gP3"
-      unique_id: "neighbor_a_gp3"
-      state_topic: "{STATE_TOPIC}"
-      value_template: >
-        {% if value_json.from == NEIGHBOR_A_DECIMAL %}
-          {{ (value_json.payload | from_json({})).gP3 | float(0) }}
-        {% else %}
-          {{ this.state }}
-        {% endif %}
-      unit_of_measurement: "kW"
-      device_class: "power"
-      state_class: "measurement"
-
-    - name: "Neighbor A gV1"
-      unique_id: "neighbor_a_gv1"
-      state_topic: "{STATE_TOPIC}"
-      value_template: >
-        {% if value_json.from == NEIGHBOR_A_DECIMAL %}
-          {{ (value_json.payload | from_json({})).gV1 | float(0) }}
-        {% else %}
-          {{ this.state }}
-        {% endif %}
-      unit_of_measurement: "V"
-      device_class: "voltage"
-      state_class: "measurement"
-
-    - name: "Neighbor A gV2"
-      unique_id: "neighbor_a_gv2"
-      state_topic: "{STATE_TOPIC}"
-      value_template: >
-        {% if value_json.from == NEIGHBOR_A_DECIMAL %}
-          {{ (value_json.payload | from_json({})).gV2 | float(0) }}
-        {% else %}
-          {{ this.state }}
-        {% endif %}
-      unit_of_measurement: "V"
-      device_class: "voltage"
-      state_class: "measurement"
-
-    - name: "Neighbor A gV3"
-      unique_id: "neighbor_a_gv3"
-      state_topic: "{STATE_TOPIC}"
-      value_template: >
-        {% if value_json.from == NEIGHBOR_A_DECIMAL %}
-          {{ (value_json.payload | from_json({})).gV3 | float(0) }}
-        {% else %}
-          {{ this.state }}
-        {% endif %}
-      unit_of_measurement: "V"
-      device_class: "voltage"
-      state_class: "measurement"
-
-    - name: "Neighbor A gEI"
-      unique_id: "neighbor_a_gei"
-      state_topic: "{STATE_TOPIC}"
-      value_template: >
-        {% if value_json.from == NEIGHBOR_A_DECIMAL %}
-          {{ (value_json.payload | from_json({})).gEI | float(0) }}
-        {% else %}
-          {{ this.state }}
-        {% endif %}
-      unit_of_measurement: "kWh"
-      device_class: "energy"
-      state_class: "total_increasing"
-
-    - name: "Neighbor A gEO"
-      unique_id: "neighbor_a_geo"
-      state_topic: "{STATE_TOPIC}"
-      value_template: >
-        {% if value_json.from == NEIGHBOR_A_DECIMAL %}
-          {{ (value_json.payload | from_json({})).gEO | float(0) }}
-        {% else %}
-          {{ this.state }}
-        {% endif %}
-      unit_of_measurement: "kWh"
-      device_class: "energy"
-      state_class: "total_increasing"
 ```
 
-Repeat for solar (`sP`, `sE`), battery (`bP`, `bS`, `bEI`, `bEO`), and wallbox (`wP`, `wE`, `wS`) using the units and device classes from §2.
+Repeat for each payload key using the appropriate unit and device class from [Data Format](#data-format).
 
 **Why `{YOUR_NODE_HEX}` in the topic?** Your node publishes received LoRa messages to `msh/{R}/2/json/mqtt/{YOUR_NODE_HEX}`. Every neighbor's messages arrive on this same topic. The `from` field distinguishes who sent each message.
 
@@ -420,9 +270,9 @@ Repeat for solar (`sP`, `sE`), battery (`bP`, `bS`, `bEI`, `bEO`), and wallbox (
 
 Your own node also publishes its received traffic — including your own messages echoed back. The `if value_json.from == NEIGHBOR_A_DECIMAL` check ensures you only create sensors for actual neighbors, not yourself. Add no sensor block for your own decimal number.
 
-### 4.4 Optional: Auto-Discovery via MQTT
+### 4.4 Auto-Discovery via MQTT (recommended)
 
-Create this automation to avoid manually adding sensor blocks per §4.2. It watches your uplink topic and uses MQTT discovery to auto-generate sensors for every new neighbor. Only fields present in the payload get a sensor — no useless 0-value entries.
+Create this automation to avoid manually adding sensor blocks per §4.2. It watches your uplink topic and uses MQTT discovery to auto-generate sensors for every new neighbor. Only fields present in the payload get a sensor.
 
 **Add this automation in HA Settings → Automations → Create Automation → Edit in YAML:**
 
@@ -799,19 +649,18 @@ mode: queued
 2. The `sender` field from the message dynamically fills each sensor's `state_topic`
 3. Publishes retained MQTT discovery configs for only the keys actually present in the payload
 4. HA auto-creates sensors, all grouped under one device per node
-5. All discovery configs publish instantly — no delays between them
+5. Discovery configs publish instantly — no delays between them
 6. Sensors are permanent — retained configs survive HA and node restarts
 
 **Result in HA:** Each neighbor appears as one device with only the sensors their household actually sends.
 
 ---
 
-### 4.5 Combined Sensors
+## Combined Sensors
 
 Add to `configuration.yaml` to aggregate all neighbors' readings into single sensors. New neighbors are included automatically.
 
-> **Quick start:** A ready-to-use HA package with all combined sensors (power + energy) is at
-> `packages/mesh_combined.yaml`. Drop it into `config/packages/` and restart HA — no replacements needed.
+> **Quick start:** A ready-to-use HA package with all combined sensors is at `mesh-combined-sensors.yaml`. Drop it into `config/packages/` and restart HA.
 
 ```yaml
 template:
@@ -872,17 +721,37 @@ template:
 
 ---
 
-## 5. Adding More Households
+## Energy Dashboard
 
-| Step | What to do |
-|------|-----------|
-| New neighbor joins | Heltec V3 per §1, install the sender blueprint (§3.1) or use the manual template (§3.2) |
-| Existing households see them | Auto-discovery (§4.4) creates sensors automatically from the first received message |
-| No changes needed on the mesh | The new node is already on the shared LoRa channel; all existing nodes will receive its messages automatically |
+### Which sensors to use
+
+| Dashboard slot | Best sensor |
+|---------------|-------------|
+| Grid consumption | `Combined Mesh Grid Import` (cumulative `gEI`) |
+| Return to grid | `Combined Mesh Grid Export` (cumulative `gEO`) |
+| Solar production | `Combined Mesh Solar Energy` (cumulative `sE`) |
+
+### Sign convention reminder
+
+The mesh uses **import/charge = positive, export/discharge = negative**:
+- `gEI` (cumulative import) and `gIP` (import power) are always ≥0 — use as-is
+- `gEO` (cumulative export) and `gEP` (export power) are always ≥0 — use as-is
+- `sE` (cumulative solar) is always ≥0 — use as-is
+- No sign adjustment needed
+
+### Linking in the Energy Dashboard
+
+All three combined sensors are available from `mesh-combined-sensors.yaml`.
+
+In HA Settings → Energy:
+1. **Grid consumption** → `Combined Mesh Grid Import` (cumulative, preferred) or `Combined Mesh Grid Import Power` (Riemann sum)
+2. **Return to grid** → `Combined Mesh Grid Export` (cumulative, preferred) or `Combined Mesh Grid Export Power` (Riemann sum)
+3. **Solar production** → `Combined Mesh Solar Energy` (cumulative, preferred) or per-neighbor `sP` (Riemann sum)
+4. **Battery** → `Combined Mesh Grid Import` as the grid sensor (battery in/out is already included in net grid energy)
 
 ---
 
-## 6. Expected Message Flow
+## Expected Message Flow
 
 ### Send direction
 
@@ -918,79 +787,10 @@ Your HA receives it, checks from == NEIGHBOR_DECIMAL,
 
 ---
 
-## Energy Dashboard (Reference)
+## Adding More Households
 
-### 7.1 Which sensors to use
-
-The energy dashboard works best with **cumulative energy sensors** (`total_increasing`, kWh):
-
-| Dashboard section | Sensor from mesh | Aggregate (optional) |
-|-------------------|-----------------|---------------------|
-| Grid consumption | `gEI` per neighbor | `Combined Mesh Grid Import` |
-| Grid return/production | `gEO` per neighbor | `Combined Mesh Grid Export` |
-| Solar production | `sE` per neighbor | `Combined Mesh Solar Energy` |
-
-Power sensors can be used via Riemann sum helpers (set unit to kW in the helper — default is W):
-- Use `gIP` for grid consumption, `gEP` for grid return/production — no sign-splitting needed
-- `sP` for solar production
-Cumulative sensors are still more accurate — **prefer `gEI`, `gEO`, `sE` where available.**
-
-### 7.2 Combined energy sensors (template)
-
-> The `packages/mesh_combined.yaml` package includes these sensors plus all power aggregates —
-> drop it into `config/packages/` instead of copying individual YAML blocks below.
-
-Add to `configuration.yaml` to sum cumulative energy across all neighbors:
-
-```yaml
-template:
-  - sensor:
-      - name: "Combined Mesh Grid Import"
-        unique_id: "combined_mesh_gei"
-        unit_of_measurement: "kWh"
-        device_class: "energy"
-        state_class: "total_increasing"
-        state: >
-          {% set entities = expand(states.sensor)
-             | selectattr('entity_id', 'search', 'node_\\d+_gei$') | list %}
-          {{ entities | map(attribute='state') | map('float', 0) | sum | round(2) }}
-
-      - name: "Combined Mesh Grid Export"
-        unique_id: "combined_mesh_geo"
-        unit_of_measurement: "kWh"
-        device_class: "energy"
-        state_class: "total_increasing"
-        state: >
-          {% set entities = expand(states.sensor)
-             | selectattr('entity_id', 'search', 'node_\\d+_geo$') | list %}
-          {{ entities | map(attribute='state') | map('float', 0) | sum | round(2) }}
-
-      - name: "Combined Mesh Solar Energy"
-        unique_id: "combined_mesh_se"
-        unit_of_measurement: "kWh"
-        device_class: "energy"
-        state_class: "total_increasing"
-        state: >
-          {% set entities = expand(states.sensor)
-             | selectattr('entity_id', 'search', 'node_\\d+_se$') | list %}
-          {{ entities | map(attribute='state') | map('float', 0) | sum | round(2) }}
-```
-
-### 7.3 Sign convention reminder
-
-The mesh uses **import/charge = positive, export/discharge = negative**. For the energy dashboard:
-- `gEI` (cumulative import) and `gIP` (import power) are always ≥0 — use as-is for grid consumption
-- `gEO` (cumulative export) and `gEP` (export power) are always ≥0 — use as-is for grid return/production
-- `sE` (cumulative solar) is always ≥0 — use as-is for solar production
-- No sign adjustment needed
-
-### 7.4 Linking in the Energy Dashboard
-
-All three combined sensors are available from `packages/mesh_combined.yaml`.
-
-In HA Settings → Energy:
-1. **Grid consumption** → `Combined Mesh Grid Import` (cumulative, preferred) or `Combined Mesh Grid Import Power` (Riemann sum)
-2. **Return to grid** → `Combined Mesh Grid Export` (cumulative, preferred) or `Combined Mesh Grid Export Power` (Riemann sum)
-3. **Solar production** → `Combined Mesh Solar Energy` (cumulative, preferred) or per-neighbor `sP` (Riemann sum)
-4. **Battery** → `Combined Mesh Grid Import` as the grid sensor (battery in/out is already included in net grid energy)
-
+| Step | What to do |
+|------|-----------|
+| New neighbor joins | Configure their Heltec V3 per [mesh-setup.md](mesh-setup.md), install the sender blueprint or use the manual template |
+| Existing households see them | Auto-discovery creates sensors automatically from the first received message |
+| No changes needed on the mesh | The new node is already on the shared LoRa channel; all existing nodes will receive its messages automatically |
