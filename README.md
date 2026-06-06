@@ -22,12 +22,12 @@ Every node runs stock Meshtastic firmware with the `mqtt` channel enabled. Each 
 
 ## What you need (per household)
 
-| Component | Purpose |
-|-----------|---------|
-| Heltec V3 (ESP32-S3 + SX1262 868 MHz) | LoRa mesh node with MQTT downlink |
-| Tasmota IR reader | Reads smart meter via optical interface |
-| Home Assistant + MQTT broker | Automates sending and receiving |
-| USB-C power supply | Existing phone charger works |
+| Component | Purpose | Est. cost |
+|-----------|---------|-----------|
+| Heltec V3 (ESP32-S3 + SX1262 868 MHz) | LoRa mesh node with MQTT downlink | ~€25 |
+| Tasmota IR reader | Smart meter IR interface | ~€20 |
+| Home Assistant + MQTT broker | Sends and receives mesh data | — |
+| USB-C power supply | Powers the node | €0 |
 
 ---
 
@@ -45,15 +45,15 @@ That's it. Each neighbor that does the same becomes visible automatically — no
 
 ## Key files
 
-| File | Content |
-|------|---------|
-| [`mesh-setup.md`](mesh-setup.md) | Hardware BOM, flashing, Heltec V3 configuration |
-| [`ha-setup.md`](ha-setup.md) | Full HA integration — sender, receiver, combined sensors, energy dashboard |
-| [`sender-blueprint.yaml`](sender-blueprint.yaml) | HA automation blueprint (import directly) |
-| [`auto-discovery-automation.yaml`](auto-discovery-automation.yaml) | Auto-discovery automation (paste into HA) |
-| [`mesh-combined-sensors.yaml`](mesh-combined-sensors.yaml) | Combined neighborhood sensor package |
-| [`Requirements.md`](Requirements.md) | Requirements, household types, device priority |
-| [`AGENTS.md`](AGENTS.md) | Architecture invariants for AI coding agents |
+| File | Purpose | Group |
+|------|---------|-------|
+| [`mesh-setup.md`](mesh-setup.md) | Hardware, flashing, Heltec V3 config | **Setup guides** |
+| [`ha-setup.md`](ha-setup.md) | Full HA integration guide | **Setup guides** |
+| [`sender-blueprint.yaml`](sender-blueprint.yaml) | HA blueprint to send your data into the mesh | **Import into HA** |
+| [`auto-discovery-automation.yaml`](auto-discovery-automation.yaml) | Auto-creates sensors for each neighbor | **Import into HA** |
+| [`mesh-combined-sensors.yaml`](mesh-combined-sensors.yaml) | Dashboard-ready aggregate sensors | **Import into HA** |
+| [`Requirements.md`](Requirements.md) | Requirements, household types | **Reference** |
+| [`AGENTS.md`](AGENTS.md) | Project invariants for AI agents | **Reference** |
 
 ---
 
@@ -71,7 +71,8 @@ That's it. Each neighbor that does the same becomes visible automatically — no
 
 ## Status
 
-Phase 1 (neighborhood data sharing) — working and documented. Phase 2 (coordinated load shedding, flex offers) — deferred pending field experience.
+- **Phase 1 — Share meter data with neighbors** ✅ working, start here
+- **Phase 2 — Coordinated load shedding and flex offers** ⏸️ deferred, no timeline
 
 ---
 
