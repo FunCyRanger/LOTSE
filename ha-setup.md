@@ -80,8 +80,8 @@ JSON payload with keys grouped by category. Sign convention: import/charge = pos
 
 | Key | Meaning | Unit | Priority |
 |-----|---------|------|----------|
-| gP | Net power (+import, -export) | kW | **mandatory** |
-| gIP | Import power only (always ≥0) | kW | important |
+| gP | Net power (+import, -export) | kW | important |
+| gIP | Import power only (always ≥0) | kW | **required** |
 | gEP | Export power only (always ≥0) | kW | important |
 | gP1 | Phase 1 power | kW | important |
 | gP2 | Phase 2 power | kW | important |
@@ -104,7 +104,7 @@ JSON payload with keys grouped by category. Sign convention: import/charge = pos
 | Key | Meaning | Unit | Priority |
 |-----|---------|------|----------|
 | bP | Power (+charge, -discharge) | kW | important |
-| bS | State of charge | % | **mandatory** |
+| bS | State of charge | % | optional |
 | bEI | Cumulative energy in | kWh | optional |
 | bEO | Cumulative energy out | kWh | optional |
 
