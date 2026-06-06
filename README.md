@@ -50,6 +50,7 @@ That's it. Each neighbor that does the same becomes visible automatically — no
 | [`mesh-setup.md`](mesh-setup.md) | Hardware BOM, flashing, Heltec V3 configuration |
 | [`ha-setup.md`](ha-setup.md) | Full HA integration — sender, receiver, combined sensors, energy dashboard |
 | [`sender-blueprint.yaml`](sender-blueprint.yaml) | HA automation blueprint (import directly) |
+| [`auto-discovery-automation.yaml`](auto-discovery-automation.yaml) | Auto-discovery automation (paste into HA) |
 | [`mesh-combined-sensors.yaml`](mesh-combined-sensors.yaml) | Combined neighborhood sensor package |
 | [`Requirements.md`](Requirements.md) | Requirements, household types, device priority |
 | [`AGENTS.md`](AGENTS.md) | Architecture invariants for AI coding agents |
@@ -61,6 +62,9 @@ That's it. Each neighbor that does the same becomes visible automatically — no
 | Directory | Contents |
 |-----------|----------|
 | `tests/` | Jinja template rendering tests, schema checks, MQTT roundtrip tests |
+| `sender-blueprint.yaml` | Sender automation blueprint (import into HA) |
+| `auto-discovery-automation.yaml` | Auto-discovery automation (paste into HA) |
+| `mesh-combined-sensors.yaml` | Combined neighborhood HA sensor package |
 | `archive/` | Legacy design docs, superseded specs, AI firmware reviews |
 
 ---

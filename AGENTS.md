@@ -50,6 +50,9 @@ messages without it). The `from` field must match the node's own decimal number.
 |------|---------|
 | `mesh-setup.md` | Heltec V3 flashing, MQTT config, channel setup |
 | `ha-setup.md` | **Active: full HA integration — sender, receiver, combined sensors, energy dashboard** |
+| `sender-blueprint.yaml` | HA sender automation blueprint |
+| `auto-discovery-automation.yaml` | MQTT auto-discovery automation |
+| `mesh-combined-sensors.yaml` | Combined neighborhood HA sensor package |
 | `Requirements.md` | Reqs, household types (T1–T10), device priority |
 | `archive/` | Legacy design docs, superseded specs, old brainstorming |
 
