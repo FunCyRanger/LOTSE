@@ -116,12 +116,17 @@ JSON payload with keys grouped by category. Sign convention: import/charge = pos
 | wE | Cumulative energy | kWh | optional |
 | wS | State of charge | % | optional |
 
+**Minimal payload (grid-only, just the required field):**
+```
+{"gIP": 1.5}
+```
+
 **Example payload (all keys):**
 ```
 {"gP":-1.2,"gIP":0.0,"gEP":1.2,"gP1":-0.4,"gP2":-0.4,"gP3":-0.4,"gV1":230,"gV2":229,"gV3":231,"gEI":12.5,"gEO":3.2,"sP":3.5,"sE":15.2,"bP":1.0,"bS":85,"bEI":8.5,"bEO":2.3,"wP":0.0,"wE":2.1,"wS":80}
 ```
 
-**Size:** ~170 bytes with all keys — fits within Meshtastic's ~220-byte limit.
+**Size:** ~170 bytes with all keys, ~10 bytes with just `gIP` — both fit within Meshtastic's ~220-byte limit.
 
 ---
 
@@ -198,3 +203,15 @@ Your HA receives it, checks from == NEIGHBOR_DECIMAL,
 | New neighbor joins | Configure their Heltec V3 per [mesh-setup.md](mesh-setup.md) and install the sender blueprint |
 | Existing households see them | Auto-discovery creates sensors automatically from the first received message |
 | No changes needed on the mesh | The new node is already on the shared LoRa channel; all existing nodes will receive its messages automatically |
+
+---
+
+## Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---------|-------------|------|
+| Blueprint import fails with "invalid config" | Node number or sensor fields have wrong types | Ensure Node Number is a plain decimal (no quotes). Check sensor entities exist and are numeric. |
+| Sensors don't appear after first message | Auto-discovery not running | Verify `auto-discovery-automation.yaml` is saved and enabled in HA → Automations. Check MQTT topic `msh/{region}/2/json/mqtt/!{your_hex}` for incoming messages (Mosquitto add-on → Listen). |
+| Combined sensors show 0 or "unavailable" | Package file not loaded | Confirm `mesh-combined-sensors.yaml` is in `config/packages/` and `packages:` is uncommented in `configuration.yaml` (or use `!include_dir_merge_named packages`). Restart HA. |
+| Energy dashboard shows gaps | Send interval too long | In the sender blueprint, adjust "Send interval" (default 5 min) to 2 min. Note this increases LoRa channel usage. |
+| Neighbor values are stale | Node went offline or LoRa range issue | Check neighbor's node is still powered. Increase send interval. Verify both nodes are within LoRa range (~1-2 km urban, more rural). |
