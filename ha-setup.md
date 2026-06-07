@@ -47,25 +47,10 @@ Tasmota ──MQTT──► HA automation          Tasmota ──MQTT──► H
 
 No edits needed — the automation extracts the region from the MQTT topic dynamically. Neighbor sensors appear automatically when the first message arrives.
 
-### Step 3 — Install Combined Package
-
-1. Copy [`mesh-combined-sensors.yaml`](mesh-combined-sensors.yaml) into your HA `config/packages/` directory
-2. Restart Home Assistant
-
-All aggregate sensors (combined grid power, solar, battery SOC, energy) appear in HA.
-
-### Step 4 — Configure Energy Dashboard
-
-1. In HA: **Settings → Energy**
-2. **Grid consumption** → select `Combined Mesh Grid Import`
-3. **Return to grid** → select `Combined Mesh Grid Export`
-4. **Solar production** → select `Combined Mesh Solar Energy`
-
-### Step 5 — Verify
+### Step 3 — Verify
 
 After the first send interval (default 5 minutes) elapses:
 - Neighbor sensors appear under **Settings → Devices & Services → Devices**
-- Combined sensors show summed values on the **Overview** dashboard
 - The **Energy** dashboard shows your first recorded data point
 
 New neighbors that join later are handled automatically — no additional setup needed.
@@ -139,31 +124,48 @@ JSON payload with keys grouped by category. Sign convention: import/charge = pos
 
 ## Energy Dashboard
 
-### Which sensors to use
+The Energy Dashboard tracks cumulative import/export/solar per household. Each neighbor's cumulative sensors appear automatically (e.g., `Node 2892019402 gEI`, `Node 2892019402 gEO`, `Node 2892019402 sE`).
 
-| Dashboard slot | Best sensor |
-|---------------|-------------|
-| Grid consumption | `Combined Mesh Grid Import` (cumulative `gEI`) |
-| Return to grid | `Combined Mesh Grid Export` (cumulative `gEO`) |
-| Solar production | `Combined Mesh Solar Energy` (cumulative `sE`) |
+### Linking sensors
 
-### Sign convention reminder
+In **Settings → Energy**:
 
-The mesh uses **import/charge = positive, export/discharge = negative**:
-- `gEI` (cumulative import) and `gIP` (import power) are always ≥0 — use as-is
-- `gEO` (cumulative export) and `gEP` (export power) are always ≥0 — use as-is
-- `sE` (cumulative solar) is always ≥0 — use as-is
+| Dashboard slot | Add each neighbor's sensor |
+|---------------|---------------------------|
+| Grid consumption | `Node {NUMBER} gEI` (cumulative import energy) |
+| Return to grid | `Node {NUMBER} gEO` (cumulative export energy) |
+| Solar production | `Node {NUMBER} sE` (cumulative solar energy) |
+
+New neighbors must be added manually when they join — there is no auto-discovery for the Energy Dashboard.
+
+### Sign convention
+
+Import = positive, export = negative:
+- `gEI` and `gIP` are always ≥0
+- `gEO` and `gEP` are always ≥0
+- `sE` is always ≥0
 - No sign adjustment needed
 
-### Linking in the Energy Dashboard
+### Optional: per-household metadata
 
-All three combined sensors are available from [`mesh-combined-sensors.yaml`](mesh-combined-sensors.yaml).
+Normalize solar output or track battery capacity across neighbors. Create one `input_number` helper per neighbor per field via **Settings → Helpers**:
 
-In HA Settings → Energy:
-1. **Grid consumption** → `Combined Mesh Grid Import` (cumulative, preferred) or `Combined Mesh Grid Import Power` (Riemann sum)
-2. **Return to grid** → `Combined Mesh Grid Export` (cumulative, preferred) or `Combined Mesh Grid Export Power` (Riemann sum)
-3. **Solar production** → `Combined Mesh Solar Energy` (cumulative, preferred) or per-neighbor `sP` (Riemann sum)
-4. **Battery** → `Combined Mesh Grid Import` as the grid sensor (battery in/out is already included in net grid energy)
+| Helper | Purpose | Value |
+|--------|---------|-------|
+| `input_number.node_{NUMBER}_solar_kwp` | PV system peak power | e.g. 5.0 kWp |
+| `input_number.node_{NUMBER}_battery_kwh` | Battery capacity | e.g. 10 kWh |
+
+Then create a template sensor to show solar utilization as % of peak power:
+
+```jinja
+{% set sP = states('sensor.node_{NUMBER}_sp') | float(0) %}
+{% set kwp = states('input_number.node_{NUMBER}_solar_kwp') | float(1) %}
+{{ (sP / kwp * 100) | round(1) }}
+```
+
+This normalizes across households: a 3 kWp system at 2 kW and a 6 kWp system at 4 kW both read 67%.
+
+**Solar forecast** (Solcast, PVOutput) is a separate HA integration, not related to the mesh payload.
 
 ---
 
@@ -219,6 +221,6 @@ Your HA receives it, checks from == NEIGHBOR_DECIMAL,
 |---------|-------------|------|
 | Blueprint import fails with "invalid config" | Node number or sensor fields have wrong types | Ensure Node Number is a plain decimal (no quotes). Check sensor entities exist and are numeric. |
 | Sensors don't appear after first message | Auto-discovery not running | Verify `auto-discovery-automation.yaml` is saved and enabled in HA → Automations. Check MQTT topic `msh/{region}/2/json/mqtt/!{your_hex}` for incoming messages (Mosquitto add-on → Listen). |
-| Combined sensors show 0 or "unavailable" | Package file not loaded | Confirm `mesh-combined-sensors.yaml` is in `config/packages/` and `packages:` is uncommented in `configuration.yaml` (or use `!include_dir_merge_named packages`). Restart HA. |
+| Neighbor sensor not listed in Energy Dashboard | Dashboard only shows `total_increasing` sensors | Auto-discovery sets this automatically. If the sensor exists but is missing from the dropdown, check its state class in **Settings → Devices & Services → Devices**. |
 | Energy dashboard shows gaps | Send interval too long | In the sender blueprint, adjust "Send interval" (default 5 min) to 2 min. Note this increases LoRa channel usage. |
 | Neighbor values are stale | Node went offline or LoRa range issue | Check neighbor's node is still powered. Increase send interval. Verify both nodes are within LoRa range (~1-2 km urban, more rural). |
