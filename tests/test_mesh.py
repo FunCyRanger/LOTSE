@@ -206,7 +206,7 @@ def make_sender_vars(**overrides):
 
 RECEIVER_TEMPLATE = """\
 {% if value_json.from == NEIGHBOR_DECIMAL %}\
-{{ (value_json.payload | from_json({})).KEY | FILTER }}\
+{{ value_json.payload.KEY | FILTER }}\
 {% else %}\
 {{ this.state }}\
 {% endif %}"""
@@ -216,9 +216,8 @@ def render_receiver(mqtt_payload, neighbor_decimal, key, filter_="float(0)",
                     this_state="0"):
     """Render a receiver value_template for a single sensor.
 
-    ``mqtt_payload`` should be a dict with ``payload`` as a JSON string
-    (matching Meshtastic uplink: the inner payload is JSON-encoded inside
-    the outer envelope).
+    ``mqtt_payload`` should be a dict with ``payload`` as an inline JSON
+    object (matching what Meshtastic publishes on the receive side).
     """
     env = ha_environment()
     tpl_str = RECEIVER_TEMPLATE.replace("KEY", key).replace("FILTER", filter_)
@@ -365,35 +364,35 @@ def test_sender_mixed_units():
 
 def test_receiver_match():
     """from matches → sensor value extracted."""
-    p = {"from": 2712679380, "payload": '{"gP": -1.2, "bS": 85}'}
+    p = {"from": 2712679380, "payload": {"gP": -1.2, "bS": 85}}
     r = render_receiver(p, 2712679380, "gP", "float(0)")
     assert float(r) == -1.2, f"Expected -1.2, got {r}"
 
 
 def test_receiver_mismatch():
     """from doesn't match → fallback state."""
-    p = {"from": 999, "payload": '{"gP": -1.2}'}
+    p = {"from": 999, "payload": {"gP": -1.2}}
     r = render_receiver(p, 2712679380, "gP", "float(0)", this_state="-5.0")
     assert r == "-5.0", f"Expected '-5.0', got {r}"
 
 
 def test_receiver_int_filter():
     """bS via |int(0) → integer."""
-    p = {"from": 2712679380, "payload": '{"bS": 85}'}
+    p = {"from": 2712679380, "payload": {"bS": 85}}
     r = render_receiver(p, 2712679380, "bS", "int(0)")
     assert int(r) == 85, f"Expected 85, got {r}"
 
 
 def test_receiver_missing_key():
     """Payload missing the key → float(0) returns 0."""
-    p = {"from": 2712679380, "payload": '{"gP": -1.2}'}
+    p = {"from": 2712679380, "payload": {"gP": -1.2}}
     r = render_receiver(p, 2712679380, "nonexistent", "float(0)")
     assert float(r) == 0.0, f"Expected 0.0, got {r}"
 
 
 def test_receiver_voltage_rounding():
     """gV1 with 1 decimal preserved."""
-    p = {"from": 2712679380, "payload": '{"gV1": 230.456}'}
+    p = {"from": 2712679380, "payload": {"gV1": 230.456}}
     r = render_receiver(p, 2712679380, "gV1", "float(0)")
     assert float(r) == 230.456
 
@@ -406,7 +405,7 @@ def test_roundtrip():
     """Send payload → receive-parsed → correct values."""
     tpl = load_sender_template()
     out = render_sender(tpl, make_sender_vars())
-    msg = {"from": 12345, "payload": json.dumps(out, separators=(",", ":"))}
+    msg = {"from": 12345, "payload": out}
     for key in ("gP", "gIP", "gEP", "bS"):
         flt = "int(0)" if key == "bS" else "float(0)"
         r = render_receiver(msg, 12345, key, flt)
@@ -471,24 +470,20 @@ def test_combined_soc_empty():
 # TESTS — AUTO‑DISCOVERY CONFIG JSON
 # ═══════════════════════════════════════════════════════════════════════════
 
-# The discovery config is itself a template that emits JSON containing a nested
-# Jinja template as a string.  The raw/endraw blocks protect the inner template.
-DISCOVERY_TPL = """\
-{"name": "Node {{ from }} gP",
- "state_topic": "msh/EU_868/2/json/mqtt/!a1b2c3d4",
- "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.gP | float(0) }}{% endif %}{% endraw %}",
- "unit_of_measurement": "kW",
- "device_class": "power",
- "state_class": "measurement",
- "unique_id": "mesh_{{ from }}_gp",
- "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}"""
+def load_discovery_template():
+    """Load the first gP sensor's MQTT discovery config template from
+    auto-discovery-automation.yaml and return it as a Jinja template string."""
+    path = ROOT / "auto-discovery-automation.yaml"
+    with open(path) as f:
+        data = yaml.load(f, Loader=yaml.FullLoader)
+    return data["action"][0]["then"][0]["data"]["payload"]
 
 
 def test_discovery_valid_json():
     """Auto-discovery config renders to valid JSON."""
     env = ha_environment()
-    tpl = env.from_string(DISCOVERY_TPL)
-    raw = tpl.render(**{"from": 2712679380})
+    tpl = env.from_string(load_discovery_template())
+    raw = tpl.render(**{"from": 2712679380, "region": "EU_868", "sender": "!a1b2c3d4"})
     cfg = json.loads(raw)
     assert cfg["name"] == "Node 2712679380 gP"
     assert cfg["unit_of_measurement"] == "kW"
@@ -501,8 +496,8 @@ def test_discovery_valid_json():
 def test_discovery_nested_template():
     """The value_template field in discovery config is itself valid Jinja."""
     env = ha_environment()
-    tpl = env.from_string(DISCOVERY_TPL)
-    raw = tpl.render(**{"from": 2712679380})
+    tpl = env.from_string(load_discovery_template())
+    raw = tpl.render(**{"from": 2712679380, "region": "EU_868", "sender": "!a1b2c3d4"})
     cfg = json.loads(raw)
 
     nested = env.from_string(cfg["value_template"])

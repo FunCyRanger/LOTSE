@@ -249,7 +249,7 @@ def test_receiver_excludes_self():
     env = ha_environment()
     template = """\
 {% if value_json.from == NEIGHBOR_DECIMAL %}\
-{{ (value_json.payload | from_json({})).gP | float(0) }}\
+{{ value_json.payload.gP | float(0) }}\
 {% else %}\
 {{ this.state }}\
 {% endif %}"""
@@ -262,12 +262,12 @@ def test_receiver_excludes_self():
     this.state = "-5.0"
 
     # from matches → extract value
-    result1 = tpl.render(value_json={"from": 12345, "payload": '{"gP": -1.2}'},
+    result1 = tpl.render(value_json={"from": 12345, "payload": {"gP": -1.2}},
                          NEIGHBOR_DECIMAL=12345, this=this)
     assert result1.strip() == "-1.2", f"Got '{result1.strip()}'"
 
     # from differs → fallback
-    result2 = tpl.render(value_json={"from": 99999, "payload": '{"gP": -1.2}'},
+    result2 = tpl.render(value_json={"from": 99999, "payload": {"gP": -1.2}},
                          NEIGHBOR_DECIMAL=12345, this=this)
     assert result2.strip() == "-5.0", f"Got '{result2.strip()}'"
 

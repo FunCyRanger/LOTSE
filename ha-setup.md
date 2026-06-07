@@ -191,7 +191,7 @@ Your node publishes to MQTT:
             "channel": 1, ...}
 
 Your HA receives it, checks from == NEIGHBOR_DECIMAL,
-  (value_json.payload | from_json({})).gP → sensor value
+  value_json.payload.gP → sensor value
 ```
 
 ---
