@@ -128,6 +128,13 @@ JSON payload with keys grouped by category. Sign convention: import/charge = pos
 
 **Size:** ~170 bytes with all keys, ~10 bytes with just `gIP` — both fit within Meshtastic's ~220-byte limit.
 
+**Edge cases:**
+- Sensors with state `unavailable`, `unknown`, `none`, `NaN`, `inf` are **omitted** from the payload (no key sent)
+- Power values are **clamped** to ±500 kW — guards against sensor glitches or unit mismatches (e.g., kWh sensor wired to a kW slot)
+- Energy values (`gEI`, `gEO`, `sE`, `bEI`, `bEO`, `wE`) are **clamped** at ≥ 0 — negative cumulative energy is rejected
+- Battery/Wallbox SOC is **clamped** to 0–100%
+- **Unit mismatch detection**: If a sensor's `unit_of_measurement` belongs to the wrong category (e.g., `kWh` in a power slot, `kW` in an energy slot), the key is omitted. If no unit is set, the value passes through as-is
+
 ---
 
 ## Energy Dashboard

@@ -41,6 +41,11 @@ MOCK_DATA = {
     "sensor.wallbox_soc":        {"state": 60,    "unit_of_measurement": "%"},
     "sensor.custom_power":       {"state": 42,    "unit_of_measurement": "custom_unit"},
     "sensor.unavailable_sensor": {"state": "unavailable", "unit_of_measurement": None},
+    "sensor.nan_sensor":          {"state": "NaN", "unit_of_measurement": "kW"},
+    "sensor.big_power":           {"state": 5000, "unit_of_measurement": "kW"},
+    "sensor.negative_kwh":        {"state": -50, "unit_of_measurement": "kWh"},
+    "sensor.bs_over_100":         {"state": 150, "unit_of_measurement": "%"},
+    "sensor.kwh_in_power_slot":   {"state": 12345, "unit_of_measurement": "kWh"},
 }
 
 
@@ -295,10 +300,10 @@ def test_sender_unit_w_to_kw():
 
 
 def test_sender_unit_mw_to_kw():
-    """0.8 MW → 800 kW."""
+    """0.8 MW → 800 kW, clamped to 500 kW max."""
     tpl = load_sender_template()
     out = render_sender(tpl, make_sender_vars(gEP="sensor.grid_export"))
-    assert out["gEP"] == 800.0, f"Expected 800.0, got {out['gEP']}"
+    assert out["gEP"] == 500.0, f"Expected 500.0, got {out['gEP']}"
 
 
 def test_sender_unit_wh_to_kwh():
@@ -331,13 +336,7 @@ def test_sender_unit_unknown_passthrough():
     assert out["gP"] == 42.0, f"Expected 42.0, got {out['gP']}"
 
 
-def test_sender_unavailable():
-    """Unavailable sensor → 0."""
-    tpl = load_sender_template()
-    vars_ = make_sender_vars(gP="sensor.unavailable_sensor",
-                             **{k: None for k in make_sender_vars() if k != "gP"})
-    out = render_sender(tpl, vars_)
-    assert out["gP"] == 0.0, f"Expected 0.0, got {out['gP']}"
+
 
 
 def test_sender_negative_preserved():
@@ -356,6 +355,68 @@ def test_sender_mixed_units():
     assert out["gP2"] == -0.5
     # -0.3 W → -0.0003 kW → round(2) → -0.0
     assert out["gP3"] == -0.0 or out["gP3"] == 0.0
+
+
+def test_sender_unavailable_omits_key():
+    """Unavailable sensor → key omitted from payload."""
+    tpl = load_sender_template()
+    vars_ = make_sender_vars(gP="sensor.unavailable_sensor",
+                             **{k: None for k in make_sender_vars() if k != "gP"})
+    out = render_sender(tpl, vars_)
+    assert "gP" not in out
+
+
+def test_sender_nan_omits_key():
+    """NaN state → key omitted."""
+    tpl = load_sender_template()
+    vars_ = make_sender_vars(gP="sensor.nan_sensor",
+                             **{k: None for k in make_sender_vars() if k != "gP"})
+    out = render_sender(tpl, vars_)
+    assert "gP" not in out
+
+
+def test_sender_power_clamped():
+    """5000 kW clamped to 500 kW."""
+    tpl = load_sender_template()
+    vars_ = make_sender_vars(gP="sensor.big_power",
+                             **{k: None for k in make_sender_vars() if k != "gP"})
+    out = render_sender(tpl, vars_)
+    assert out["gP"] == 500.0, f"Expected 500.0, got {out['gP']}"
+
+
+def test_sender_bs_clamped():
+    """bS = 150 clamped to 100."""
+    tpl = load_sender_template()
+    vars_ = make_sender_vars(bS="sensor.bs_over_100",
+                             **{k: None for k in make_sender_vars() if k != "bS"})
+    out = render_sender(tpl, vars_)
+    assert out["bS"] == 100, f"Expected 100, got {out['bS']}"
+
+
+def test_sender_energy_negative_clamped():
+    """Negative energy clamped to 0."""
+    tpl = load_sender_template()
+    vars_ = make_sender_vars(gEI="sensor.negative_kwh",
+                             **{k: None for k in make_sender_vars() if k != "gEI"})
+    out = render_sender(tpl, vars_)
+    assert out["gEI"] == 0.0, f"Expected 0.0, got {out['gEI']}"
+
+
+def test_sender_unit_mismatch_omitted():
+    """kWh sensor in kW slot → key omitted."""
+    tpl = load_sender_template()
+    vars_ = make_sender_vars(gP="sensor.kwh_in_power_slot",
+                             **{k: None for k in make_sender_vars() if k != "gP"})
+    out = render_sender(tpl, vars_)
+    assert "gP" not in out, f"gP should be omitted, got {out.get('gP')}"
+
+
+def test_sender_all_unavailable():
+    """All sensors offline → empty payload dict."""
+    tpl = load_sender_template()
+    vars_ = make_sender_vars(**{k: "sensor.unavailable_sensor" for k in make_sender_vars()})
+    out = render_sender(tpl, vars_)
+    assert out == {}, f"Expected empty dict, got {out}"
 
 
 # ═══════════════════════════════════════════════════════════════════════════
