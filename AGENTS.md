@@ -1,71 +1,132 @@
 # AGENTS.md
 
-**This repo is documentation-only.** No firmware, simulation, or build code exists on disk
-or in `main` branch history. Directories (`firmware/`, `meshtastic-fork-clean/`, `simulation/`,
-`simulation_v2/`) referenced in root `.md` files and `.gitignore` were planned but never
-committed, or were deleted.
+**Documentation-only repo** — no firmware, simulation, or build code exists on disk or in `main` branch history. Directories (`firmware/`, `meshtastic-fork-clean/`, `simulation/`, `simulation_v2/`) referenced in root `.md` files and `.gitignore` were planned but never committed.
 
-## Project state
+## Project
 
-Neighborhood energy coordination project — specification/planning phase.
+Neighborhood energy coordination (Phase 1: share meter data over LoRa). Each household: Tasmota → MQTT → HA automation → MQTT → Heltec V3 (stock Meshtastic, mqtt ch+downlink) → LoRa 868 MHz → all neighbors.
 
-- **Active guides:** `mesh-setup.md` — Heltec V3 configuration; `ha-setup.md` — HA automation integration
-- Two AI reviews at `archive/20260517 AI review/` (Claude, Grok) list concrete firmware errors —
-  **read both before writing firmware**
+## Critical: HA Jinja `NativeEnvironment` gotcha
 
-## Critical: HA Jinja NativeEnvironment `ast.literal_eval` gotcha
+HA uses Jinja2 `NativeEnvironment` which auto-converts template output back to Python types via `ast.literal_eval`. `{{ {"gIP":0} | to_json }}` outputs string `'{"gIP":0}'` but NativeEnvironment parses it back to dict `{"gIP": 0}`, breaking the Meshtastic envelope.
 
-HA uses Jinja2 `NativeEnvironment` which auto-converts template output
-back to Python types via `ast.literal_eval`. This means:
-- `{{ {"gIP":0} | to_json }}` outputs string `'{"gIP":0}'`, but
-  NativeEnvironment parses it back to Python dict `{"gIP": 0}`.
-- If that dict is then used in another `| to_json`, it serializes as
-  a nested object, not a JSON string — **breaks Meshtastic envelope**.
+**Fix**: apply `| to_json` twice to produce a JSON string literal: `{{ dict(items) | to_json | to_json }}`. Tests use standard `Environment` (no NativeEnvironment) and need two `json.loads` calls.
 
-**Fix**: apply `| to_json` twice to produce a JSON string literal:
-`{{ dict(items) | to_json | to_json }}` → output `'"{\\"gIP\\":0}"'` →
-NativeEnvironment unwraps to Python string `'{"gIP":0}'` (not a dict).
+## Payload & MQTT conventions
 
-This applies anywhere the final template output must be a JSON string
-rather than a parsed object. Standard `Environment` (used in tests)
-does NOT have this behavior.
+| Rule | Detail |
+|------|--------|
+| Topic | `msh/{region}/2/json/mqtt/` — **trailing `/` required** (Meshtastic silently drops without it) |
+| `from` | Must match the node's own decimal number |
+| Payload keys | 2-3 char abbreviations: `gP` (grid power), `bS` (battery SoC), `gIP`, `gEP`, `gP1`-`gP3`, `gV1`-`gV3`, `gEI`, `gEO`, `sP`, `sE`, `bP`, `bEI`, `bEO`, `wP`, `wE`, `wS` |
+| Envelope | `{"from": <int>, "type": "sendtext", "payload": "<json_string>", "channel": 1}` |
+| `evaluate_payload` | Must be `false` on `mqtt.publish` service call |
+| Max payload | 220 bytes inner JSON; full MQTT envelope < 4096 bytes |
+| Sender interval | Default 5 min, configurable 1-60 min |
 
-## Architecture (chosen)
+## Critical: test infrastructure quirks
 
-```
-Each household:
-Tasmota ──MQTT──► HA automation ──MQTT──► Heltec V3 (stock, mqtt ch+downlink)
-                                              │
-                                              ▼ LoRa 868 MHz
-                                         all neighbors
+Tests do NOT use pytest — they are standalone scripts with custom runners:
+```bash
+pip install -r tests/requirements.txt
+python3 tests/test_mesh.py       # 32 template + roundtrip tests
+python3 tests/test_schema.py     # 9 schema constraint tests
+python3 tests/test_e2e_mqtt.py   # requires Docker (eclipse-mosquitto), auto-skipped if unavailable
 ```
 
-Every node has the `mqtt` channel with downlink enabled. Each HA publishes to
-`msh/{R}/2/json/mqtt/` — **trailing `/` is required** (Meshtastic silently drops
-messages without it). The `from` field must match the node's own decimal number.
+The test mock infra (`ha_environment()`) mimics HA's Jinja environment with custom `to_json`, `from_json`, `float`, `int` filters and mock states. Tests use standard `Environment`, **not** `NativeEnvironment`, so rendering the sender template requires **two** `json.loads` calls to unwrap the double-encoded payload (`render_sender()` helper).
 
-## Key documents
+YAML validation (CI step) handles `!input` tags used by HA blueprints via a custom constructor.
 
-| File | Content |
+## CI
+
+`.github/workflows/test.yml`: runs on push/PR to `main`. Spins up `eclipse-mosquitto` Docker service, runs all 3 test scripts + YAML validation.
+
+## Known stale content
+
+- `sender-blueprint-python.md` — AI-generated Node-RED guide, **not real code**, describes a non-existent protocol
+- `archive/prototype-build.md` — references firmware code, PlatformIO configs, and a Meshtastic fork that were never committed
+- Two AI reviews at `archive/20260517 AI review/` (Claude, Grok) list concrete firmware errors; read before attempting firmware
+
+## Security
+
+- `.gitignore` excludes `*.log` files (may contain device identifiers, PSKs, or credentials)
+- No firmware/build code exists — any generated binaries must not be committed
+- All communication is outbound-only (MQTT, no incoming ports)
+
+## `config-hub/` — ESP-IDF project
+
+New in this session. A Config Hub ESP32 device that replaces the HA Jinja sender. Tasmota IR reader publishes raw SML via MQTT → Config Hub transforms → publishes Meshtastic envelope to `msh/{region}/2/json/mqtt/`.
+
+### Architecture
+
+```
+Tasmota (SMI script) --MQTT--> Config Hub --MQTT--> Heltec V3 --LoRa--> neighbors
+```
+
+### Files
+
+| File | Purpose |
 |------|---------|
-| `mesh-setup.md` | Heltec V3 flashing, MQTT config, channel setup |
-| `ha-setup.md` | **Active: full HA integration — sender, receiver, combined sensors, energy dashboard** |
-| `sender-blueprint.yaml` | HA sender automation blueprint |
-| `auto-discovery-automation.yaml` | MQTT auto-discovery automation |
-| `mesh-combined-sensors.yaml` | Combined neighborhood HA sensor package |
-| `Requirements.md` | Reqs, household types (T1–T10), device priority |
-| `archive/` | Legacy design docs, superseded specs, old brainstorming |
+| `main/main.c` | Init sequence: NVS→WiFi→MQTT broker→HTTP server |
+| `main/web_server.c` | HTTP server: embedded SPA (`/api/status`, `/api/config`, `/api/script/parse`, `/api/tasmota/configure`, `/api/tasmota/discover`, `/api/wifi/connect`) |
+| `main/html.h` | Embedded `index.html` SPA (auto-generated by `scripts/embed_webui.py`) |
+| `main/wifi_manager.c` | AP+Station mode, auto-fallback to AP |
+| `main/mqtt_broker.c` | Minimal MQTT 3.1.1 broker, select()-based, QoS 0, max 8 clients |
+| `main/tasmota_client.c` | HTTP client for Tasmota `/cm` API (script push, commands, discovery) |
+| `main/transform.c` | SMI script parser, Tasmota JSON→LOTSE payload transformer, Meshtastic envelope builder |
+| `main/config_store.c` | NVS JSON persistence |
+| `main/lotse_config.c` | Shared types, key names |
+| `webui/index.html` | SPA source (paste script→check GPIO→map variables→apply), English UI, 5-step workflow |
+| `scripts/embed_webui.py` | Converts `webui/index.html` → `main/html.h` |
+| `CMakeLists.txt` | Top-level ESP-IDF project |
+| `main/CMakeLists.txt` | Component registration |
+| `sdkconfig.defaults` | ESP32, 4MB flash, LWIP 16 sockets, CORS |
 
-## Known errors (from AI review; apply to `archive/prototype-build.md`)
+### Build
 
-- OBIS code `36.7.0` is non-standard; correct for active power feed-in is `-1:16.7.0`
-- SML library PlatformIO identifier `m-/SML` is invalid; use `mzi_/sml` or git URL
-- No `platformio.ini` exists anywhere in the repo
-- No `README.md` at GitHub root (local copy exists; repo is empty on GitHub)
+```bash
+cd config-hub/
+idf.py set-target esp32
+idf.py build
+idf.py -p /dev/ttyUSB0 flash
+# After flash: de-assert RTS/DTR so ESP32 doesn't stay in reset:
+python3 -c "import serial; ser=serial.Serial('/dev/ttyUSB0'); ser.setDTR(False); ser.setRTS(False); ser.close()"
+# Monitor (TTY required):
+idf.py -p /dev/ttyUSB0 monitor
+```
 
-## If building firmware
+### GPIO parsing
 
-Reference hardware: Heltec V3 (ESP32-S3 + SX1262 868 MHz). Target was Meshtastic v2.7.9
-fork. No build config or fork code exists on disk. `archive/phase1-summary.md` notes BLE/Ethernet/
-nRF52 platform code must be excluded from a Meshtastic build. Pinout assumptions vary by
-doc — verify against board before coding.
+- `transform_parse_gpio()` scans `>D` section for `GPIO<n>=<func>` (func 1=RX, 3=TX)
+- If not found, scans for Tasmota `+<TX>,<RX>,...` serial device format
+- `transform_inject_gpio()` updates `+` lines in-place (rebuilds with new TX/RX), falls back to `>D` replacement
+- GPIO defaults: RX=3, TX=1 (set in `main.c`, persisted via config_store)
+
+### Key design decisions
+
+- No meter DB: users paste SMI scripts from Hichi/Tasmota docs, Config Hub parses on the fly
+- Auto-mapping by unit (W→gP, kWh→gEI, V→gV1, %→bS), user overrides via dropdown
+- Transform runs on Config Hub (replaces HA Jinja sender)
+- Custom MQTT broker on raw LWIP sockets (QoS 0, no external broker dependency)
+- ESP-IDF (not Arduino) for better LWIP/HTTP server control
+
+### Current state (2026-06-09)
+
+**Working:**
+- Full end-to-end: Tasmota SENSOR (MQTT) → broker → `transform_apply_mapping` → `transform_build_envelope` → `mqtt_broker_publish` to `msh/{region}/2/json/mqtt/`
+- Broker log API: sanitizes binary bytes (0x80-0xFF, 0x00-0x1F replaced with `.`) in all fields (client, topic, payload)
+- SUBSCRIBE/UNSUBSCRIBE case fix: `case 0x80` / `case 0xA0` (masked type, not raw byte 0x82/0xA2)
+- SO_SNDTIMEO (1s) on client sockets prevents `write()` blocking
+- SetOption19=ON required on Tasmota (was OFF, disabling all telemetry publishing)
+- Tasmota at 192.168.178.194, TelePeriod=300, MqttHost=192.168.178.163
+- Config Hub at 192.168.178.163 (a0:b7:65:56:a6:d4)
+
+**Blocked / needs attention:**
+- Heltec V3 (Meshtastic node) not currently connected to broker — needs to be powered on and configured with MqttHost=192.168.178.163
+- `node_decimal` = 2147483647 (placeholder, not real Meshtastic node ID)
+- QoS 1/2 PUBLISH handling not implemented (2-byte packet ID not stripped from payload) — not yet triggered by any connected client
+
+## If building firmware (Meshtastic fork)
+
+Reference hardware: Heltec V3 (ESP32-S3 + SX1262 868 MHz). Target Meshtastic v2.7.9 fork. No build config or fork code exists. BLE/Ethernet/nRF52 platform code must be excluded. Pinout assumptions vary by doc — verify against board. OBIS code `36.7.0` is non-standard; correct for active power feed-in is `-1:16.7.0`; SML library `m-/SML` is invalid, use `mzi_/sml` or git URL.

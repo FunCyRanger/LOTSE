@@ -1,0 +1,12 @@
+idf_component_register(
+    SRCS
+        main.c
+        wifi_manager.c
+        web_server.c
+        mqtt_broker.c
+        tasmota_client.c
+        config_store.c
+        transform.c
+    INCLUDE_DIRS
+        "."
+)

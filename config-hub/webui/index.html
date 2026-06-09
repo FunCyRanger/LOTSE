@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LOTSE Config Hub</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f0f2f5;color:#333;padding:16px;max-width:900px;margin:0 auto}
+h1{font-size:20px;margin:8px 0 16px;color:#1a237e}
+h2{font-size:16px;margin:16px 0 8px;color:#283593}
+.card{background:#fff;border-radius:8px;padding:16px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.status{display:flex;gap:12px;flex-wrap:wrap}
+.status-item{padding:6px 12px;border-radius:16px;font-size:13px;font-weight:600}
+.status-ok{background:#e8f5e9;color:#2e7d32}
+.status-warn{background:#fff3e0;color:#e65100}
+.status-err{background:#fbe9e7;color:#c62828}
+label{display:block;font-size:13px;font-weight:600;margin:8px 0 4px;color:#555}
+input,textarea,select{width:100%;padding:8px 12px;border:1px solid #ccc;border-radius:6px;font-size:14px}
+textarea{font-family:'Courier New',monospace;font-size:12px;min-height:120px;resize:vertical}
+table{width:100%;border-collapse:collapse;margin:8px 0}
+th,td{padding:6px 8px;text-align:left;border-bottom:1px solid #e0e0e0;font-size:13px}
+th{background:#f5f5f5;font-weight:600}
+select{padding:4px 6px;font-size:12px}
+.btn{padding:10px 20px;border:none;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.btn-primary{background:#3949ab;color:#fff}
+.btn-primary:hover{background:#303f9f}
+.btn-primary:disabled{background:#9fa8da;cursor:not-allowed}
+.btn-secondary{background:#e0e0e0;color:#333}
+.btn-secondary:hover{background:#bdbdbd}
+.btn-success{background:#2e7d32;color:#fff}
+.btn-success:hover{background:#1b5e20}
+.btn-danger{background:#c62828;color:#fff}
+.toast{position:fixed;bottom:24px;right:24px;padding:12px 20px;border-radius:8px;color:#fff;font-weight:600;font-size:14px;z-index:100;animation:fadeIn .3s}
+.toast-success{background:#2e7d32}
+.toast-error{background:#c62828}
+.toast-info{background:#1565c0}
+@keyframes fadeIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.hidden{display:none!important}
+#spinner{display:inline-block;width:16px;height:16px;border:2px solid #9fa8da;border-top-color:#3949ab;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<h1>&#9889; LOTSE Config Hub</h1>
+
+<div id="wifi-setup" class="card hidden">
+  <h2>WiFi Setup</h2>
+  <p style="font-size:13px;color:#666;margin-bottom:8px">Select and connect to a WiFi network.</p>
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+    <button class="btn btn-secondary" onclick="scanWifi('wifi-setup')">&#128269; Scan networks</button>
+    <span id="wifi-setup-scan-msg" style="font-size:13px;color:#666"></span>
+  </div>
+  <label>Network</label>
+  <select id="wifi-setup-ssid" onchange="onSsidChange('wifi-setup')">
+    <option value="">&mdash; Select network &mdash;</option>
+  </select>
+  <div id="wifi-setup-manual" class="hidden" style="margin-top:8px">
+    <label>Manual SSID</label>
+    <input id="wifi-setup-ssid-manual" placeholder="e.g. FRITZ!Box 7590">
+  </div>
+  <label>Password</label>
+  <input id="wifi-setup-pass" type="password" placeholder="WiFi password">
+  <div style="display:flex;gap:8px;align-items:center;margin-top:12px">
+    <button class="btn btn-primary" onclick="saveWifi('wifi-setup')">Connect</button>
+    <span id="wifi-setup-msg" style="font-size:13px;color:#666"></span>
+  </div>
+</div>
+
+<div id="diff-modal" class="hidden" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.4);z-index:200;display:flex;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:12px;padding:24px;max-width:500px;width:90%;box-shadow:0 4px 24px rgba(0,0,0,.3)">
+    <h2 style="margin:0 0 4px">Differences found on Tasmota</h2>
+    <p style="font-size:13px;color:#666;margin-bottom:12px">Select what to send:</p>
+    <div id="diff-items" style="margin-bottom:16px"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-secondary" onclick="closeDiffModal()">Cancel</button>
+      <button id="diff-send-btn" class="btn btn-success" onclick="sendSelectedActions()">&#128228; Send selected</button>
+    </div>
+  </div>
+</div>
+
+<div id="main-ui" class="hidden">
+  <div class="card">
+    <h2>Status</h2>
+    <div class="status">
+      <span id="status-wifi" class="status-item">WiFi: ?</span>
+      <span id="status-mqtt" class="status-item">MQTT: ?</span>
+      <span id="status-tasmota" class="status-item">Tasmota: ?</span>
+      <span id="status-ip" class="status-item">IP: -</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>WiFi</h2>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+      <button class="btn btn-secondary" onclick="scanWifi('main')">&#128269; Scan networks</button>
+      <span id="wifi-main-scan-msg" style="font-size:13px;color:#666"></span>
+    </div>
+    <label>Network</label>
+    <select id="wifi-main-ssid" onchange="onSsidChange('main')">
+      <option value="">&mdash; Select network &mdash;</option>
+    </select>
+    <div id="wifi-main-manual" class="hidden" style="margin-top:8px">
+      <label>Manual SSID</label>
+      <input id="wifi-main-ssid-manual" placeholder="e.g. FRITZ!Box 7590">
+    </div>
+    <label>Password</label>
+    <input id="wifi-main-pass" type="password" placeholder="WiFi password">
+    <div style="display:flex;gap:8px;align-items:center;margin-top:12px">
+      <button class="btn btn-primary" onclick="saveWifi('main')">Connect</button>
+      <span id="wifi-main-msg" style="font-size:13px;color:#666"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Configure IR Reader</h2>
+
+    <label>IR reader Tasmota IP</label>
+    <input id="tasmota-ip" placeholder="e.g. 192.168.1.100">
+    <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+      <button class="btn btn-secondary" onclick="discoverTasmota()">&#128269; Discover</button>
+      <span id="discover-msg" style="font-size:13px;color:#666"></span>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
+      <button class="btn btn-secondary" onclick="verifyTasmota()">&#128269; Verify script on Tasmota</button>
+      <span id="verify-msg" style="font-size:13px;color:#666"></span>
+    </div>
+
+    <label style="margin-top:16px">Paste Tasmota script from Hichi / Tasmota docs</label>
+    <textarea id="script-input" placeholder="Paste the SMI script from the Hichi list or Tasmota docs..."></textarea>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn btn-primary" onclick="parseScript()">&#128269; Parse &amp; show variables</button>
+    </div>
+  </div>
+
+  <div id="gpio-card" class="card hidden">
+    <h2>GPIO pins for SML communication</h2>
+    <div style="display:flex;gap:16px;flex-wrap:wrap">
+      <div style="flex:1;min-width:120px">
+        <label>RX GPIO</label>
+        <input id="gpio-rx" type="number" value="3" min="0" max="39">
+      </div>
+      <div style="flex:1;min-width:120px">
+        <label>TX GPIO</label>
+        <input id="gpio-tx" type="number" value="1" min="0" max="39">
+      </div>
+    </div>
+    <div id="gpio-warning" class="hidden" style="margin-top:8px;padding:8px 12px;background:#fff3e0;border-radius:6px;font-size:13px;color:#e65100">
+      <span id="gpio-warning-msg"></span>
+    </div>
+    <label style="margin-top:8px;display:flex;align-items:center;gap:8px;font-size:13px;font-weight:400">
+      <input id="gpio-confirm" type="checkbox">
+      I have checked and confirmed the GPIO pins
+    </label>
+  </div>
+
+  <div id="mapping-card" class="card hidden">
+    <h2>Map variables to LOTSE keys</h2>
+    <p style="font-size:13px;color:#666;margin-bottom:8px">Mapping is auto-suggested based on unit. Adjust as needed.</p>
+    <table>
+      <thead><tr><th>Variable</th><th>Label</th><th>Unit</th><th>LOTSE Key</th></tr></thead>
+      <tbody id="mapping-table"></tbody>
+    </table>
+  </div>
+
+  <div id="send-card" class="card hidden">
+    <h2>Send configuration to Tasmota</h2>
+    <div id="send-summary" style="font-size:13px;padding:8px 12px;background:#e8f5e9;border-radius:6px;margin-bottom:8px;line-height:1.5"></div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button id="apply-btn" class="btn btn-success" onclick="applyConfig()">&#128228; Apply &amp; send to Tasmota</button>
+      <span id="apply-msg" style="font-size:13px"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>MQTT Broker</h2>
+    <table>
+      <tr><td>Status</td><td id="mqtt-status-txt">-</td></tr>
+      <tr><td>Connected clients</td><td id="mqtt-clients">0</td></tr>
+      <tr><td>Port</td><td>1883</td></tr>
+    </table>
+    <div style="margin-top:8px">
+      <a href="#" onclick="toggleBrokerLog();return false" id="broker-log-toggle" style="font-size:12px;color:#3949ab">&#9654; Show broker log</a>
+    </div>
+    <div id="broker-log-card" class="hidden" style="margin-top:8px">
+      <pre id="broker-log" style="max-height:400px;overflow-y:auto;font-size:11px;background:#1e1e1e;color:#d4d4d4;padding:8px;border-radius:4px;white-space:pre-wrap;word-break:break-all">Waiting for data...</pre>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>LOTSE Configuration</h2>
+    <label>Region</label>
+    <select id="region">
+      <option value="EU_868">EU_868</option>
+      <option value="US_915">US_915</option>
+      <option value="CN_470">CN_470</option>
+    </select>
+    <label>Own node decimal</label>
+    <input id="node-decimal" type="number" placeholder="e.g. 2892010904">
+    <label>Send interval (seconds)</label>
+    <input id="send-interval" type="number" value="300" min="60" max="3600">
+    <span style="font-size:12px;color:#666">How often data is sent via LoRa (60–3600)</span>
+    <label>Heltec V3 node hash</label>
+    <div style="display:flex;gap:8px;align-items:center">
+      <input id="node-hash" placeholder="e.g. !acaad598" style="flex:1">
+      <button class="btn btn-secondary" onclick="detectNodeHash()" title="Detect from MQTT traffic">&#128269; Detect</button>
+    </div>
+    <span style="font-size:12px;color:#666">The <code>!xxxxxxx</code> suffix from <code>msh/.../json/mqtt/!xxxxxxx</code> topics</span>
+    <button class="btn btn-primary" onclick="saveConfig()" style="margin-top:12px">Save</button>
+  </div>
+
+  <div class="card">
+    <h2>Factory Reset</h2>
+    <p style="font-size:13px;color:#666;margin-bottom:8px">Reset all settings and return to AP mode.</p>
+    <button class="btn btn-danger" onclick="factoryReset()">&#9888;&#65039; Factory reset</button>
+    <span id="reset-msg" style="font-size:13px;margin-left:8px"></span>
+  </div>
+</div>
+
+<script>
+const LOTSE_KEYS = [
+  "gP","gIP","gEP","gP1","gP2","gP3",
+  "gV1","gV2","gV3","gEI","gEO",
+  "sP","sE","bP","bS","bEI","bEO",
+  "wP","wE","wS"
+];
+
+function $(id){return document.getElementById(id)}
+
+function escHtml(s){
+  const d=document.createElement('div');
+  d.textContent=s;
+  return d.innerHTML;
+}
+
+function toast(msg, type){
+  const t=document.createElement('div');
+  t.className='toast toast-'+type;
+  t.textContent=msg;
+  document.body.appendChild(t);
+  setTimeout(()=>t.remove(),4000);
+}
+
+let currentMappings=[];
+let scriptGpioRx=null;
+let scriptGpioTx=null;
+let diffData=null;
+
+async function api(path, opts){
+  try{
+    const r=await fetch(path, opts||{});
+    if(!r.ok) throw new Error(r.statusText);
+    return await r.json();
+  }catch(e){
+    toast('API error: '+e.message, 'error');
+    throw e;
+  }
+}
+
+function ssidId(prefix){return prefix+'-ssid'}
+function manualId(prefix){return prefix+'-ssid-manual'}
+function passId(prefix){return prefix+'-pass'}
+function manualDivId(prefix){return prefix+'-manual'}
+function scanMsgId(prefix){return prefix+'-scan-msg'}
+function msgId(prefix){return prefix+'-msg'}
+
+function onSsidChange(prefix){
+  const sel=$(ssidId(prefix));
+  const div=$(manualDivId(prefix));
+  if(sel.value==='__manual__'){
+    div.classList.remove('hidden');
+  }else{
+    div.classList.add('hidden');
+  }
+}
+
+async function scanWifi(prefix){
+  const msgSpan=$(scanMsgId(prefix));
+  msgSpan.textContent='Scanning...';
+  try{
+    await api('/api/wifi/scan');
+    await new Promise(r=>setTimeout(r,1500));
+    const r=await api('/api/wifi/networks');
+    const sel=$(ssidId(prefix));
+    sel.innerHTML='<option value="">&mdash; Select network &mdash;</option>';
+    if(r.networks){
+      r.networks.forEach(n=>{
+        if(!n.ssid) return;
+        const opt=document.createElement('option');
+        opt.value=n.ssid;
+        const icon=n.auth===0?'&#128274;':'&#128274;';
+        opt.textContent=icon+' '+n.ssid+' ('+n.rssi+' dBm)';
+        sel.appendChild(opt);
+      });
+    }
+    const manual=document.createElement('option');
+    manual.value='__manual__';
+    manual.textContent='&#9998; Other network (manual)';
+    sel.appendChild(manual);
+    msgSpan.textContent=r.count+' networks found';
+  }catch(e){
+    msgSpan.textContent='Scan failed';
+  }
+}
+
+async function saveWifi(prefix){
+  const sel=$(ssidId(prefix));
+  let ssid=sel.value;
+  if(ssid==='__manual__'||ssid===''){
+    ssid=$(manualId(prefix)).value.trim();
+  }
+  const pass=$(passId(prefix)).value.trim();
+  const msgSpan=$(msgId(prefix));
+  if(!ssid) return toast('Enter SSID','error');
+
+  msgSpan.innerHTML='<span id="spinner"></span>Saving...';
+  try{
+    await api('/api/config',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({wifi_ssid:ssid,wifi_pass:pass,configured:true})
+    });
+    msgSpan.textContent='Connecting...';
+    await api('/api/wifi/connect',{method:'POST'});
+    toast('WiFi settings saved. Connecting...','info');
+    setTimeout(()=>init(),3000);
+  }catch(e){
+    msgSpan.textContent='Failed';
+  }
+}
+
+async function refreshStatus(){
+  try{
+    const s=await api('/api/status');
+    const wifi=$('status-wifi');
+    wifi.textContent='WiFi: '+s.wifi_state;
+    wifi.className='status-item '+(s.wifi_state==='STATION'?'status-ok':s.wifi_state==='AP'?'status-warn':'status-err');
+    $('status-ip').textContent='IP: '+(s.ip||'-');
+    const mqtt=$('status-mqtt');
+    mqtt.textContent='MQTT: '+s.mqtt_clients+' clients';
+    mqtt.className='status-item '+(s.mqtt_clients>0?'status-ok':'status-warn');
+    const tas=$('status-tasmota');
+    if(s.tasmota_connected){
+      tas.textContent='Tasmota: connected';
+      tas.className='status-item status-ok';
+    }else{
+      tas.textContent='Tasmota: ?';
+      tas.className='status-item status-warn';
+    }
+    $('mqtt-status-txt').textContent=s.mqtt_clients>0?'Active':'Waiting for clients...';
+    $('mqtt-clients').textContent=s.mqtt_clients;
+  }catch(e){}
+}
+
+async function init(){
+  try{
+    const cfg=await api('/api/config');
+    if(cfg.configured){
+      $('main-ui').classList.remove('hidden');
+      $('wifi-setup').classList.add('hidden');
+      if(cfg.wifi_ssid){
+        const sel=$('wifi-main-ssid');
+        let found=false;
+        for(let i=0;i<sel.options.length;i++){
+          if(sel.options[i].value===cfg.wifi_ssid){
+            sel.value=cfg.wifi_ssid;
+            found=true;
+            break;
+          }
+        }
+        if(!found){
+          $('wifi-main-ssid-manual').value=cfg.wifi_ssid;
+        }
+      }
+      if(cfg.tasmota_ip) $('tasmota-ip').value=cfg.tasmota_ip;
+      if(cfg.region) $('region').value=cfg.region;
+      if(cfg.node_decimal) $('node-decimal').value=cfg.node_decimal;
+      if(cfg.send_interval) $('send-interval').value=cfg.send_interval;
+      if(cfg.node_hash) $('node-hash').value=cfg.node_hash;
+      if(cfg.gpio_rx>0) $('gpio-rx').value=cfg.gpio_rx;
+      if(cfg.gpio_tx>0) $('gpio-tx').value=cfg.gpio_tx;
+      if(cfg.script) $('script-input').value=cfg.script;
+      if(cfg.mappings&&cfg.mappings.length){
+        currentMappings=cfg.mappings;
+        renderMappings();
+      }
+      if (cfg.script) {
+        try{
+          const r=await api('/api/script/parse',{
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({script:cfg.script})
+          });
+          scriptGpioRx=r.gpio_rx||0;
+          scriptGpioTx=r.gpio_tx||0;
+        }catch(e){
+          scriptGpioRx=0;
+          scriptGpioTx=0;
+        }
+        $('gpio-card').classList.remove('hidden');
+        $('mapping-card').classList.remove('hidden');
+        $('send-card').classList.remove('hidden');
+        updateGpioCard();
+        updateSendSummary();
+      }
+    }else{
+      $('wifi-setup').classList.remove('hidden');
+      $('main-ui').classList.add('hidden');
+    }
+    refreshStatus();
+    setInterval(refreshStatus,5000);
+  }catch(e){}
+}
+
+let brokerLogVisible=false;
+let brokerLogInterval=null;
+
+function toggleBrokerLog(){
+  const card=$('broker-log-card');
+  const toggle=$('broker-log-toggle');
+  brokerLogVisible=!brokerLogVisible;
+  if(brokerLogVisible){
+    card.classList.remove('hidden');
+    toggle.innerHTML='&#9660; Hide broker log';
+    refreshBrokerLog();
+    brokerLogInterval=setInterval(refreshBrokerLog,2000);
+  }else{
+    card.classList.add('hidden');
+    toggle.innerHTML='&#9654; Show broker log';
+    if(brokerLogInterval){clearInterval(brokerLogInterval);brokerLogInterval=null;}
+  }
+}
+
+async function refreshBrokerLog(){
+  try{
+    const entries=await api('/api/broker/log');
+    const el=$('broker-log');
+    if(!entries||entries.length===0){
+      el.textContent='No MQTT traffic yet.';
+      return;
+    }
+    const lines=entries.map(e=>{
+      return e.time.toFixed(1)+'s ['+e.client+'] '+e.topic+' | '+e.payload;
+    });
+    el.textContent=lines.join('\n');
+    el.scrollTop = el.scrollHeight;
+  }catch(e){}
+}
+
+async function parseScript(){
+  const script=$('script-input').value.trim();
+  if(!script) return toast('Please paste a script','error');
+
+  $('mapping-card').classList.add('hidden');
+  $('send-card').classList.add('hidden');
+  const r=await api('/api/script/parse',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({script})
+  });
+
+  currentMappings=r.mappings||[];
+  renderMappings();
+  $('mapping-card').classList.remove('hidden');
+
+  scriptGpioRx=r.gpio_rx;
+  scriptGpioTx=r.gpio_tx;
+  updateGpioCard();
+  updateSendSummary();
+  toast(r.mappings.length+' variables found, GPIO checked','success');
+}
+
+function updateGpioCard(){
+  const rx=$('gpio-rx').value;
+  const tx=$('gpio-tx').value;
+  const warn=$('gpio-warning');
+  const msg=$('gpio-warning-msg');
+  const confirm=$('gpio-confirm');
+  let hasWarning=false;
+
+  if(scriptGpioRx>0||scriptGpioTx>0){
+    const parts=[];
+    if(scriptGpioRx>0) parts.push('RX=GPIO'+scriptGpioRx);
+    if(scriptGpioTx>0) parts.push('TX=GPIO'+scriptGpioTx);
+    if(rx!=scriptGpioRx||tx!=scriptGpioTx){
+      msg.innerHTML='&#9888;&#65039; Found in script: '+parts.join(', ')+'<br>Defaults differ. Please check GPIO pins.';
+      warn.classList.remove('hidden');
+      hasWarning=true;
+    }else{
+      msg.innerHTML='&#9989; Found in script: '+parts.join(', ')+' &mdash; matches';
+      warn.classList.remove('hidden');
+    }
+  }else{
+    msg.innerHTML='&#8505;&#65039; No GPIO info in script. Defaults will be used.';
+    warn.classList.remove('hidden');
+  }
+
+  confirm.checked=false;
+  $('gpio-card').classList.remove('hidden');
+  updateApplyButton();
+  $('gpio-rx').oninput=function(){updateApplyButton();updateSendSummary();};
+  $('gpio-tx').oninput=function(){updateApplyButton();updateSendSummary();};
+  confirm.onchange=updateApplyButton;
+}
+
+function updateSendSummary(){
+  const ip=$('tasmota-ip').value||'(not set)';
+  const scriptLen=$('script-input').value.length;
+  const rx=$('gpio-rx').value;
+  const tx=$('gpio-tx').value;
+  const el=$('send-summary');
+  el.innerHTML='<b>Will send to Tasmota at '+escHtml(ip)+':</b><br>'+
+    'Script: '+scriptLen+' chars &middot; GPIO: RX='+rx+', TX='+tx+' &middot; Reset Template+Module &middot; Configure MQTT &middot; Reboot';
+}
+
+function updateApplyButton(){
+  const btn=$('apply-btn');
+  if(!btn) return;
+  const confirm=$('gpio-confirm');
+  const rx=$('gpio-rx').value;
+  const tx=$('gpio-tx').value;
+  const needConfirm=(scriptGpioRx>0||scriptGpioTx>0)&&(rx!=scriptGpioRx||tx!=scriptGpioTx);
+  btn.disabled=needConfirm&&!confirm.checked;
+  const gc=$('gpio-card');
+  if(gc&&!gc.classList.contains('hidden')){
+    if(!needConfirm||confirm.checked){
+      $('send-card').classList.remove('hidden');
+    }else{
+      $('send-card').classList.add('hidden');
+    }
+  }
+}
+
+function renderMappings(){
+  const tbody=$('mapping-table');
+  tbody.innerHTML='';
+  currentMappings.forEach((m,i)=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`
+      <td>${m.var||m.var_name}</td>
+      <td>${m.label||''}</td>
+      <td>${m.unit||''}</td>
+      <td>
+        <select data-idx="${i}">
+          <option value="">&mdash; don't send &mdash;</option>
+          ${LOTSE_KEYS.map(k=>`<option value="${k}"${(m.lotse_key===k)?' selected':''}>${k}</option>`).join('')}
+        </select>
+      </td>`;
+    tbody.appendChild(tr);
+  });
+  tbody.querySelectorAll('select').forEach(sel=>{
+    sel.addEventListener('change',()=>{
+      const idx=parseInt(sel.dataset.idx);
+      currentMappings[idx].lotse_key=sel.value;
+    });
+  });
+}
+
+async function applyConfig(){
+  const tasmotaIp=$('tasmota-ip').value.trim();
+  if(!tasmotaIp) return toast('Please enter Tasmota IP','error');
+
+  $('apply-msg').innerHTML='<span id="spinner"></span>Checking Tasmota...';
+  $('apply-msg').style.color='#666';
+
+  try{
+    const diff=await api('/api/tasmota/diff');
+    if(!diff.reachable){
+      // Tasmota unreachable — send full config anyway (may be first setup)
+      diffData=null;
+      reallySend(['script','mqtt']);
+      return;
+    }
+    const needsUpdate=diff.differences.filter(d=>d.needs_update);
+    if(needsUpdate.length===0){
+      $('apply-msg').innerHTML='&#9989; Tasmota already up to date';
+      $('apply-msg').style.color='#2e7d32';
+      toast('No differences — Tasmota up to date','success');
+      return;
+    }
+    // Show modal with differences
+    diffData=diff;
+    renderDiffModal();
+    $('diff-modal').classList.remove('hidden');
+    $('apply-msg').textContent='';
+  }catch(e){
+    // Fallback: send full config
+    diffData=null;
+    reallySend(['script','mqtt']);
+  }
+}
+
+function renderDiffModal(){
+  const container=$('diff-items');
+  container.innerHTML='';
+  diffData.differences.forEach(d=>{
+    const checked=d.needs_update?'checked':'';
+    const row=document.createElement('div');
+    row.style.cssText='padding:8px 0;border-bottom:1px solid #eee;font-size:13px';
+    row.innerHTML=
+      '<label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-weight:400">'+
+        '<input type="checkbox" class="diff-cb" data-item="'+escHtml(d.item)+'" '+checked+
+          (d.needs_update?'':' disabled')+'>'+
+        '<div>'+
+          '<b>'+escHtml(d.label)+'</b><br>'+
+          '<span style="color:#c62828">&#10060; '+escHtml(d.current)+'</span> &rarr; '+
+          '<span style="color:#2e7d32">'+escHtml(d.expected)+'</span>'+
+        '</div>'+
+      '</label>';
+    container.appendChild(row);
+  });
+}
+
+function closeDiffModal(){
+  $('diff-modal').classList.add('hidden');
+}
+
+function sendSelectedActions(){
+  const cbs=document.querySelectorAll('#diff-items .diff-cb:checked');
+  const actions=Array.from(cbs).map(cb=>cb.dataset.item);
+  closeDiffModal();
+  reallySend(actions);
+}
+
+async function reallySend(actions){
+  const tasmotaIp=$('tasmota-ip').value.trim();
+  $('apply-msg').innerHTML='<span id="spinner"></span>Sending...';
+  $('apply-msg').style.color='#666';
+  try{
+    const r=await api('/api/tasmota/configure',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        tasmota_ip:tasmotaIp,
+        script:$('script-input').value,
+        mappings:currentMappings,
+        region:$('region').value,
+        node_decimal:parseInt($('node-decimal').value)||0,
+        gpio_rx:parseInt($('gpio-rx').value)||3,
+        gpio_tx:parseInt($('gpio-tx').value)||1,
+        actions:actions
+      })
+    });
+    let statusColor='#2e7d32';
+    let toastType='success';
+    if(r.verified&&r.match){
+      $('apply-msg').innerHTML='&#9989; '+r.message;
+    }else if(r.verified&&!r.match){
+      $('apply-msg').innerHTML='&#9888;&#65039; '+r.message;
+      statusColor='#e65100';
+      toastType='error';
+    }else{
+      $('apply-msg').innerHTML='&#9888;&#65039; '+r.message;
+      statusColor='#c62828';
+      toastType='error';
+    }
+    $('apply-msg').style.color=statusColor;
+    toast(r.message, toastType);
+    refreshStatus();
+  }catch(e){
+    $('apply-msg').textContent='Failed';
+    $('apply-msg').style.color='#c62828';
+  }
+}
+
+async function discoverTasmota(){
+  $('discover-msg').textContent='Searching...';
+  try{
+    const r=await api('/api/tasmota/discover',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ip:$('tasmota-ip').value.trim()})
+    });
+    if(r.success){
+      $('discover-msg').textContent='&#9989; Tasmota found';
+      toast('Tasmota reachable','success');
+    }else{
+      $('discover-msg').textContent='&#10060; No Tasmota at this IP';
+      toast('Tasmota not reachable','error');
+    }
+  }catch(e){
+    $('discover-msg').textContent='&#10060; Error';
+  }
+}
+
+async function verifyTasmota(){
+  const msg=$('verify-msg');
+  msg.innerHTML='<span id="spinner"></span> Reading...';
+  try{
+    const r=await api('/api/tasmota/verify');
+    if(!r.reachable){
+      msg.innerHTML='&#10060; Tasmota unreachable';
+      return;
+    }
+    if(r.match){
+      msg.innerHTML='&#9989; Script is loaded and running';
+    }else if(r.script_running === false){
+      msg.innerHTML='&#9888;&#65039; No script loaded on Tasmota';
+    }else{
+      msg.innerHTML='&#9888;&#65039; Script differs from stored config';
+    }
+    toast('Tasmota '+(r.reachable?'reachable':'unreachable'), r.reachable?'info':'error');
+  }catch(e){
+    msg.textContent='&#10060; Error';
+  }
+}
+
+async function detectNodeHash(){
+  const btn=$('node-hash').parentNode.querySelector('button');
+  const orig=btn.innerHTML;
+  btn.innerHTML='Detecting...';
+  btn.disabled=true;
+  try{
+    const r=await api('/api/mesh/discover');
+    if(r.nodes&&r.nodes.length>0){
+      $('node-hash').value=r.nodes[0].hash;
+      toast('Detected hash: '+r.nodes[0].hash,'success');
+    }else{
+      toast('No Meshtastic nodes found in MQTT traffic','error');
+    }
+  }catch(e){
+    toast('Detection failed','error');
+  }
+  btn.innerHTML=orig;
+  btn.disabled=false;
+}
+
+async function saveConfig(){
+  await api('/api/config',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      tasmota_ip:$('tasmota-ip').value,
+      region:$('region').value,
+      node_decimal:parseInt($('node-decimal').value)||0,
+      node_hash:$('node-hash').value,
+      send_interval:parseInt($('send-interval').value)||300,
+      gpio_rx:parseInt($('gpio-rx').value)||3,
+      gpio_tx:parseInt($('gpio-tx').value)||1,
+      script:$('script-input').value,
+      mappings:currentMappings
+    })
+  });
+  toast('Saved','success');
+}
+
+async function factoryReset(){
+  if(!confirm('Really reset to factory defaults? The device will reboot into AP mode.')) return;
+  const msg=$('reset-msg');
+  msg.textContent='Resetting...';
+  try{
+    await api('/api/config',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({configured:false,wifi_ssid:'',wifi_pass:'',tasmota_ip:'',region:'',node_decimal:0,send_interval:300,script:'',mappings:[]})
+    });
+    toast('Reset! Please restart the device.','success');
+    msg.textContent='OK &mdash; power cycle the device (or press RST)';
+  }catch(e){
+    msg.textContent='Failed';
+  }
+}
+
+init();
+</script>
+</body>
+</html>
