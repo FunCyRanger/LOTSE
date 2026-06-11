@@ -124,7 +124,13 @@ static esp_err_t handle_get_config(httpd_req_t *req)
     cJSON_AddNumberToObject(root, "gpio_rx", g_cfg->gpio_rx);
     cJSON_AddNumberToObject(root, "gpio_tx", g_cfg->gpio_tx);
     cJSON_AddNumberToObject(root, "send_interval", g_cfg->send_interval);
-    cJSON_AddStringToObject(root, "node_hash", g_cfg->node_hash);
+    if (!g_cfg->node_hash[0] && g_cfg->node_decimal > 0) {
+        char buf[16];
+        snprintf(buf, sizeof(buf), "!%x", (unsigned int)g_cfg->node_decimal);
+        cJSON_AddStringToObject(root, "node_hash", buf);
+    } else {
+        cJSON_AddStringToObject(root, "node_hash", g_cfg->node_hash);
+    }
     cJSON_AddStringToObject(root, "script", g_cfg->script);
 
     cJSON *maps = cJSON_AddArrayToObject(root, "mappings");
@@ -172,6 +178,14 @@ static esp_err_t handle_post_config(httpd_req_t *req)
     if (g_cfg->send_interval < 60) g_cfg->send_interval = 300;
     v = cJSON_GetObjectItem(root, "node_hash");
     if (v && v->valuestring) strncpy(g_cfg->node_hash, v->valuestring, sizeof(g_cfg->node_hash)-1);
+    v = cJSON_GetObjectItem(root, "node_hash");
+    if (v && v->valuestring) {
+        strncpy(g_cfg->node_hash, v->valuestring, sizeof(g_cfg->node_hash)-1);
+    } else if (g_cfg->node_decimal > 0) {
+        // Derive hash from decimal: "!<hex>"
+        snprintf(g_cfg->node_hash, sizeof(g_cfg->node_hash), "!%x",
+                 (unsigned int)g_cfg->node_decimal);
+    }
     v = cJSON_GetObjectItem(root, "script");
     if (v && v->valuestring) strncpy(g_cfg->script, v->valuestring, sizeof(g_cfg->script)-1);
 

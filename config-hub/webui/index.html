@@ -161,6 +161,10 @@ select{padding:4px 6px;font-size:12px}
       <thead><tr><th>Variable</th><th>Label</th><th>Unit</th><th>LOTSE Key</th></tr></thead>
       <tbody id="mapping-table"></tbody>
     </table>
+    <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+      <button class="btn btn-primary" onclick="saveMappings()">Save mappings</button>
+      <span id="mapping-save-msg" style="font-size:13px;color:#666"></span>
+    </div>
   </div>
 
   <div id="send-card" class="card hidden">
@@ -197,16 +201,11 @@ select{padding:4px 6px;font-size:12px}
       <option value="CN_470">CN_470</option>
     </select>
     <label>Own node decimal</label>
-    <input id="node-decimal" type="number" placeholder="e.g. 2892010904">
+    <input id="node-decimal" type="number" placeholder="e.g. 2892010904" oninput="updateNodeHash()">
+    <div id="node-hash-display" style="font-size:13px;color:#666;margin:4px 0 0 4px"></div>
     <label>Send interval (seconds)</label>
     <input id="send-interval" type="number" value="300" min="60" max="3600">
     <span style="font-size:12px;color:#666">How often data is sent via LoRa (60–3600)</span>
-    <label>Heltec V3 node hash</label>
-    <div style="display:flex;gap:8px;align-items:center">
-      <input id="node-hash" placeholder="e.g. !acaad598" style="flex:1">
-      <button class="btn btn-secondary" onclick="detectNodeHash()" title="Detect from MQTT traffic">&#128269; Detect</button>
-    </div>
-    <span style="font-size:12px;color:#666">The <code>!xxxxxxx</code> suffix from <code>msh/.../json/mqtt/!xxxxxxx</code> topics</span>
     <button class="btn btn-primary" onclick="saveConfig()" style="margin-top:12px">Save</button>
   </div>
 
@@ -225,6 +224,15 @@ const LOTSE_KEYS = [
   "sP","sE","bP","bS","bEI","bEO",
   "wP","wE","wS"
 ];
+const LOTSE_DESC = {
+  gP:"Grid Power", gIP:"Grid Import", gEP:"Grid Export",
+  gP1:"Phase 1 Power", gP2:"Phase 2 Power", gP3:"Phase 3 Power",
+  gV1:"Phase 1 Voltage", gV2:"Phase 2 Voltage", gV3:"Phase 3 Voltage",
+  gEI:"Grid Energy Imported", gEO:"Grid Energy Exported",
+  sP:"Solar Power", sE:"Solar Energy",
+  bP:"Battery Power", bS:"Battery SoC", bEI:"Battery Energy In", bEO:"Battery Energy Out",
+  wP:"Wallbox Power", wE:"Wallbox Energy", wS:"Wallbox SoC"
+};
 
 function $(id){return document.getElementById(id)}
 
@@ -409,8 +417,8 @@ async function init(){
       if(cfg.tasmota_ip) $('tasmota-ip').value=cfg.tasmota_ip;
       if(cfg.region) $('region').value=cfg.region;
       if(cfg.node_decimal) $('node-decimal').value=cfg.node_decimal;
+      updateNodeHash();
       if(cfg.send_interval) $('send-interval').value=cfg.send_interval;
-      if(cfg.node_hash) $('node-hash').value=cfg.node_hash;
       if(cfg.gpio_rx>0) $('gpio-rx').value=cfg.gpio_rx;
       if(cfg.gpio_tx>0) $('gpio-tx').value=cfg.gpio_tx;
       if(cfg.script) $('script-input').value=cfg.script;
@@ -597,7 +605,7 @@ function renderMappings(){
       <td>
         <select data-idx="${i}">
           <option value="">&mdash; don't send &mdash;</option>
-          ${LOTSE_KEYS.map(k=>`<option value="${k}"${(m.lotse_key===k)?' selected':''}>${k}</option>`).join('')}
+          ${LOTSE_KEYS.map(k=>`<option value="${k}"${(m.lotse_key===k)?' selected':''}>${k} — ${LOTSE_DESC[k]}</option>`).join('')}
         </select>
       </td>`;
     tbody.appendChild(tr);
@@ -775,24 +783,18 @@ async function verifyTasmota(){
   }
 }
 
-async function detectNodeHash(){
-  const btn=$('node-hash').parentNode.querySelector('button');
-  const orig=btn.innerHTML;
-  btn.innerHTML='Detecting...';
-  btn.disabled=true;
-  try{
-    const r=await api('/api/mesh/discover');
-    if(r.nodes&&r.nodes.length>0){
-      $('node-hash').value=r.nodes[0].hash;
-      toast('Detected hash: '+r.nodes[0].hash,'success');
-    }else{
-      toast('No Meshtastic nodes found in MQTT traffic','error');
-    }
-  }catch(e){
-    toast('Detection failed','error');
+
+
+function updateNodeHash(){
+  const el=$('node-decimal');
+  const display=$('node-hash-display');
+  const v=parseInt(el.value)||0;
+  if(v>0){
+    const hex=v.toString(16).toLowerCase();
+    display.textContent='Node hash: !'+hex;
+  }else{
+    display.textContent='';
   }
-  btn.innerHTML=orig;
-  btn.disabled=false;
 }
 
 async function saveConfig(){
@@ -803,7 +805,6 @@ async function saveConfig(){
       tasmota_ip:$('tasmota-ip').value,
       region:$('region').value,
       node_decimal:parseInt($('node-decimal').value)||0,
-      node_hash:$('node-hash').value,
       send_interval:parseInt($('send-interval').value)||300,
       gpio_rx:parseInt($('gpio-rx').value)||3,
       gpio_tx:parseInt($('gpio-tx').value)||1,
@@ -812,6 +813,23 @@ async function saveConfig(){
     })
   });
   toast('Saved','success');
+}
+
+async function saveMappings(){
+  const msg=$('mapping-save-msg');
+  msg.innerHTML='<span id="spinner"></span>';
+  try{
+    await api('/api/config',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({mappings:currentMappings})
+    });
+    msg.textContent='Saved';
+    setTimeout(()=>msg.textContent='',3000);
+    toast('Mappings saved','success');
+  }catch(e){
+    msg.textContent='Failed';
+  }
 }
 
 async function factoryReset(){
