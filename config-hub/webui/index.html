@@ -281,6 +281,23 @@ function onSsidChange(prefix){
   }
 }
 
+function ensureCurrentSsid(prefix){
+  const sel=$(ssidId(prefix));
+  const saved=$(manualId(prefix)).value.trim();
+  if(!saved) return;
+  let found=false;
+  for(let i=0;i<sel.options.length;i++){
+    if(sel.options[i].value===saved){found=true;break;}
+  }
+  if(!found){
+    const opt=document.createElement('option');
+    opt.value=saved;
+    opt.textContent='⚡ '+saved+' (current)';
+    sel.insertBefore(opt, sel.options[0]);
+  }
+  sel.value=saved;
+}
+
 async function scanWifi(prefix){
   const msgSpan=$(scanMsgId(prefix));
   console.log('scanWifi:', prefix, 'msgSpan:', msgSpan);
@@ -323,6 +340,7 @@ async function scanWifi(prefix){
     sel.appendChild(manual);
     const c=r&&r.count?r.count:0;
     msgSpan.textContent=c+' networks found';
+    ensureCurrentSsid(prefix);
   } catch(e) {
     console.error('scanWifi error:', e);
     msgSpan.textContent='Scan failed';
@@ -385,18 +403,8 @@ async function init(){
       $('main-ui').classList.remove('hidden');
       $('wifi-setup').classList.add('hidden');
       if(cfg.wifi_ssid){
-        const sel=$('wifi-main-ssid');
-        let found=false;
-        for(let i=0;i<sel.options.length;i++){
-          if(sel.options[i].value===cfg.wifi_ssid){
-            sel.value=cfg.wifi_ssid;
-            found=true;
-            break;
-          }
-        }
-        if(!found){
-          $('wifi-main-ssid-manual').value=cfg.wifi_ssid;
-        }
+        $('wifi-main-ssid-manual').value=cfg.wifi_ssid;
+        ensureCurrentSsid('main');
       }
       if(cfg.tasmota_ip) $('tasmota-ip').value=cfg.tasmota_ip;
       if(cfg.region) $('region').value=cfg.region;
