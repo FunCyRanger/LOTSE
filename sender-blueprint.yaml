@@ -244,7 +244,7 @@ action:
         {% if wP %}{% set uo=state_attr(wP,'unit_of_measurement') %}{% if states(wP)not in bad and uo not in energy_units %}{% set v=(states(wP)|float(0)*kW.get(uo,1))|round(2) %}{% set items=items+[("wP",[[v,500]|min,-500]|max)] %}{% endif %}{% endif %}
         {% if wE %}{% set uo=state_attr(wE,'unit_of_measurement') %}{% if states(wE)not in bad and uo not in ('W','kW','MW') %}{% set v=(states(wE)|float(0)*kWh.get(uo,1))|round(2) %}{% set items=items+[("wE",[v,0]|max)] %}{% endif %}{% endif %}
         {% if wS and states(wS) not in bad %}{% set v=states(wS)|int(0) %}{% set items=items+[("wS",[[v,100]|min,0]|max)] %}{% endif %}
-        {{ dict(items) | to_json | to_json }}
+        {{ dict(items) | to_json }}
   - variables:
       outer:
         from: "{{ node | int(0) }}"
