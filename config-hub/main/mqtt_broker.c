@@ -1,6 +1,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <time.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
@@ -15,13 +16,14 @@ static const char *TAG = "mqtt_broker";
 
 #define MAX_CLIENTS  MAX_MQTT_CLIENTS
 #define BUF_SIZE     2048
-#define LOG_ENTRIES  50
+#define LOG_ENTRIES  200
 
 typedef struct {
     char client_id[64];
     char topic[128];
     char payload[65];
     int64_t time_us;
+    char time_str[20];
 } log_entry_t;
 
 static log_entry_t s_log[LOG_ENTRIES];
@@ -39,6 +41,8 @@ typedef struct mqtt_client {
     char client_id[64];
     mqtt_sub_t *subscriptions;
     bool connected;
+    uint8_t buf[BUF_SIZE];
+    int buf_len;
 } mqtt_client_t;
 
 static mqtt_client_t s_clients[MAX_CLIENTS];
@@ -165,6 +169,19 @@ static void handle_publish(mqtt_client_t *client, const uint8_t *buf, int len)
     int payload_len = len - 2 - topic_len;
     const uint8_t *payload = buf + 2 + topic_len;
 
+    static int s_publish_count = 0;
+    static int64_t s_last_publish_us = 0;
+    s_publish_count++;
+    int64_t now = esp_timer_get_time();
+    if (s_last_publish_us > 0 && (now - s_last_publish_us) > 30000000) {
+        ESP_LOGW(TAG, "WATCHDOG: %lld ms since last publish (count=%d)",
+                 (now - s_last_publish_us) / 1000, s_publish_count);
+    }
+    s_last_publish_us = now;
+    if (s_publish_count % 10 == 0) {
+        ESP_LOGI(TAG, "PUBLISH #%d: topic=%s, client=%s", s_publish_count, topic, client->client_id);
+    }
+
     ESP_LOGI(TAG, "PUBLISH %s from %s (payload_len=%d)", topic, client->client_id, payload_len);
     if (payload_len > 0) {
         char preview[65];
@@ -183,6 +200,13 @@ static void handle_publish(mqtt_client_t *client, const uint8_t *buf, int len)
         memcpy(e->payload, payload, plen);
         e->payload[plen] = 0;
         e->time_us = esp_timer_get_time();
+        time_t now = time(NULL);
+        struct tm *tm_info = localtime(&now);
+        if (tm_info && tm_info->tm_year >= (2024 - 1900)) {
+            strftime(e->time_str, sizeof(e->time_str), "%H:%M:%S", tm_info);
+        } else {
+            e->time_str[0] = '\0';
+        }
         s_log_head = (s_log_head + 1) % LOG_ENTRIES;
         if (s_log_count < LOG_ENTRIES) s_log_count++;
     }
@@ -222,7 +246,7 @@ static void handle_subscribe(mqtt_client_t *client, const uint8_t *buf, int len)
             strncpy(sub->topic, topic, sizeof(sub->topic)-1);
             sub->next = client->subscriptions;
             client->subscriptions = sub;
-            ESP_LOGD(TAG, "SUB %s (qos=%d)", topic, qos);
+            ESP_LOGI(TAG, "SUB %s (qos=%d)", topic, qos);
         }
     }
 
@@ -273,7 +297,10 @@ static void handle_packet(mqtt_client_t *client, const uint8_t *buf, int len)
 
         client->connected = true;
         uint8_t connack[4] = {0x20, 0x02, 0x00, 0x00};
-        write(client->fd, connack, 4);
+        int wlen = write(client->fd, connack, 4);
+        if (wlen != 4) {
+            ESP_LOGW(TAG, "CONNACK write failed for %s (ret=%d, errno=%d)", client->client_id, wlen, errno);
+        }
         ESP_LOGI(TAG, "CONNECT %s", client->client_id);
         if (s_connect_cb) s_connect_cb(client->client_id);
         break;
@@ -363,7 +390,9 @@ static void mqtt_broker_task(void *pvParameter)
                     c->fd = client_fd;
                     struct timeval snd_tv = { .tv_sec = 1, .tv_usec = 0 };
                     setsockopt(client_fd, SOL_SOCKET, SO_SNDTIMEO, &snd_tv, sizeof(snd_tv));
-                    ESP_LOGI(TAG, "new client fd=%d", client_fd);
+                    char remote_ip[16];
+                    inet_ntop(AF_INET, &client_addr.sin_addr, remote_ip, sizeof(remote_ip));
+                    ESP_LOGI(TAG, "new client fd=%d from %s:%d", client_fd, remote_ip, ntohs(client_addr.sin_port));
                 } else {
                     close(client_fd);
                     ESP_LOGW(TAG, "max clients reached, rejected");
@@ -376,26 +405,54 @@ static void mqtt_broker_task(void *pvParameter)
             if (!c->in_use || c->fd < 0) continue;
             if (!FD_ISSET(c->fd, &readfds)) continue;
 
-            uint8_t buf[BUF_SIZE];
-            int n = read(c->fd, buf, sizeof(buf) - 1);
+            uint8_t tmp[BUF_SIZE];
+            int n = read(c->fd, tmp, sizeof(tmp));
             if (n <= 0) {
                 ESP_LOGI(TAG, "client %s disconnected", c->client_id);
                 client_free(c);
                 continue;
             }
 
+            // Append to persistent buffer
+            if (n + c->buf_len > BUF_SIZE) {
+                int room = BUF_SIZE - c->buf_len;
+                if (room > 0) {
+                    memcpy(c->buf + c->buf_len, tmp, room);
+                    c->buf_len = BUF_SIZE;
+                    ESP_LOGW(TAG, "buffer full for %s, dropped %d bytes", c->client_id, n - room);
+                } else {
+                    ESP_LOGW(TAG, "buffer full for %s, dropped %d bytes", c->client_id, n);
+                }
+            } else {
+                memcpy(c->buf + c->buf_len, tmp, n);
+                c->buf_len += n;
+            }
+
             int offset = 0;
-            while (offset < n) {
+            int pkt_num = 0;
+            while (offset < c->buf_len) {
                 int remaining = 0;
                 int rl_bytes = 0;
-                if (offset + 1 < n) {
-                    remaining = read_remaining_length(buf + offset + 1, &rl_bytes);
+                if (offset + 1 < c->buf_len) {
+                    remaining = read_remaining_length(c->buf + offset + 1, &rl_bytes);
                 }
                 if (remaining < 0) break;
                 int pkt_len = 1 + rl_bytes + remaining;
-                if (pkt_len > n - offset) break;
-                handle_packet(c, buf + offset, pkt_len);
+                if (pkt_len > c->buf_len - offset) break;
+                handle_packet(c, c->buf + offset, pkt_len);
                 offset += pkt_len;
+                pkt_num++;
+            }
+            if (pkt_num > 0) {
+                ESP_LOGI(TAG, "READ: %d new bytes, %d packets from %s", n, pkt_num, c->client_id);
+            }
+            if (offset < c->buf_len) {
+                int leftover = c->buf_len - offset;
+                ESP_LOGD(TAG, "PARTIAL: %d bytes remain for %s", leftover, c->client_id);
+                memmove(c->buf, c->buf + offset, leftover);
+                c->buf_len = leftover;
+            } else {
+                c->buf_len = 0;
             }
         }
     }
@@ -404,7 +461,7 @@ static void mqtt_broker_task(void *pvParameter)
 esp_err_t mqtt_broker_start(void)
 {
     memset(s_clients, 0, sizeof(s_clients));
-    xTaskCreate(mqtt_broker_task, "mqtt_broker", 8192, NULL, 5, NULL);
+    xTaskCreate(mqtt_broker_task, "mqtt_broker", 16384, NULL, 5, NULL);
     return ESP_OK;
 }
 
@@ -467,6 +524,7 @@ char *mqtt_broker_get_log_json(void)
         cJSON_AddStringToObject(item, "topic", topic_copy);
         cJSON_AddStringToObject(item, "payload", payload_copy);
         cJSON_AddNumberToObject(item, "time", (double)e->time_us / 1000000.0);
+        cJSON_AddStringToObject(item, "time_str", e->time_str[0] ? e->time_str : "");
         cJSON_AddItemToArray(arr, item);
     }
 

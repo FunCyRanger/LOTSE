@@ -68,7 +68,12 @@ static int json_to_config(const char *json, hub_config_t *cfg)
     if (v && v->valuestring) strncpy(cfg->tasmota_topic, v->valuestring, sizeof(cfg->tasmota_topic)-1);
 
     v = cJSON_GetObjectItem(root, "region");
-    if (v && v->valuestring) strncpy(cfg->region, v->valuestring, sizeof(cfg->region)-1);
+    if (v && v->valuestring) {
+        strncpy(cfg->region, v->valuestring, sizeof(cfg->region)-1);
+    } else {
+        // Default region if none configured
+        strncpy(cfg->region, "EU_868", sizeof(cfg->region)-1);
+    }
 
     v = cJSON_GetObjectItem(root, "node_decimal");
     if (v && cJSON_IsNumber(v)) cfg->node_decimal = (uint32_t)v->valuedouble;

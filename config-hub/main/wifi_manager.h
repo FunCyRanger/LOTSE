@@ -16,6 +16,7 @@ typedef void (*wifi_callback_t)(wifi_state_t state);
 esp_err_t wifi_manager_init(void);
 esp_err_t wifi_manager_start(const char *ssid, const char *pass);
 esp_err_t wifi_manager_start_ap(void);
+esp_err_t wifi_manager_stop_ap(void);
 void     wifi_manager_set_callback(wifi_callback_t cb);
 wifi_state_t wifi_manager_get_state(void);
 const char *wifi_manager_get_ip(void);

@@ -179,8 +179,9 @@ select{padding:4px 6px;font-size:12px}
       <tr><td>Connected clients</td><td id="mqtt-clients">0</td></tr>
       <tr><td>Port</td><td>1883</td></tr>
     </table>
-    <div style="margin-top:8px">
+    <div style="margin-top:8px;display:flex;align-items:center;gap:12px">
       <a href="#" onclick="toggleBrokerLog();return false" id="broker-log-toggle" style="font-size:12px;color:#3949ab">&#9654; Show broker log</a>
+      <button type="button" onclick="copyBrokerLog()" style="font-size:11px;padding:2px 8px;cursor:pointer">&#128203; Copy</button>
     </div>
     <div id="broker-log-card" class="hidden" style="margin-top:8px">
       <pre id="broker-log" style="max-height:400px;overflow-y:auto;font-size:11px;background:#1e1e1e;color:#d4d4d4;padding:8px;border-radius:4px;white-space:pre-wrap;word-break:break-all">Waiting for data...</pre>
@@ -248,21 +249,27 @@ let diffData=null;
 
 async function api(path, opts){
   try{
+    console.log('API call:', path, opts);
     const r=await fetch(path, opts||{});
+    console.log('API response status:', r.status);
     if(!r.ok) throw new Error(r.statusText);
-    return await r.json();
+    const result = await r.json();
+    console.log('API response data:', result);
+    return result;
   }catch(e){
+    console.error('API error:', e);
     toast('API error: '+e.message, 'error');
     throw e;
   }
 }
 
-function ssidId(prefix){return prefix+'-ssid'}
-function manualId(prefix){return prefix+'-ssid-manual'}
-function passId(prefix){return prefix+'-pass'}
-function manualDivId(prefix){return prefix+'-manual'}
-function scanMsgId(prefix){return prefix+'-scan-msg'}
-function msgId(prefix){return prefix+'-msg'}
+function wifiPrefix(prefix){return prefix.startsWith('wifi-')?prefix:'wifi-'+prefix}
+function ssidId(prefix){return wifiPrefix(prefix)+'-ssid'}
+function manualId(prefix){return wifiPrefix(prefix)+'-ssid-manual'}
+function passId(prefix){return wifiPrefix(prefix)+'-pass'}
+function manualDivId(prefix){return wifiPrefix(prefix)+'-manual'}
+function scanMsgId(prefix){return wifiPrefix(prefix)+'-scan-msg'}
+function msgId(prefix){return wifiPrefix(prefix)+'-msg'}
 
 function onSsidChange(prefix){
   const sel=$(ssidId(prefix));
@@ -276,14 +283,31 @@ function onSsidChange(prefix){
 
 async function scanWifi(prefix){
   const msgSpan=$(scanMsgId(prefix));
+  console.log('scanWifi:', prefix, 'msgSpan:', msgSpan);
+  if (!msgSpan) {
+    console.error('scanWifi: msgSpan element not found for prefix:', prefix);
+    return;
+  }
+
+  const sel=$(ssidId(prefix));
+  console.log('scanWifi:', prefix, 'sel:', sel);
+  if (!sel) {
+    console.error('scanWifi: sel element not found for prefix:', prefix);
+    msgSpan.textContent='Scan failed: dropdown not found';
+    return;
+  }
+
   msgSpan.textContent='Scanning...';
-  try{
+  try {
     await api('/api/wifi/scan');
-    await new Promise(r=>setTimeout(r,1500));
-    const r=await api('/api/wifi/networks');
-    const sel=$(ssidId(prefix));
+    let r, deadline=Date.now()+10000;
+    while(Date.now()<deadline){
+      await new Promise(r=>setTimeout(r,500));
+      r=await api('/api/wifi/networks');
+      if(r.count>0) break;
+    }
     sel.innerHTML='<option value="">&mdash; Select network &mdash;</option>';
-    if(r.networks){
+    if(r&&r.networks){
       r.networks.forEach(n=>{
         if(!n.ssid) return;
         const opt=document.createElement('option');
@@ -297,8 +321,10 @@ async function scanWifi(prefix){
     manual.value='__manual__';
     manual.textContent='&#9998; Other network (manual)';
     sel.appendChild(manual);
-    msgSpan.textContent=r.count+' networks found';
-  }catch(e){
+    const c=r&&r.count?r.count:0;
+    msgSpan.textContent=c+' networks found';
+  } catch(e) {
+    console.error('scanWifi error:', e);
     msgSpan.textContent='Scan failed';
   }
 }
@@ -440,11 +466,31 @@ async function refreshBrokerLog(){
       return;
     }
     const lines=entries.map(e=>{
-      return e.time.toFixed(1)+'s ['+e.client+'] '+e.topic+' | '+e.payload;
+      const ts = e.time_str ? e.time_str : e.time.toFixed(1)+'s';
+      return ts+' ['+e.client+'] '+e.topic+' | '+e.payload;
     });
     el.textContent=lines.join('\n');
     el.scrollTop = el.scrollHeight;
   }catch(e){}
+}
+
+function copyBrokerLog(){
+  const el = $('broker-log');
+  const text = el.textContent;
+  if (!text || text === 'No MQTT traffic yet.' || text === 'Waiting for data...') {
+    toast('Nothing to copy', 'error');
+    return;
+  }
+  const range = document.createRange();
+  range.selectNode(el);
+  window.getSelection().removeAllRanges();
+  window.getSelection().addRange(range);
+  if (document.execCommand('copy')) {
+    toast('Copied to clipboard', 'success');
+  } else {
+    toast('Copy failed', 'error');
+  }
+  window.getSelection().removeAllRanges();
 }
 
 async function parseScript(){
@@ -566,9 +612,17 @@ async function applyConfig(){
   try{
     const diff=await api('/api/tasmota/diff');
     if(!diff.reachable){
-      // Tasmota unreachable — send full config anyway (may be first setup)
-      diffData=null;
-      reallySend(['script','mqtt']);
+      // Tasmota unreachable — let user choose what to send
+      diffData = {
+        reachable: false,
+        differences: [
+          {item:'script', label:'Push SMI script', current:'(Tasmota unreachable)', expected:'ready to push ('+$('script-input').value.length+' chars)', needs_update:true},
+          {item:'mqtt', label:'Configure MQTT', current:'(Tasmota unreachable)', expected:'MQTT host, port, SetOption19', needs_update:true}
+        ]
+      };
+      renderDiffModal();
+      $('diff-modal').classList.remove('hidden');
+      $('apply-msg').textContent='';
       return;
     }
     const needsUpdate=diff.differences.filter(d=>d.needs_update);
@@ -584,9 +638,17 @@ async function applyConfig(){
     $('diff-modal').classList.remove('hidden');
     $('apply-msg').textContent='';
   }catch(e){
-    // Fallback: send full config
-    diffData=null;
-    reallySend(['script','mqtt']);
+    // Fallback — let user choose what to send
+    diffData = {
+      reachable: false,
+      differences: [
+        {item:'script', label:'Push SMI script', current:'(error checking Tasmota)', expected:'ready to push ('+$('script-input').value.length+' chars)', needs_update:true},
+        {item:'mqtt', label:'Configure MQTT', current:'(error checking Tasmota)', expected:'MQTT host, port, SetOption19', needs_update:true}
+      ]
+    };
+    renderDiffModal();
+    $('diff-modal').classList.remove('hidden');
+    $('apply-msg').textContent='';
   }
 }
 

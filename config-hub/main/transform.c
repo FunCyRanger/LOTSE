@@ -119,6 +119,7 @@ int transform_apply_mapping(const char *tasmota_json, const hub_config_t *cfg,
     if (!root) { ESP_LOGD(TAG, "map: JSON parse failed: %.100s", tasmota_json); return -1; }
 
     // Tasmota SMI publishes: {"SML1":{"Power":-1200, "E_in":1234.5, ...}}
+    // Tasmota discovery publishes: {"sn":{"Time":"...","ACE0":{"Meter_id":0,...}}}
     // Find the first nested object (the meter data)
     cJSON *meter_obj = NULL;
     cJSON *child = root->child;
@@ -127,6 +128,16 @@ int transform_apply_mapping(const char *tasmota_json, const hub_config_t *cfg,
         child = child->next;
     }
     if (!meter_obj) { ESP_LOGD(TAG, "map: no nested object found"); cJSON_Delete(root); return -1; }
+
+    // If the found object is "sn" (discovery), it contains further meter objects
+    if (strcmp(meter_obj->string, "sn") == 0) {
+        cJSON *sn_child = meter_obj->child;
+        while (sn_child) {
+            if (cJSON_IsObject(sn_child)) { meter_obj = sn_child; break; }
+            sn_child = sn_child->next;
+        }
+    }
+    if (!meter_obj) { ESP_LOGD(TAG, "map: no meter data inside 'sn' found"); cJSON_Delete(root); return -1; }
 
     ESP_LOGD(TAG, "map: found meter key '%s' with %d mappings", meter_obj->string, cfg->mapping_count);
 

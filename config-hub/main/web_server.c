@@ -584,30 +584,41 @@ static esp_err_t handle_wifi_connect(httpd_req_t *req)
     return send_json(req, "{\"ok\":true}", 200);
 }
 
+#define JSON_ERROR "{\"error\":\"scan failed\"}"
+#define JSON_SCANNING "{\"scanning\":true}"
+
 static esp_err_t handle_wifi_scan(httpd_req_t *req)
 {
+    ESP_LOGI(TAG, "handle_wifi_scan called");
     esp_err_t err = wifi_manager_scan_start();
     if (err != ESP_OK) {
+        ESP_LOGE(TAG, "wifi_manager_scan_start failed: %s", esp_err_to_name(err));
         return send_json(req, "{\"error\":\"scan failed\"}", 500);
     }
     return send_json(req, "{\"scanning\":true}", 200);
 }
 
+
 static esp_err_t handle_wifi_networks(httpd_req_t *req)
 {
     wifi_scan_result_t results[MAX_SCAN_RESULTS];
     int count = wifi_manager_scan_get_results(results, MAX_SCAN_RESULTS);
-
+    
+    ESP_LOGI(TAG, "handle_wifi_networks: count = %d", count);
+    
     cJSON *root = cJSON_CreateObject();
     cJSON_AddNumberToObject(root, "count", count);
     cJSON *arr = cJSON_AddArrayToObject(root, "networks");
+    
     for (int i = 0; i < count; i++) {
         cJSON *n = cJSON_CreateObject();
+        ESP_LOGI(TAG, "Adding network: %s, rssi=%d, auth=%d", results[i].ssid, results[i].rssi, results[i].authmode);
         cJSON_AddStringToObject(n, "ssid", results[i].ssid);
         cJSON_AddNumberToObject(n, "rssi", results[i].rssi);
         cJSON_AddNumberToObject(n, "auth", results[i].authmode);
         cJSON_AddItemToArray(arr, n);
     }
+    
     return send_json_obj(req, root);
 }
 

@@ -19,6 +19,7 @@ static wifi_state_t s_state = WIFI_STATE_INIT;
 static char s_ip_str[16] = {0};
 static wifi_callback_t s_callback = NULL;
 static int s_retry_count = 0;
+static bool s_ap_active = false;
 
 static wifi_scan_result_t s_scan_results[MAX_SCAN_RESULTS];
 static int s_scan_count = 0;
@@ -41,8 +42,11 @@ static void event_handler(void *arg, esp_event_base_t event_base,
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
         s_retry_count++;
         if (s_retry_count > MAX_RETRIES) {
-            ESP_LOGE(TAG, "STA failed after %d retries, staying in AP mode", MAX_RETRIES);
+            ESP_LOGE(TAG, "STA failed after %d retries, starting AP", MAX_RETRIES);
             set_state(WIFI_STATE_FAILED);
+            if (!s_ap_active) {
+                wifi_manager_start_ap();
+            }
         } else {
             set_state(WIFI_STATE_CONNECTING);
             esp_wifi_connect();
@@ -54,13 +58,20 @@ static void event_handler(void *arg, esp_event_base_t event_base,
         s_retry_count = 0;
         set_state(WIFI_STATE_STATION);
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+        if (s_ap_active) {
+            wifi_manager_stop_ap();
+        }
     }
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_SCAN_DONE) {
         uint16_t count = 0;
         esp_wifi_scan_get_ap_num(&count);
+        ESP_LOGI(TAG, "Scan event received, count = %d", count);
         if (count > MAX_SCAN_RESULTS) count = MAX_SCAN_RESULTS;
         wifi_ap_record_t *records = malloc(count * sizeof(wifi_ap_record_t));
-        if (records) {
+        if (!records) {
+            ESP_LOGE(TAG, "Failed to allocate memory for scan records");
+        } else {
+            ESP_LOGI(TAG, "Allocating %d scan records", count);
             esp_wifi_scan_get_ap_records(&count, records);
             s_scan_count = 0;
             for (int i = 0; i < count && s_scan_count < MAX_SCAN_RESULTS; i++) {
@@ -71,15 +82,16 @@ static void event_handler(void *arg, esp_event_base_t event_base,
                 if (s_scan_results[s_scan_count].ssid[0])
                     s_scan_count++;
             }
+            ESP_LOGI(TAG, "Scan done: %d networks found", s_scan_count);
             free(records);
         }
-        ESP_LOGI(TAG, "Scan done: %d networks found", s_scan_count);
     }
 }
 
 esp_err_t wifi_manager_init(void)
 {
     s_wifi_event_group = xEventGroupCreate();
+    s_ap_active = false;
 
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
@@ -92,27 +104,8 @@ esp_err_t wifi_manager_init(void)
         ESP_EVENT_ANY_ID, &event_handler, NULL, NULL));
     ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT,
         IP_EVENT_STA_GOT_IP, &event_handler, NULL, NULL));
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
-
-    // Always configure AP with LOTSE-XXXXXX SSID so it's available on every boot
-    wifi_config_t ap = {
-        .ap = {
-            .ssid_len = 0,
-            .channel = 6,
-            .max_connection = 4,
-            .authmode = WIFI_AUTH_OPEN,
-        },
-    };
-    uint8_t mac[6];
-    esp_wifi_get_mac(WIFI_IF_AP, mac);
-    snprintf((char *)ap.ap.ssid, sizeof(ap.ap.ssid),
-             "LOTSE-%02X%02X%02X", mac[3], mac[4], mac[5]);
-    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap));
-
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_start());
-
-    // Set AP config again after start (needed on some ESP-IDF versions)
-    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap));
 
     return ESP_OK;
 }
@@ -140,14 +133,14 @@ esp_err_t wifi_manager_start(const char *ssid, const char *pass)
     esp_err_t err = esp_wifi_set_config(WIFI_IF_STA, &sta);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to set STA config: %s", esp_err_to_name(err));
-        set_state(WIFI_STATE_AP);
+        wifi_manager_start_ap();
         return err;
     }
 
     err = esp_wifi_connect();
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to connect: %s", esp_err_to_name(err));
-        set_state(WIFI_STATE_AP);
+        wifi_manager_start_ap();
         return err;
     }
 
@@ -156,9 +149,48 @@ esp_err_t wifi_manager_start(const char *ssid, const char *pass)
 
 esp_err_t wifi_manager_start_ap(void)
 {
-    // AP is already configured in wifi_manager_init(), nothing else needed
-    ESP_LOGI(TAG, "AP mode only (no saved config)");
+    esp_err_t err = esp_wifi_stop();
+    if (err != ESP_OK) return err;
+
+    esp_wifi_set_mode(WIFI_MODE_APSTA);
+
+    wifi_config_t ap = {
+        .ap = {
+            .ssid_len = 0,
+            .channel = 6,
+            .max_connection = 4,
+            .authmode = WIFI_AUTH_OPEN,
+        },
+    };
+    uint8_t mac[6];
+    esp_wifi_get_mac(WIFI_IF_AP, mac);
+    snprintf((char *)ap.ap.ssid, sizeof(ap.ap.ssid),
+             "LOTSE-%02X%02X%02X", mac[3], mac[4], mac[5]);
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap));
+    ESP_ERROR_CHECK(esp_wifi_start());
+    // Set AP config again after start (needed on some ESP-IDF versions)
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap));
+
+    s_ap_active = true;
+    ESP_LOGI(TAG, "AP started: %s", ap.ap.ssid);
     return ESP_OK;
+}
+
+esp_err_t wifi_manager_stop_ap(void)
+{
+    if (!s_ap_active) return ESP_OK;
+
+    s_ap_active = false;
+    s_retry_count = 0; // prevent momentary disconnect from counting as failure
+    esp_err_t err = esp_wifi_stop();
+    if (err != ESP_OK) return err;
+
+    esp_wifi_set_mode(WIFI_MODE_STA);
+    err = esp_wifi_start(); // triggers STA_START -> esp_wifi_connect()
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "AP stopped, STA-only mode");
+    }
+    return err;
 }
 
 esp_err_t wifi_manager_scan_start(void)

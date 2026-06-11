@@ -1,9 +1,11 @@
 #include <string.h>
 #include <stdlib.h>
+#include <time.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "esp_sntp.h"
 #include "driver/gpio.h"
 #include "nvs_flash.h"
 #include "config_store.h"
@@ -25,9 +27,13 @@ static void on_mqtt_connect(const char *client_id)
 
 static void on_mqtt_publish(const char *topic, const char *payload, int payload_len)
 {
+    ESP_LOGD(TAG, "mqtt pub: topic=%s, len=%d", topic, payload_len);
     // SENSOR path: build and publish sendtext envelope
-    if (strstr(topic, "/SENSOR")) {
-        if (!s_cfg.configured || !s_cfg.region[0]) { ESP_LOGD(TAG, "cb: not configured"); return; }
+    if (strstr(topic, "/SENSOR") || strstr(topic, "/sensors")) {
+        if (!s_cfg.configured || !s_cfg.region[0]) {
+            ESP_LOGW(TAG, "cb: missing config (conf=%d, region='%s')", s_cfg.configured, s_cfg.region);
+            return;
+        }
         int interval = s_cfg.send_interval;
         if (interval < 60) interval = 300;
         if (s_last_send_us > 0) {
@@ -38,12 +44,10 @@ static void on_mqtt_publish(const char *topic, const char *payload, int payload_
         int n = transform_apply_mapping(payload, &s_cfg, &lp);
         if (n <= 0) return;
         char topic_buf[128];
-        if (s_cfg.node_hash[0])
-            snprintf(topic_buf, sizeof(topic_buf), "msh/%s/2/json/mqtt/%s", s_cfg.region, s_cfg.node_hash);
-        else
-            snprintf(topic_buf, sizeof(topic_buf), "msh/%s/2/json/mqtt/", s_cfg.region);
+        snprintf(topic_buf, sizeof(topic_buf), "msh/%s/2/json/mqtt/%s", s_cfg.region, s_cfg.node_hash);
         char *envelope = transform_build_envelope(&lp, s_cfg.node_decimal, 1);
         if (!envelope) return;
+        ESP_LOGI(TAG, "publishing envelope to %s", topic_buf);
         mqtt_broker_publish(topic_buf, envelope, 0);
         free(envelope);
         s_last_send_us = esp_timer_get_time();
@@ -119,9 +123,9 @@ static void poll_tasmota_sensor_task(void *arg)
 {
     hub_config_t *cfg = (hub_config_t *)arg;
     while (1) {
-        int interval = cfg->send_interval;
-        if (interval < 60) interval = 300;
-        vTaskDelay(pdMS_TO_TICKS(interval * 1000));
+        // HTTP fallback poll runs at a fixed slow rate (600s = 10 min)
+        // independent of send_interval. MQTT SENSOR is the primary data path.
+        vTaskDelay(pdMS_TO_TICKS(600 * 1000));
 
         if (!cfg->configured || !cfg->tasmota_ip[0] || !cfg->region[0])
             continue;
@@ -154,10 +158,7 @@ static void poll_tasmota_sensor_task(void *arg)
         if (n <= 0) continue;
 
         char topic_buf[128];
-        if (cfg->node_hash[0])
-            snprintf(topic_buf, sizeof(topic_buf), "msh/%s/2/json/mqtt/%s", cfg->region, cfg->node_hash);
-        else
-            snprintf(topic_buf, sizeof(topic_buf), "msh/%s/2/json/mqtt/", cfg->region);
+        snprintf(topic_buf, sizeof(topic_buf), "msh/%s/2/json/mqtt/%s", cfg->region, cfg->node_hash);
 
         char *envelope = transform_build_envelope(&lp, cfg->node_decimal, 1);
         if (!envelope) continue;
@@ -166,6 +167,41 @@ static void poll_tasmota_sensor_task(void *arg)
         mqtt_broker_publish(topic_buf, envelope, 0);
         free(envelope);
     }
+}
+
+static void sntp_sync_task(void *arg)
+{
+    // Wait for WiFi station connection
+    while (wifi_manager_get_state() != WIFI_STATE_STATION) {
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+
+    ESP_LOGI(TAG, "starting SNTP time sync");
+    sntp_setoperatingmode(SNTP_OPMODE_POLL);
+    sntp_setservername(0, "pool.ntp.org");
+    sntp_init();
+
+    setenv("TZ", "CET-1CEST,M3.5.0,M10.5.0/3", 1);
+    tzset();
+
+    struct tm timeinfo = {0};
+    int retry = 0;
+    while (timeinfo.tm_year < (2024 - 1900) && retry < 30) {
+        vTaskDelay(pdMS_TO_TICKS(2000));
+        time_t now = time(NULL);
+        localtime_r(&now, &timeinfo);
+        retry++;
+    }
+
+    if (timeinfo.tm_year >= (2024 - 1900)) {
+        ESP_LOGI(TAG, "SNTP synced: %04d-%02d-%02d %02d:%02d:%02d",
+                 timeinfo.tm_year + 1900, timeinfo.tm_mon + 1,
+                 timeinfo.tm_mday, timeinfo.tm_hour,
+                 timeinfo.tm_min, timeinfo.tm_sec);
+    } else {
+        ESP_LOGW(TAG, "SNTP sync failed after %d retries", retry);
+    }
+    vTaskDelete(NULL);
 }
 
 void app_main(void)
@@ -202,6 +238,7 @@ void app_main(void)
 
     web_server_start(&s_cfg);
     xTaskCreate(poll_tasmota_sensor_task, "poll_sensor", 8192, &s_cfg, 5, NULL);
+    xTaskCreate(sntp_sync_task, "sntp_sync", 4096, NULL, 5, NULL);
 
     ESP_LOGI(TAG, "LOTSE Config Hub initialized");
 }

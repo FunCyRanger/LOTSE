@@ -290,6 +290,51 @@ def test_combined_sensor_regex():
         )
 
 
+def test_sender_topic_no_hash():
+    """Sender blueprint publishes to msh/{region}/2/json/mqtt/ without node hash."""
+    path = ROOT / "sender-blueprint.yaml"
+    with open(path) as f:
+        blueprint = yaml.load(f, Loader=yaml.FullLoader)
+    # Scan actions for the mqtt.publish service
+    publish = None
+    for act in blueprint["action"]:
+        if isinstance(act, dict) and act.get("service") == "mqtt.publish":
+            publish = act
+            break
+    assert publish is not None, "mqtt.publish action not found"
+    topic_tpl = publish["data"]["topic"]
+    # Template should be literal string with no hash suffix
+    assert topic_tpl == "msh/{{ region }}/2/json/mqtt/", f"Got: {topic_tpl}"
+    env = ha_environment()
+    rendered = env.from_string(topic_tpl).render(region="EU_868")
+    assert rendered == "msh/EU_868/2/json/mqtt/"
+    assert not rendered.rstrip("/").endswith("/2/json/mqtt/!"), "Topic contains node hash suffix"
+    parts = rendered.rstrip("/").split("/")
+    assert parts == ["msh", "EU_868", "2", "json", "mqtt"]
+
+
+def test_envelope_payload_is_json_string():
+    """Full envelope has payload as a JSON string (not a raw object)."""
+    env = ha_environment()
+    tpl = load_sender_inner()
+    inner = render_sender(tpl, make_sender_vars())
+    inner_str = json.dumps(inner, separators=(",", ":"))
+    escaped = inner_str.replace('"', '\\"')
+
+    envelope_tpl = env.from_string("""\
+{"from": {{ node }}, "type": "sendtext",
+ "payload": "{{ inner }}",
+ "channel": {{ chan }}}""")
+    raw = envelope_tpl.render(node=2892010904, inner=escaped, chan=1)
+    envelope = json.loads(raw)
+    assert isinstance(envelope["payload"], str), (
+        f"payload must be a JSON string, got {type(envelope['payload'])}"
+    )
+    parsed = json.loads(envelope["payload"])
+    assert isinstance(parsed, dict)
+    assert "gP" in parsed
+
+
 def test_envelope_inner_size():
     """Full MQTT envelope stays under 4096 bytes."""
     env = ha_environment()
