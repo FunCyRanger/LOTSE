@@ -235,6 +235,36 @@ def render_receiver(mqtt_payload, neighbor_decimal, key, filter_="float(0)",
     return result.strip()
 
 
+UNIVERSAL_TEMPLATE = """\
+{% if value_json.from == NEIGHBOR_DECIMAL %}\
+{% set p = value_json.payload if value_json.payload is mapping\
+           else value_json.payload | from_json({}) %}\
+{{ p.KEY | FILTER }}\
+{% else %}\
+{{ this.state }}\
+{% endif %}"""
+
+
+def render_receiver_universal(mqtt_payload, neighbor_decimal, key,
+                              filter_="float(0)", this_state="0"):
+    """Render the universal receiver template that handles both dict and string
+    payloads (matching the updated auto-discovery value_template)."""
+    env = ha_environment()
+    tpl_str = UNIVERSAL_TEMPLATE.replace("KEY", key).replace("FILTER", filter_)
+    tpl = env.from_string(tpl_str)
+
+    class ThisProxy:
+        def __init__(self):
+            self.state = this_state
+
+    result = tpl.render(
+        value_json=mqtt_payload,
+        NEIGHBOR_DECIMAL=neighbor_decimal,
+        this=ThisProxy(),
+    )
+    return result.strip()
+
+
 # ─── Combined sensor helper ────────────────────────────────────────────────
 
 def render_combined(template_str, mock_entity_ids):
@@ -451,6 +481,59 @@ def test_receiver_voltage_rounding():
     p = {"from": 2712679380, "payload": {"gV1": 230.456}}
     r = render_receiver(p, 2712679380, "gV1", "float(0)")
     assert float(r) == 230.456
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# TESTS — UNIVERSAL RECEIVER (handles both dict and string payloads)
+# ═══════════════════════════════════════════════════════════════════════════
+
+def test_universal_receiver_dict_payload():
+    """"Universal template: dict payload → value extracted."""
+    p = {"from": 2712679380, "payload": {"gP": -1.2, "bS": 85}}
+    r = render_receiver_universal(p, 2712679380, "gP", "float(0)")
+    assert float(r) == -1.2, f"Expected -1.2, got {r}"
+
+
+def test_universal_receiver_string_payload():
+    """"Universal template: string payload → parsed and value extracted."""
+    p = {"from": 2712679380, "payload": '{"gP": -1.2, "bS": 85}'}
+    r = render_receiver_universal(p, 2712679380, "gP", "float(0)")
+    assert float(r) == -1.2, f"Expected -1.2, got {r}"
+
+
+def test_universal_receiver_dict_mismatch():
+    """"Universal template: dict payload, from mismatch → fallback."""
+    p = {"from": 999, "payload": {"gP": -1.2}}
+    r = render_receiver_universal(p, 2712679380, "gP", "float(0)", this_state="-5.0")
+    assert r == "-5.0", f"Expected '-5.0', got {r}"
+
+
+def test_universal_receiver_string_mismatch():
+    """"Universal template: string payload, from mismatch → fallback."""
+    p = {"from": 999, "payload": '{"gP": -1.2}'}
+    r = render_receiver_universal(p, 2712679380, "gP", "float(0)", this_state="-5.0")
+    assert r == "-5.0", f"Expected '-5.0', got {r}"
+
+
+def test_universal_receiver_missing_key():
+    """"Universal template: payload missing the key → default 0."""
+    p = {"from": 2712679380, "payload": {"gP": -1.2}}
+    r = render_receiver_universal(p, 2712679380, "nonexistent", "float(0)")
+    assert float(r) == 0.0, f"Expected 0.0, got {r}"
+
+
+def test_universal_receiver_int_filter_dict():
+    """"Universal template: bS via |int(0) with dict payload."""
+    p = {"from": 2712679380, "payload": {"bS": 85}}
+    r = render_receiver_universal(p, 2712679380, "bS", "int(0)")
+    assert int(r) == 85, f"Expected 85, got {r}"
+
+
+def test_universal_receiver_int_filter_string():
+    """"Universal template: bS via |int(0) with string payload."""
+    p = {"from": 2712679380, "payload": '{"bS": 85}'}
+    r = render_receiver_universal(p, 2712679380, "bS", "int(0)")
+    assert int(r) == 85, f"Expected 85, got {r}"
 
 
 # ═══════════════════════════════════════════════════════════════════════════

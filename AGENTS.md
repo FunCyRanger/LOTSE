@@ -118,6 +118,8 @@ idf.py -p /dev/ttyUSB0 monitor
 
 When the Heltec V3 echoes a `sendtext` message back via LoRa, the `payload` field arrives as an escaped JSON string. `main.c:on_mqtt_publish()` detects messages on `msh/{region}/2/json/mqtt/{node_hash}`, parses the inner JSON string, and republishes with `"type": "text"` and `payload` as a parsed JSON object. Without this, `value_json.payload.gEI` in HA receiver templates would fail because `payload` would be a string, not a dict.
 
+**Caveat**: The echo fix only runs for the config-hub's own `node_hash` (sender-side). On the receiver's HA broker (no config-hub), LoRa echoes arrive with `payload` as a raw string. The `auto-discovery-automation.yaml` handles both cases via a `pp` variable (`trigger.payload_json.payload | from_json({})` with `is mapping` fallback) and extracts `sender` from `trigger.topic.split('/')[-1]` instead of the message body.
+
 ### Tasmota requirements
 
 - `SetOption19=ON` (was OFF by default, blocks all telemetry publishing)

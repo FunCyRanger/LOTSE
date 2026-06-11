@@ -10,14 +10,20 @@ condition:
          and trigger.payload_json.payload is defined }}
 variables:
   from: "{{ trigger.payload_json.from }}"
-  sender: "{{ trigger.payload_json.sender }}"
+  sender: "{{ trigger.topic.split('/')[-1] }}"
   region: "{{ trigger.topic.split('/')[1] }}"
+  pp: >
+    {% if trigger.payload_json.payload is mapping %}
+    {{ trigger.payload_json.payload }}
+    {% else %}
+    {{ trigger.payload_json.payload | from_json({}) }}
+    {% endif %}
 action:
   # GRID
 
   - if:
       - condition: template
-        value_template: "{{ (trigger.payload_json.payload).gP is defined }}"
+        value_template: "{{ pp.gP is defined }}"
     then:
       - service: mqtt.publish
         data:
@@ -27,14 +33,14 @@ action:
           payload: >
             {"name": "Node {{ from }} gP",
              "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
-             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.gP | float(0) }}{% endif %}{% endraw %}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{% set p = value_json.payload if value_json.payload is mapping else value_json.payload | from_json({}) %}{{ p.gP | float(0) }}{% endif %}{% endraw %}",
              "unit_of_measurement": "kW", "device_class": "power", "state_class": "measurement",
              "unique_id": "mesh_{{ from }}_gp",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
 
   - if:
       - condition: template
-        value_template: "{{ (trigger.payload_json.payload).gP1 is defined }}"
+        value_template: "{{ pp.gP1 is defined }}"
     then:
       - service: mqtt.publish
         data:
@@ -44,14 +50,14 @@ action:
           payload: >
             {"name": "Node {{ from }} gP1",
              "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
-             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.gP1 | float(0) }}{% endif %}{% endraw %}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{% set p = value_json.payload if value_json.payload is mapping else value_json.payload | from_json({}) %}{{ p.gP1 | float(0) }}{% endif %}{% endraw %}",
              "unit_of_measurement": "kW", "device_class": "power", "state_class": "measurement",
              "unique_id": "mesh_{{ from }}_gp1",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
 
   - if:
       - condition: template
-        value_template: "{{ (trigger.payload_json.payload).gP2 is defined }}"
+        value_template: "{{ pp.gP2 is defined }}"
     then:
       - service: mqtt.publish
         data:
@@ -61,14 +67,14 @@ action:
           payload: >
             {"name": "Node {{ from }} gP2",
              "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
-             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.gP2 | float(0) }}{% endif %}{% endraw %}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{% set p = value_json.payload if value_json.payload is mapping else value_json.payload | from_json({}) %}{{ p.gP2 | float(0) }}{% endif %}{% endraw %}",
              "unit_of_measurement": "kW", "device_class": "power", "state_class": "measurement",
              "unique_id": "mesh_{{ from }}_gp2",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
 
   - if:
       - condition: template
-        value_template: "{{ (trigger.payload_json.payload).gP3 is defined }}"
+        value_template: "{{ pp.gP3 is defined }}"
     then:
       - service: mqtt.publish
         data:
@@ -78,14 +84,14 @@ action:
           payload: >
             {"name": "Node {{ from }} gP3",
              "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
-             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.gP3 | float(0) }}{% endif %}{% endraw %}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{% set p = value_json.payload if value_json.payload is mapping else value_json.payload | from_json({}) %}{{ p.gP3 | float(0) }}{% endif %}{% endraw %}",
              "unit_of_measurement": "kW", "device_class": "power", "state_class": "measurement",
              "unique_id": "mesh_{{ from }}_gp3",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
 
   - if:
       - condition: template
-        value_template: "{{ (trigger.payload_json.payload).gV1 is defined }}"
+        value_template: "{{ pp.gV1 is defined }}"
     then:
       - service: mqtt.publish
         data:
@@ -95,14 +101,14 @@ action:
           payload: >
             {"name": "Node {{ from }} gV1",
              "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
-             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.gV1 | float(0) }}{% endif %}{% endraw %}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{% set p = value_json.payload if value_json.payload is mapping else value_json.payload | from_json({}) %}{{ p.gV1 | float(0) }}{% endif %}{% endraw %}",
              "unit_of_measurement": "V", "device_class": "voltage", "state_class": "measurement",
              "unique_id": "mesh_{{ from }}_gv1",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
 
   - if:
       - condition: template
-        value_template: "{{ (trigger.payload_json.payload).gV2 is defined }}"
+        value_template: "{{ pp.gV2 is defined }}"
     then:
       - service: mqtt.publish
         data:
@@ -112,14 +118,14 @@ action:
           payload: >
             {"name": "Node {{ from }} gV2",
              "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
-             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.gV2 | float(0) }}{% endif %}{% endraw %}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{% set p = value_json.payload if value_json.payload is mapping else value_json.payload | from_json({}) %}{{ p.gV2 | float(0) }}{% endif %}{% endraw %}",
              "unit_of_measurement": "V", "device_class": "voltage", "state_class": "measurement",
              "unique_id": "mesh_{{ from }}_gv2",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
 
   - if:
       - condition: template
-        value_template: "{{ (trigger.payload_json.payload).gV3 is defined }}"
+        value_template: "{{ pp.gV3 is defined }}"
     then:
       - service: mqtt.publish
         data:
@@ -129,14 +135,14 @@ action:
           payload: >
             {"name": "Node {{ from }} gV3",
              "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
-             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.gV3 | float(0) }}{% endif %}{% endraw %}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{% set p = value_json.payload if value_json.payload is mapping else value_json.payload | from_json({}) %}{{ p.gV3 | float(0) }}{% endif %}{% endraw %}",
              "unit_of_measurement": "V", "device_class": "voltage", "state_class": "measurement",
              "unique_id": "mesh_{{ from }}_gv3",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
 
   - if:
       - condition: template
-        value_template: "{{ (trigger.payload_json.payload).gIP is defined }}"
+        value_template: "{{ pp.gIP is defined }}"
     then:
       - service: mqtt.publish
         data:
@@ -146,14 +152,14 @@ action:
           payload: >
             {"name": "Node {{ from }} gIP",
              "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
-             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.gIP | float(0) }}{% endif %}{% endraw %}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{% set p = value_json.payload if value_json.payload is mapping else value_json.payload | from_json({}) %}{{ p.gIP | float(0) }}{% endif %}{% endraw %}",
              "unit_of_measurement": "kW", "device_class": "power", "state_class": "measurement",
              "unique_id": "mesh_{{ from }}_gip",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
 
   - if:
       - condition: template
-        value_template: "{{ (trigger.payload_json.payload).gEP is defined }}"
+        value_template: "{{ pp.gEP is defined }}"
     then:
       - service: mqtt.publish
         data:
@@ -163,14 +169,14 @@ action:
           payload: >
             {"name": "Node {{ from }} gEP",
              "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
-             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.gEP | float(0) }}{% endif %}{% endraw %}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{% set p = value_json.payload if value_json.payload is mapping else value_json.payload | from_json({}) %}{{ p.gEP | float(0) }}{% endif %}{% endraw %}",
              "unit_of_measurement": "kW", "device_class": "power", "state_class": "measurement",
              "unique_id": "mesh_{{ from }}_gep",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
 
   - if:
       - condition: template
-        value_template: "{{ (trigger.payload_json.payload).gEI is defined }}"
+        value_template: "{{ pp.gEI is defined }}"
     then:
       - service: mqtt.publish
         data:
@@ -180,14 +186,14 @@ action:
           payload: >
             {"name": "Node {{ from }} gEI",
              "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
-             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.gEI | float(0) }}{% endif %}{% endraw %}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{% set p = value_json.payload if value_json.payload is mapping else value_json.payload | from_json({}) %}{{ p.gEI | float(0) }}{% endif %}{% endraw %}",
              "unit_of_measurement": "kWh", "device_class": "energy", "state_class": "total_increasing",
              "unique_id": "mesh_{{ from }}_gei",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
 
   - if:
       - condition: template
-        value_template: "{{ (trigger.payload_json.payload).gEO is defined }}"
+        value_template: "{{ pp.gEO is defined }}"
     then:
       - service: mqtt.publish
         data:
@@ -197,7 +203,7 @@ action:
           payload: >
             {"name": "Node {{ from }} gEO",
              "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
-             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.gEO | float(0) }}{% endif %}{% endraw %}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{% set p = value_json.payload if value_json.payload is mapping else value_json.payload | from_json({}) %}{{ p.gEO | float(0) }}{% endif %}{% endraw %}",
              "unit_of_measurement": "kWh", "device_class": "energy", "state_class": "total_increasing",
              "unique_id": "mesh_{{ from }}_geo",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
@@ -206,7 +212,7 @@ action:
 
   - if:
       - condition: template
-        value_template: "{{ (trigger.payload_json.payload).sP is defined }}"
+        value_template: "{{ pp.sP is defined }}"
     then:
       - service: mqtt.publish
         data:
@@ -216,14 +222,14 @@ action:
           payload: >
             {"name": "Node {{ from }} sP",
              "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
-             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.sP | float(0) }}{% endif %}{% endraw %}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{% set p = value_json.payload if value_json.payload is mapping else value_json.payload | from_json({}) %}{{ p.sP | float(0) }}{% endif %}{% endraw %}",
              "unit_of_measurement": "kW", "device_class": "power", "state_class": "measurement",
              "unique_id": "mesh_{{ from }}_sp",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
 
   - if:
       - condition: template
-        value_template: "{{ (trigger.payload_json.payload).sE is defined }}"
+        value_template: "{{ pp.sE is defined }}"
     then:
       - service: mqtt.publish
         data:
@@ -233,7 +239,7 @@ action:
           payload: >
             {"name": "Node {{ from }} sE",
              "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
-             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.sE | float(0) }}{% endif %}{% endraw %}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{% set p = value_json.payload if value_json.payload is mapping else value_json.payload | from_json({}) %}{{ p.sE | float(0) }}{% endif %}{% endraw %}",
              "unit_of_measurement": "kWh", "device_class": "energy", "state_class": "total_increasing",
              "unique_id": "mesh_{{ from }}_se",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
@@ -242,7 +248,7 @@ action:
 
   - if:
       - condition: template
-        value_template: "{{ (trigger.payload_json.payload).bP is defined }}"
+        value_template: "{{ pp.bP is defined }}"
     then:
       - service: mqtt.publish
         data:
@@ -252,14 +258,14 @@ action:
           payload: >
             {"name": "Node {{ from }} bP",
              "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
-             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.bP | float(0) }}{% endif %}{% endraw %}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{% set p = value_json.payload if value_json.payload is mapping else value_json.payload | from_json({}) %}{{ p.bP | float(0) }}{% endif %}{% endraw %}",
              "unit_of_measurement": "kW", "device_class": "power", "state_class": "measurement",
              "unique_id": "mesh_{{ from }}_bp",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
 
   - if:
       - condition: template
-        value_template: "{{ (trigger.payload_json.payload).bS is defined }}"
+        value_template: "{{ pp.bS is defined }}"
     then:
       - service: mqtt.publish
         data:
@@ -269,14 +275,14 @@ action:
           payload: >
             {"name": "Node {{ from }} bS",
              "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
-             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.bS | int(0) }}{% endif %}{% endraw %}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{% set p = value_json.payload if value_json.payload is mapping else value_json.payload | from_json({}) %}{{ p.bS | int(0) }}{% endif %}{% endraw %}",
              "unit_of_measurement": "%", "device_class": "battery", "state_class": "measurement",
              "unique_id": "mesh_{{ from }}_bs",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
 
   - if:
       - condition: template
-        value_template: "{{ (trigger.payload_json.payload).bEI is defined }}"
+        value_template: "{{ pp.bEI is defined }}"
     then:
       - service: mqtt.publish
         data:
@@ -286,14 +292,14 @@ action:
           payload: >
             {"name": "Node {{ from }} bEI",
              "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
-             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.bEI | float(0) }}{% endif %}{% endraw %}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{% set p = value_json.payload if value_json.payload is mapping else value_json.payload | from_json({}) %}{{ p.bEI | float(0) }}{% endif %}{% endraw %}",
              "unit_of_measurement": "kWh", "device_class": "energy", "state_class": "total_increasing",
              "unique_id": "mesh_{{ from }}_bei",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
 
   - if:
       - condition: template
-        value_template: "{{ (trigger.payload_json.payload).bEO is defined }}"
+        value_template: "{{ pp.bEO is defined }}"
     then:
       - service: mqtt.publish
         data:
@@ -303,7 +309,7 @@ action:
           payload: >
             {"name": "Node {{ from }} bEO",
              "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
-             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.bEO | float(0) }}{% endif %}{% endraw %}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{% set p = value_json.payload if value_json.payload is mapping else value_json.payload | from_json({}) %}{{ p.bEO | float(0) }}{% endif %}{% endraw %}",
              "unit_of_measurement": "kWh", "device_class": "energy", "state_class": "total_increasing",
              "unique_id": "mesh_{{ from }}_beo",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
@@ -312,7 +318,7 @@ action:
 
   - if:
       - condition: template
-        value_template: "{{ (trigger.payload_json.payload).wP is defined }}"
+        value_template: "{{ pp.wP is defined }}"
     then:
       - service: mqtt.publish
         data:
@@ -322,14 +328,14 @@ action:
           payload: >
             {"name": "Node {{ from }} wP",
              "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
-             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.wP | float(0) }}{% endif %}{% endraw %}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{% set p = value_json.payload if value_json.payload is mapping else value_json.payload | from_json({}) %}{{ p.wP | float(0) }}{% endif %}{% endraw %}",
              "unit_of_measurement": "kW", "device_class": "power", "state_class": "measurement",
              "unique_id": "mesh_{{ from }}_wp",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
 
   - if:
       - condition: template
-        value_template: "{{ (trigger.payload_json.payload).wE is defined }}"
+        value_template: "{{ pp.wE is defined }}"
     then:
       - service: mqtt.publish
         data:
@@ -339,14 +345,14 @@ action:
           payload: >
             {"name": "Node {{ from }} wE",
              "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
-             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.wE | float(0) }}{% endif %}{% endraw %}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{% set p = value_json.payload if value_json.payload is mapping else value_json.payload | from_json({}) %}{{ p.wE | float(0) }}{% endif %}{% endraw %}",
              "unit_of_measurement": "kWh", "device_class": "energy", "state_class": "total_increasing",
              "unique_id": "mesh_{{ from }}_we",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
 
   - if:
       - condition: template
-        value_template: "{{ (trigger.payload_json.payload).wS is defined }}"
+        value_template: "{{ pp.wS is defined }}"
     then:
       - service: mqtt.publish
         data:
@@ -356,7 +362,7 @@ action:
           payload: >
             {"name": "Node {{ from }} wS",
              "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
-             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{{ value_json.payload.wS | int(0) }}{% endif %}{% endraw %}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{% set p = value_json.payload if value_json.payload is mapping else value_json.payload | from_json({}) %}{{ p.wS | int(0) }}{% endif %}{% endraw %}",
              "unit_of_measurement": "%", "device_class": "battery", "state_class": "measurement",
              "unique_id": "mesh_{{ from }}_ws",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
