@@ -167,11 +167,16 @@ def load_sender_template():
 # ─── Render helpers ────────────────────────────────────────────────────────
 
 def render_sender(template_str, variables):
-    """Render the sender's inner template with mocked HA globals."""
+    """Render the sender's inner template with mocked HA globals.
+
+    The template outputs ``| to_json | to_json`` (double encoding) so that
+    HA's NativeEnvironment unwraps it to a Python string instead of a dict.
+    In tests (no NativeEnvironment) we need two json.loads calls.
+    """
     env = ha_environment()
     tpl = env.from_string(template_str)
     result = tpl.render(**variables)
-    return json.loads(result)
+    return json.loads(json.loads(result))
 
 
 def make_sender_vars(**overrides):

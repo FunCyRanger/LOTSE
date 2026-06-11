@@ -165,7 +165,7 @@ def render_sender(template_str, variables):
     env = ha_environment()
     tpl = env.from_string(template_str)
     result = tpl.render(**variables)
-    return json.loads(result)
+    return json.loads(json.loads(result))
 
 
 # ─── TESTS ─────────────────────────────────────────────────────────────────
@@ -290,12 +290,11 @@ def test_combined_sensor_regex():
         )
 
 
-def test_sender_topic_no_hash():
-    """Sender blueprint publishes to msh/{region}/2/json/mqtt/ without node hash."""
+def test_sender_topic_with_node():
+    """Sender blueprint publishes to msh/{region}/2/json/mqtt/{node} (node decimal suffix)."""
     path = ROOT / "sender-blueprint.yaml"
     with open(path) as f:
         blueprint = yaml.load(f, Loader=yaml.FullLoader)
-    # Scan actions for the mqtt.publish service
     publish = None
     for act in blueprint["action"]:
         if isinstance(act, dict) and act.get("service") == "mqtt.publish":
@@ -303,14 +302,12 @@ def test_sender_topic_no_hash():
             break
     assert publish is not None, "mqtt.publish action not found"
     topic_tpl = publish["data"]["topic"]
-    # Template should be literal string with no hash suffix
-    assert topic_tpl == "msh/{{ region }}/2/json/mqtt/", f"Got: {topic_tpl}"
+    assert topic_tpl == "msh/{{ region }}/2/json/mqtt/{{ node }}", f"Got: {topic_tpl}"
     env = ha_environment()
-    rendered = env.from_string(topic_tpl).render(region="EU_868")
-    assert rendered == "msh/EU_868/2/json/mqtt/"
-    assert not rendered.rstrip("/").endswith("/2/json/mqtt/!"), "Topic contains node hash suffix"
-    parts = rendered.rstrip("/").split("/")
-    assert parts == ["msh", "EU_868", "2", "json", "mqtt"]
+    rendered = env.from_string(topic_tpl).render(region="EU_868", node="2896876952")
+    assert rendered == "msh/EU_868/2/json/mqtt/2896876952"
+    parts = rendered.split("/")
+    assert parts == ["msh", "EU_868", "2", "json", "mqtt", "2896876952"]
 
 
 def test_envelope_payload_is_json_string():

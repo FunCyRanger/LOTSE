@@ -1,0 +1,77 @@
+[1/5] cd /home/felix/LOTSE/config-hub/build/esp-idf/esptool_py && /home/felix/.espressif/python_env/idf5.4_py3.14_env/bin/python /home/felix/esp/esp-idf/components/partition_table/check_sizes.py --offset 0x8000 partition --type app /home/felix/LOTSE/config-hub/build/partition_table/partition-table.bin /home/felix/LOTSE/config-hub/build/lotse_config_hub.bin
+lotse_config_hub.bin binary size 0xf0390 bytes. Smallest app partition is 0x100000 bytes. 0xfc70 bytes (6%) free.
+[2/5] Performing build step for 'bootloader'
+[1/1] cd /home/felix/LOTSE/config-hub/build/bootloader/esp-idf/esptool_py && /home/felix/.espressif/python_env/idf5.4_py3.14_env/bin/python /home/felix/esp/esp-idf/components/partition_table/check_sizes.py --offset 0x8000 bootloader 0x1000 /home/felix/LOTSE/config-hub/build/bootloader/bootloader.bin
+Bootloader binary size 0x6560 bytes. 0xaa0 bytes (9%) free.
+[3/5] No install step for 'bootloader'
+[4/5] Completed 'bootloader'
+[4/5] cd /home/felix/esp/esp-idf/components/esptool_py && /home/felix/.local/lib/python3.14/site-packages/cmake/data/bin/cmake -D IDF_PATH=/home/felix/esp/esp-idf -D "SERIAL_TOOL=/home/felix/.espressif/python_env/idf5.4_py3.14_env/bin/python;;/home/felix/esp/esp-idf/components/esptool_py/esptool/esptool.py;--chip;esp32" -D "SERIAL_TOOL_ARGS=--before=default_reset;--after=hard_reset;write_flash;@flash_args" -D WORKING_DIRECTORY=/home/felix/LOTSE/config-hub/build -P /home/felix/esp/esp-idf/components/esptool_py/run_serial_tool.cmake
+esptool.py --chip esp32 -p /dev/ttyUSB0 -b 460800 --before=default_reset --after=hard_reset write_flash --flash_mode dio --flash_freq 40m --flash_size 2MB 0x1000 bootloader/bootloader.bin 0x10000 lotse_config_hub.bin 0x8000 partition_table/partition-table.bin
+esptool.py v4.11.0
+Serial port /dev/ttyUSB0
+Connecting..........
+Chip is ESP32-D0WD-V3 (revision v3.1)
+Features: WiFi, BT, Dual Core, 240MHz, VRef calibration in efuse, Coding Scheme None
+Crystal is 40MHz
+MAC: a0:b7:65:56:a6:d4
+Uploading stub...
+Running stub...
+Stub running...
+Changing baud rate to 460800
+Changed.
+Configuring flash size...
+Flash will be erased from 0x00001000 to 0x00007fff...
+Flash will be erased from 0x00010000 to 0x00100fff...
+Flash will be erased from 0x00008000 to 0x00008fff...
+SHA digest in image updated
+Compressed 25952 bytes to 16355...
+Writing at 0x00001000... (100 %)
+Wrote 25952 bytes (16355 compressed) at 0x00001000 in 0.5 seconds (effective 405.5 kbit/s)...
+Hash of data verified.
+Compressed 983952 bytes to 605149...
+Writing at 0x00010000... (2 %)
+Writing at 0x0001c64e... (5 %)
+Writing at 0x00029929... (8 %)
+Writing at 0x0003276c... (10 %)
+Writing at 0x0003d785... (13 %)
+Writing at 0x000435d7... (16 %)
+Writing at 0x000491f1... (18 %)
+Writing at 0x0004ee83... (21 %)
+Writing at 0x00054ce0... (24 %)
+Writing at 0x0005a82c... (27 %)
+Writing at 0x000605d6... (29 %)
+Writing at 0x000663db... (32 %)
+Writing at 0x0006c086... (35 %)
+Writing at 0x00071fec... (37 %)
+Writing at 0x00078185... (40 %)
+Writing at 0x0007dd84... (43 %)
+Writing at 0x000842e5... (45 %)
+Writing at 0x00089474... (48 %)
+Writing at 0x0008e8ba... (51 %)
+Writing at 0x00093fcf... (54 %)
+Writing at 0x0009982b... (56 %)
+Writing at 0x0009ec83... (59 %)
+Writing at 0x000a4379... (62 %)
+Writing at 0x000aa022... (64 %)
+Writing at 0x000af943... (67 %)
+Writing at 0x000b57cc... (70 %)
+Writing at 0x000bbb43... (72 %)
+Writing at 0x000c1645... (75 %)
+Writing at 0x000c719f... (78 %)
+Writing at 0x000cccf9... (81 %)
+Writing at 0x000d257d... (83 %)
+Writing at 0x000d9148... (86 %)
+Writing at 0x000e33c7... (89 %)
+Writing at 0x000e977e... (91 %)
+Writing at 0x000ef84a... (94 %)
+Writing at 0x000f585d... (97 %)
+Writing at 0x000fb07e... (100 %)
+Wrote 983952 bytes (605149 compressed) at 0x00010000 in 13.6 seconds (effective 578.3 kbit/s)...
+Hash of data verified.
+Compressed 3072 bytes to 103...
+Writing at 0x00008000... (100 %)
+Wrote 3072 bytes (103 compressed) at 0x00008000 in 0.0 seconds (effective 1367.3 kbit/s)...
+Hash of data verified.
+
+Leaving...
+Hard resetting via RTS pin...
