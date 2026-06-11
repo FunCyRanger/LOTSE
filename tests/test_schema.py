@@ -127,15 +127,18 @@ def _input_constructor(loader, node):
 yaml.FullLoader.add_constructor("!input", _input_constructor)
 
 
-def load_sender_inner():
+def load_sender_template():
     path = ROOT / "sender-blueprint.yaml"
     with open(path) as f:
         blueprint = yaml.load(f, Loader=yaml.FullLoader)
-    return blueprint["action"][1]["variables"]["inner"]
+    return blueprint["action"][1]["variables"]["envelope"]
 
 
 def make_sender_vars(**overrides):
     defaults = dict(
+        node="2896876952",
+        region="eu868",
+        channel_input=1,
         gP="sensor.grid_power",
         gIP="sensor.grid_import",
         gEP="sensor.grid_export",
@@ -165,7 +168,8 @@ def render_sender(template_str, variables):
     env = ha_environment()
     tpl = env.from_string(template_str)
     result = tpl.render(**variables)
-    return json.loads(json.loads(result))
+    envelope = json.loads(result)
+    return json.loads(envelope["payload"])
 
 
 # ─── TESTS ─────────────────────────────────────────────────────────────────
@@ -175,7 +179,7 @@ MESHTASTIC_PAYLOAD_MAX_BYTES = 220
 
 def test_payload_within_220_bytes():
     """Full 20-sensor payload fits Meshtastic 220-byte limit."""
-    tpl = load_sender_inner()
+    tpl = load_sender_template()
     out = render_sender(tpl, make_sender_vars())
     inner_json = json.dumps(out, separators=(",", ":"))
     size = len(inner_json.encode("utf-8"))
@@ -186,7 +190,7 @@ def test_payload_within_220_bytes():
 
 def test_payload_typical_small():
     """Minimal payload (gP, bS only) well under limit."""
-    tpl = load_sender_inner()
+    tpl = load_sender_template()
     vars_ = make_sender_vars(**{k: None for k in make_sender_vars()
                                 if k not in ("gP", "bS")})
     out = render_sender(tpl, vars_)
@@ -209,7 +213,7 @@ def test_mqtt_topic_trailing_slash():
 
 def test_sign_convention():
     """gP signed, gIP/gEP >= 0, bS 0-100 int."""
-    tpl = load_sender_inner()
+    tpl = load_sender_template()
     out = render_sender(tpl, make_sender_vars())
     assert "gP" in out and isinstance(out["gP"], (int, float))
     if "gIP" in out:
@@ -232,7 +236,7 @@ def test_nan_safe():
 
 def test_none_and_empty_entity_id():
     """None and '' as entity ID both skip the key."""
-    tpl = load_sender_inner()
+    tpl = load_sender_template()
     keep = ("gP",)
     none_vars = make_sender_vars(**{k: None for k in make_sender_vars()
                                     if k not in keep})
@@ -312,18 +316,9 @@ def test_sender_topic_with_node():
 
 def test_envelope_payload_is_json_string():
     """Full envelope has payload as a JSON string (not a raw object)."""
-    env = ha_environment()
-    tpl = load_sender_inner()
-    inner = render_sender(tpl, make_sender_vars())
-    inner_str = json.dumps(inner, separators=(",", ":"))
-    escaped = inner_str.replace('"', '\\"')
-
-    envelope_tpl = env.from_string("""\
-{"from": {{ node }}, "type": "sendtext",
- "payload": "{{ inner }}",
- "channel": {{ chan }}}""")
-    raw = envelope_tpl.render(node=2892010904, inner=escaped, chan=1)
-    envelope = json.loads(raw)
+    tpl = load_sender_template()
+    result = ha_environment().from_string(tpl).render(**make_sender_vars())
+    envelope = json.loads(result)
     assert isinstance(envelope["payload"], str), (
         f"payload must be a JSON string, got {type(envelope['payload'])}"
     )
@@ -334,18 +329,9 @@ def test_envelope_payload_is_json_string():
 
 def test_envelope_inner_size():
     """Full MQTT envelope stays under 4096 bytes."""
-    env = ha_environment()
-    tpl = load_sender_inner()
-    inner = render_sender(tpl, make_sender_vars())
-    inner_str = json.dumps(inner, separators=(",", ":"))
-    escaped = inner_str.replace('"', '\\"')
-
-    envelope_tpl = env.from_string("""\
-{"from": {{ node }}, "type": "sendtext",
- "payload": "{{ inner }}",
- "channel": {{ chan }}}""")
-    raw = envelope_tpl.render(node=2892010904, inner=escaped, chan=1)
-    envelope = json.loads(raw)
+    tpl = load_sender_template()
+    result = ha_environment().from_string(tpl).render(**make_sender_vars())
+    envelope = json.loads(result)
     size = len(json.dumps(envelope, separators=(",", ":")).encode("utf-8"))
     assert size < 4096, f"Envelope too large: {size} bytes"
 

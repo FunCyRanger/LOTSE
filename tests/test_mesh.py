@@ -160,28 +160,32 @@ def load_sender_template():
     path = ROOT / "sender-blueprint.yaml"
     with open(path) as f:
         blueprint = yaml.load(f, Loader=yaml.FullLoader)
-    raw = blueprint["action"][1]["variables"]["inner"]
+    raw = blueprint["action"][1]["variables"]["envelope"]
     return raw
 
 
 # ─── Render helpers ────────────────────────────────────────────────────────
 
 def render_sender(template_str, variables):
-    """Render the sender's inner template with mocked HA globals.
+    """Render the sender's envelope template with mocked HA globals.
 
-    The template outputs ``| to_json | to_json`` (double encoding) so that
-    HA's NativeEnvironment unwraps it to a Python string instead of a dict.
-    In tests (no NativeEnvironment) we need two json.loads calls.
+    The template produces a full Meshtastic envelope JSON via
+    ``{{ outer_env | to_json }}``.  Single ``json.loads`` unwraps the envelope;
+    a second one extracts the inner LOTSE payload.
     """
     env = ha_environment()
     tpl = env.from_string(template_str)
     result = tpl.render(**variables)
-    return json.loads(json.loads(result))
+    envelope = json.loads(result)
+    return json.loads(envelope["payload"])
 
 
 def make_sender_vars(**overrides):
     """Build entity-id variables dict (all sensors populated by default)."""
     defaults = dict(
+        node="2896876952",
+        region="eu868",
+        channel_input=1,
         gP="sensor.grid_power",
         gIP="sensor.grid_import",
         gEP="sensor.grid_export",
