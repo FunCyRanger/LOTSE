@@ -14,7 +14,7 @@ Neighborhood energy coordination (Phase 1: share meter data over LoRa). Each hou
 
 HA uses Jinja2 `NativeEnvironment` which auto-converts template output back to Python types via `ast.literal_eval`. `{{ {"gIP":0} | to_json }}` outputs string `'{"gIP":0}'` but NativeEnvironment parses it back to dict `{"gIP": 0}`, breaking the Meshtastic envelope.
 
-**Fix**: apply `| to_json` twice to produce a JSON string literal: `{{ dict(items) | to_json | to_json }}`. Tests use standard `Environment` (no NativeEnvironment) and need two `json.loads` calls.
+**Fix**: apply `| to_json` when embedding `inner` into the outer envelope dict: `payload: "{{ inner | to_json }}"`. This re-serializes the NativeEnvironment-parsed dict back to a JSON string at the point of embedding. The inner template uses single `| to_json` only; the outer dict's `payload` value goes through a second `| to_json` to produce clean single-level `\"` escaping (avoids the bloated `\\\"` of double-encoding). Tests use standard `Environment` (no NativeEnvironment) and need one `json.loads` call.
 
 ## Payload & MQTT conventions
 
@@ -44,7 +44,7 @@ make -C config-hub/tests run     # 30+ transform/parse/GPIO/envelope tests
 ```
 Compiles `test_transform.c`, `unity.c`, `../main/transform.c`, `../main/lotse_config.c`, and vendored `cJSON` with `-Wall -Wextra -Werror`.
 
-The test mock infra (`ha_environment()`) mimics HA's Jinja environment with custom `to_json`, `from_json`, `float`, `int` filters and mock states. Tests use standard `Environment`, **not** `NativeEnvironment`, so rendering the sender template requires **two** `json.loads` calls to unwrap the double-encoded payload (`render_sender()` helper).
+The test mock infra (`ha_environment()`) mimics HA's Jinja environment with custom `to_json`, `from_json`, `float`, `int` filters and mock states. Tests use standard `Environment`, **not** `NativeEnvironment`, so rendering the sender template requires one `json.loads` call to parse the single-encoded payload (`render_sender()` helper).
 
 `tests/check_installation.py` — standalone HA connectivity health check (requires HA URL + token).
 

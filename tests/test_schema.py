@@ -165,7 +165,7 @@ def render_sender(template_str, variables):
     env = ha_environment()
     tpl = env.from_string(template_str)
     result = tpl.render(**variables)
-    return json.loads(json.loads(result))
+    return json.loads(result)
 
 
 # ─── TESTS ─────────────────────────────────────────────────────────────────

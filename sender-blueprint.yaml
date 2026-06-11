@@ -249,7 +249,7 @@ action:
       outer:
         from: "{{ node | int(0) }}"
         type: "sendtext"
-        payload: "{{ inner }}"
+        payload: "{{ inner | to_json }}"
         channel: "{{ channel_input | int(0) }}"
   - service: mqtt.publish
     data:
