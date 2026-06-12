@@ -152,6 +152,7 @@ select{padding:4px 6px;font-size:12px}
       <input id="gpio-confirm" type="checkbox">
       I have checked and confirmed the GPIO pins
     </label>
+    <div id="plus-config" style="margin-top:8px;font-size:13px;color:#666;"></div>
   </div>
 
   <div id="mapping-card" class="card hidden">
@@ -253,6 +254,7 @@ function toast(msg, type){
 let currentMappings=[];
 let scriptGpioRx=null;
 let scriptGpioTx=null;
+let lastScriptMeta=null;
 let diffData=null;
 
 async function api(path, opts){
@@ -435,9 +437,11 @@ async function init(){
           });
           scriptGpioRx=r.gpio_rx||0;
           scriptGpioTx=r.gpio_tx||0;
+          lastScriptMeta=r.meter_type?r:null;
         }catch(e){
           scriptGpioRx=0;
           scriptGpioTx=0;
+          lastScriptMeta=null;
         }
         $('gpio-card').classList.remove('hidden');
         $('mapping-card').classList.remove('hidden');
@@ -527,6 +531,7 @@ async function parseScript(){
 
   scriptGpioRx=r.gpio_rx;
   scriptGpioTx=r.gpio_tx;
+  lastScriptMeta=r.meter_type?r:null;
   updateGpioCard();
   updateSendSummary();
   toast(r.mappings.length+' variables found, GPIO checked','success');
@@ -563,6 +568,19 @@ function updateGpioCard(){
   $('gpio-rx').oninput=function(){updateApplyButton();updateSendSummary();};
   $('gpio-tx').oninput=function(){updateApplyButton();updateSendSummary();};
   confirm.onchange=updateApplyButton;
+
+  // Show serial config from + line
+  const pc=$('plus-config');
+  if(lastScriptMeta){
+    const parts=[];
+    if(lastScriptMeta.meter_type) parts.push('type='+lastScriptMeta.meter_type);
+    if(lastScriptMeta.baudrate>0) parts.push(lastScriptMeta.baudrate+' baud');
+    if(lastScriptMeta.flag>0) parts.push('flag='+lastScriptMeta.flag);
+    if(lastScriptMeta.prefix) parts.push('prefix='+lastScriptMeta.prefix);
+    pc.innerHTML='&#9881; Serial config from script: '+parts.join(', ');
+  }else{
+    pc.innerHTML='';
+  }
 }
 
 function updateSendSummary(){
@@ -596,16 +614,27 @@ function updateApplyButton(){
 function renderMappings(){
   const tbody=$('mapping-table');
   tbody.innerHTML='';
+  // Build set of lotse_keys used by other rows, per row
   currentMappings.forEach((m,i)=>{
+    const used=new Set();
+    currentMappings.forEach((other,j)=>{
+      if(j!==i && other.lotse_key) used.add(other.lotse_key);
+    });
     const tr=document.createElement('tr');
+    let opts=`<option value="">&mdash; don't send &mdash;</option>`;
+    LOTSE_KEYS.forEach(k=>{
+      // Show key if it's this row's current selection, or not used by another row
+      if(k===m.lotse_key || !used.has(k)){
+        opts+=`<option value="${k}"${(m.lotse_key===k)?' selected':''}>${k} — ${LOTSE_DESC[k]}</option>`;
+      }
+    });
     tr.innerHTML=`
       <td>${m.var||m.var_name}</td>
       <td>${m.label||''}</td>
       <td>${m.unit||''}</td>
       <td>
         <select data-idx="${i}">
-          <option value="">&mdash; don't send &mdash;</option>
-          ${LOTSE_KEYS.map(k=>`<option value="${k}"${(m.lotse_key===k)?' selected':''}>${k} — ${LOTSE_DESC[k]}</option>`).join('')}
+          ${opts}
         </select>
       </td>`;
     tbody.appendChild(tr);
@@ -614,6 +643,8 @@ function renderMappings(){
     sel.addEventListener('change',()=>{
       const idx=parseInt(sel.dataset.idx);
       currentMappings[idx].lotse_key=sel.value;
+      // Re-render so dropdowns update (used keys shuffle)
+      renderMappings();
     });
   });
 }

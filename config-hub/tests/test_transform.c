@@ -479,7 +479,7 @@ void test_parse_gpio_plus_format_alternate(void)
     script_gpio_t gpio;
     transform_parse_gpio(SMI_WITH_PLUS_GPIO_ALT, &gpio);
     TEST_ASSERT_EQUAL_INT(15, gpio.gpio_rx);
-    TEST_ASSERT_EQUAL_INT(13, gpio.gpio_tx);
+    TEST_ASSERT_EQUAL_INT(1, gpio.gpio_tx);  // txGPIO is field 7, not M
 }
 
 void test_inject_gpio_into_script_without_section(void)
@@ -503,15 +503,198 @@ void test_inject_gpio_replaces_existing(void)
     free(result);
 }
 
+void test_inject_gpio_into_trailing_ws_section(void)
+{
+    // SMI_WITH_GPIO_TRAILING_WS has >D  \n (trailing spaces) and no + line
+    char *result = transform_inject_gpio(SMI_WITH_GPIO_TRAILING_WS, 13, 15);
+    TEST_ASSERT_NOT_NULL(result);
+    // Should replace the existing >D section (with trailing space)
+    TEST_ASSERT(strstr(result, ">D\nGPIO13=1\nGPIO15=3\n\n") != NULL);
+    // Old values replaced
+    TEST_ASSERT(strstr(result, "GPIO3=1") == NULL);
+    TEST_ASSERT(strstr(result, "GPIO1=3") == NULL);
+    // Data line with leading whitespace preserved
+    TEST_ASSERT(strstr(result, "    1,1@1,Strombezug gesamt") != NULL);
+    free(result);
+}
+
 void test_inject_gpio_updates_plus_format(void)
 {
     char *result = transform_inject_gpio(SMI_WITH_PLUS_GPIO_ALT, 3, 1);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT(strstr(result, "+1,3,") != NULL);
+    // Preserves M=13, updates rx to 3
+    TEST_ASSERT(strstr(result, "+13,3,") != NULL);
     // Preserves rest of the line
     TEST_ASSERT(strstr(result, "o,16,300") != NULL);
     TEST_ASSERT(strstr(result, "1,1@1,Strombezug gesamt") != NULL);
     free(result);
+}
+
+/* ── Leading whitespace tests ─────────────────────────────── */
+
+void test_parse_leading_whitespace(void)
+{
+    int n = transform_parse_script(SMI_LEADING_WS, mappings, MAX_MAPPINGS);
+    TEST_ASSERT_EQUAL_INT(18, n);
+    // Verify a few known values parse correctly despite leading whitespace
+    TEST_ASSERT_EQUAL_STRING("Total_Bezug", mappings[0].var_name);
+    TEST_ASSERT_EQUAL_STRING("Wh", mappings[0].unit);
+    TEST_ASSERT_EQUAL_STRING("Frequency", mappings[16].var_name);
+    TEST_ASSERT_EQUAL_STRING("Hz", mappings[16].unit);
+    TEST_ASSERT_EQUAL_STRING("CosPhi", mappings[17].var_name);
+    TEST_ASSERT_EQUAL_STRING("", mappings[17].unit);
+}
+
+void test_parse_gpio_trailing_ws(void)
+{
+    script_gpio_t gpio;
+    transform_parse_gpio(SMI_WITH_GPIO_TRAILING_WS, &gpio);
+    TEST_ASSERT_EQUAL_INT(3, gpio.gpio_rx);
+    TEST_ASSERT_EQUAL_INT(1, gpio.gpio_tx);
+}
+
+void test_parse_gpio_plus_leading_ws(void)
+{
+    script_gpio_t gpio;
+    transform_parse_gpio(SMI_WITH_PLUS_LEADING_WS, &gpio);
+    TEST_ASSERT_EQUAL_INT(3, gpio.gpio_rx);
+    TEST_ASSERT_EQUAL_INT(1, gpio.gpio_tx);
+    TEST_ASSERT(gpio.has_plus);
+    TEST_ASSERT_EQUAL_INT('o', gpio.meter_type);
+    TEST_ASSERT_EQUAL_INT(16, gpio.flag);
+    TEST_ASSERT_EQUAL_INT(300, gpio.baudrate);
+    TEST_ASSERT_EQUAL_STRING("ACE0", gpio.prefix);
+}
+
+void test_inject_gpio_into_leading_ws(void)
+{
+    char *result = transform_inject_gpio(SMI_LEADING_WS, 3, 1);
+    TEST_ASSERT_NOT_NULL(result);
+    // Script has + line, so it gets updated instead of >D section
+    TEST_ASSERT(strstr(result, "+1,3,s,1,9600,SML") != NULL);
+    // Data lines preserved
+    TEST_ASSERT(strstr(result, "1,1@1,Bezug Total Wirkarbeit Wh") != NULL);
+    free(result);
+}
+
+void test_parse_plus_line_baudrate(void)
+{
+    // Test with SMI_WITH_PLUS_GPIO which uses the standard format
+    script_gpio_t gpio;
+    transform_parse_gpio(SMI_WITH_PLUS_GPIO, &gpio);
+    TEST_ASSERT(gpio.has_plus);
+    TEST_ASSERT_EQUAL_INT('o', gpio.meter_type);
+    TEST_ASSERT_EQUAL_INT(16, gpio.flag);
+    TEST_ASSERT_EQUAL_INT(300, gpio.baudrate);
+    TEST_ASSERT_EQUAL_STRING("ACE0", gpio.prefix);
+}
+
+void test_update_plus_line_preserves_meter(void)
+{
+    char *result = transform_inject_gpio(SMI_WITH_PLUS_GPIO_ALT, 3, 1);
+    TEST_ASSERT_NOT_NULL(result);
+    // M=13 should be preserved, rx updated to 3, tx stays 1
+    TEST_ASSERT(strstr(result, "+13,3,o,16,300,ACE0,1,600,2F3F210D0A") != NULL);
+    free(result);
+}
+
+/* ── Phase-aware auto-mapping tests ────────────────────────── */
+
+void test_parse_phase_aware_power(void)
+{
+    int n = transform_parse_script(SMI_PHASE_SCRIPT, mappings, MAX_MAPPINGS);
+    TEST_ASSERT_EQUAL_INT(11, n);
+    // Leistung_L3 is index 6, check phase-aware assignment
+    int leistung_l1 = -1, leistung_l2 = -1, leistung_l3 = -1, leistung_summe = -1;
+    for (int i = 0; i < n; i++) {
+        if (strcmp(mappings[i].var_name, "Watt_L1") == 0) leistung_l1 = i;
+        else if (strcmp(mappings[i].var_name, "Watt_L2") == 0) leistung_l2 = i;
+        else if (strcmp(mappings[i].var_name, "Watt_L3") == 0) leistung_l3 = i;
+        else if (strcmp(mappings[i].var_name, "Watt_Summe") == 0) leistung_summe = i;
+    }
+    TEST_ASSERT(leistung_l1 >= 0);
+    TEST_ASSERT(leistung_l2 >= 0);
+    TEST_ASSERT(leistung_l3 >= 0);
+    TEST_ASSERT(leistung_summe >= 0);
+    TEST_ASSERT_EQUAL_STRING("gP1", mappings[leistung_l1].lotse_key);
+    TEST_ASSERT_EQUAL_STRING("gP2", mappings[leistung_l2].lotse_key);
+    TEST_ASSERT_EQUAL_STRING("gP3", mappings[leistung_l3].lotse_key);
+    TEST_ASSERT_EQUAL_STRING("gP", mappings[leistung_summe].lotse_key);
+}
+
+void test_parse_phase_aware_voltage(void)
+{
+    int n = transform_parse_script(SMI_PHASE_SCRIPT, mappings, MAX_MAPPINGS);
+    TEST_ASSERT_EQUAL_INT(11, n);
+    int spannung_l1 = -1, spannung_l2 = -1, spannung_l3 = -1;
+    for (int i = 0; i < n; i++) {
+        if (strcmp(mappings[i].var_name, "Volt_L1") == 0) spannung_l1 = i;
+        else if (strcmp(mappings[i].var_name, "Volt_L2") == 0) spannung_l2 = i;
+        else if (strcmp(mappings[i].var_name, "Volt_L3") == 0) spannung_l3 = i;
+    }
+    TEST_ASSERT(spannung_l1 >= 0);
+    TEST_ASSERT(spannung_l2 >= 0);
+    TEST_ASSERT(spannung_l3 >= 0);
+    TEST_ASSERT_EQUAL_STRING("gV1", mappings[spannung_l1].lotse_key);
+    TEST_ASSERT_EQUAL_STRING("gV2", mappings[spannung_l2].lotse_key);
+    TEST_ASSERT_EQUAL_STRING("gV3", mappings[spannung_l3].lotse_key);
+}
+
+/* ── Dedup tests ─────────────────────────────────────────── */
+
+void test_parse_auto_dedup_3power(void)
+{
+    int n = transform_parse_script(SMI_3_POWER, mappings, MAX_MAPPINGS);
+    TEST_ASSERT_EQUAL_INT(3, n);
+    TEST_ASSERT_EQUAL_STRING("gP",  mappings[0].lotse_key);
+    TEST_ASSERT_EQUAL_STRING("gP1", mappings[1].lotse_key);
+    TEST_ASSERT_EQUAL_STRING("gP2", mappings[2].lotse_key);
+}
+
+void test_parse_auto_dedup_overflow(void)
+{
+    int n = transform_parse_script(SMI_5_POWER, mappings, MAX_MAPPINGS);
+    TEST_ASSERT_EQUAL_INT(5, n);
+    TEST_ASSERT_EQUAL_STRING("gP",  mappings[0].lotse_key);
+    TEST_ASSERT_EQUAL_STRING("gP1", mappings[1].lotse_key);
+    TEST_ASSERT_EQUAL_STRING("gP2", mappings[2].lotse_key);
+    TEST_ASSERT_EQUAL_STRING("gP3", mappings[3].lotse_key);
+    TEST_ASSERT_EQUAL_STRING("",    mappings[4].lotse_key);
+}
+
+void test_parse_auto_dedup_energy(void)
+{
+    int n = transform_parse_script(SMI_2_ENERGY, mappings, MAX_MAPPINGS);
+    TEST_ASSERT_EQUAL_INT(2, n);
+    TEST_ASSERT_EQUAL_STRING("gEI", mappings[0].lotse_key);
+    TEST_ASSERT_EQUAL_STRING("gEO", mappings[1].lotse_key);
+}
+
+void test_parse_auto_dedup_voltage(void)
+{
+    int n = transform_parse_script(SMI_3_VOLTAGE, mappings, MAX_MAPPINGS);
+    TEST_ASSERT_EQUAL_INT(3, n);
+    TEST_ASSERT_EQUAL_STRING("gV1", mappings[0].lotse_key);
+    TEST_ASSERT_EQUAL_STRING("gV2", mappings[1].lotse_key);
+    TEST_ASSERT_EQUAL_STRING("gV3", mappings[2].lotse_key);
+}
+
+void test_apply_dedup_collision(void)
+{
+    clear_cfg();
+    cfg.mapping_count = 2;
+    strcpy(cfg.mappings[0].var_name, "Power");
+    strcpy(cfg.mappings[0].unit, "W");
+    strcpy(cfg.mappings[0].lotse_key, "gP");
+    strcpy(cfg.mappings[1].var_name, "OtherPower");
+    strcpy(cfg.mappings[1].unit, "W");
+    strcpy(cfg.mappings[1].lotse_key, "gP");
+
+    int n = transform_apply_mapping(TASMOTA_JSON_DEDUP, &cfg, &payload);
+    TEST_ASSERT_EQUAL_INT(1, n);
+    TEST_ASSERT_EQUAL_STRING("gP", payload.values[0].lotse_key);
+    // First var (Power=1200) should win: 1200 W → 1.2 kW
+    TEST_ASSERT_FLOAT_WITHIN(0.001, 1.2, payload.values[0].value);
 }
 
 /* ── runner ────────────────────────────────────────────── */
@@ -563,7 +746,24 @@ int main(void)
     RUN_TEST(test_parse_gpio_plus_format_alternate);
     RUN_TEST(test_inject_gpio_into_script_without_section);
     RUN_TEST(test_inject_gpio_replaces_existing);
+    RUN_TEST(test_inject_gpio_into_trailing_ws_section);
     RUN_TEST(test_inject_gpio_updates_plus_format);
+
+    RUN_TEST(test_parse_leading_whitespace);
+    RUN_TEST(test_parse_gpio_trailing_ws);
+    RUN_TEST(test_parse_gpio_plus_leading_ws);
+    RUN_TEST(test_inject_gpio_into_leading_ws);
+    RUN_TEST(test_parse_plus_line_baudrate);
+    RUN_TEST(test_update_plus_line_preserves_meter);
+
+    RUN_TEST(test_parse_phase_aware_power);
+    RUN_TEST(test_parse_phase_aware_voltage);
+
+    RUN_TEST(test_parse_auto_dedup_3power);
+    RUN_TEST(test_parse_auto_dedup_overflow);
+    RUN_TEST(test_parse_auto_dedup_energy);
+    RUN_TEST(test_parse_auto_dedup_voltage);
+    RUN_TEST(test_apply_dedup_collision);
 
     return UNITY_END();
 }

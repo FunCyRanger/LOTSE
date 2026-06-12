@@ -7,16 +7,38 @@
 
 static const char *TAG = "transform";
 
+static bool key_already_used(const var_mapping_t *mappings, int count, const char *key)
+{
+    for (int i = 0; i < count; i++) {
+        if (strcmp(mappings[i].lotse_key, key) == 0) return true;
+    }
+    return false;
+}
+
+static const char *first_unused_slot(const char *pool[], const var_mapping_t *mappings, int count)
+{
+    for (int i = 0; pool[i]; i++) {
+        if (!key_already_used(mappings, count, pool[i])) return pool[i];
+    }
+    return NULL;
+}
+
 int transform_parse_script(const char *script, var_mapping_t *mappings, int max)
 {
+    static const char *power_slots[] = {"gP", "gP1", "gP2", "gP3", NULL};
+    static const char *energy_slots[] = {"gEI", "gEO", NULL};
+    static const char *voltage_slots[] = {"gV1", "gV2", "gV3", NULL};
+
     int count = 0;
     const char *p = script;
 
     while (p && *p && count < max) {
+        while (*p == ' ' || *p == '\t') p++;
         if (strncmp(p, "1,", 2) != 0) {
-            p = strstr(p, "\n1,");
+            p = strchr(p, '\n');
             if (!p) break;
             p++;
+            continue;
         }
 
         const char *line_end = strchr(p, '\n');
@@ -85,21 +107,35 @@ int transform_parse_script(const char *script, var_mapping_t *mappings, int max)
                 mappings[count].label[llen] = 0;
             }
 
-            // Auto-suggest LOTSE key based on unit
-            if (strcmp(mappings[count].unit, "W") == 0)
-                strcpy(mappings[count].lotse_key, "gP");
-            else if (strcmp(mappings[count].unit, "kW") == 0)
-                strcpy(mappings[count].lotse_key, "gP");
-            else if (strstr(mappings[count].unit, "Wh") || strstr(mappings[count].unit, "kWh"))
-                strcpy(mappings[count].lotse_key, "gEI");
-            else if (strstr(mappings[count].unit, "V") && strlen(mappings[count].unit) <= 2)
-                strcpy(mappings[count].lotse_key, "gV1");
-            else if (strcmp(mappings[count].unit, "%") == 0)
-                strcpy(mappings[count].lotse_key, "bS");
-            else if (strcmp(mappings[count].unit, "A") == 0)
-                strcpy(mappings[count].lotse_key, ""); // no LOTSE key for current
-            else
+            // Auto-suggest LOTSE key — phase-aware for power/voltage, cycle for others
+            const char *assigned = NULL;
+            if (strcmp(mappings[count].unit, "W") == 0 || strcmp(mappings[count].unit, "kW") == 0) {
+                const char *nm = mappings[count].label;
+                if (!nm[0]) nm = mappings[count].var_name;
+                if      (strstr(nm, "L1")) assigned = key_already_used(mappings, count, "gP1") ? NULL : "gP1";
+                else if (strstr(nm, "L2")) assigned = key_already_used(mappings, count, "gP2") ? NULL : "gP2";
+                else if (strstr(nm, "L3")) assigned = key_already_used(mappings, count, "gP3") ? NULL : "gP3";
+                else                       assigned = first_unused_slot(power_slots, mappings, count);
+            } else if (strstr(mappings[count].unit, "Wh")) {
+                assigned = first_unused_slot(energy_slots, mappings, count);
+            } else if (strstr(mappings[count].unit, "V") && strlen(mappings[count].unit) <= 2) {
+                const char *nm = mappings[count].label;
+                if (!nm[0]) nm = mappings[count].var_name;
+                if      (strstr(nm, "L1")) assigned = key_already_used(mappings, count, "gV1") ? NULL : "gV1";
+                else if (strstr(nm, "L2")) assigned = key_already_used(mappings, count, "gV2") ? NULL : "gV2";
+                else if (strstr(nm, "L3")) assigned = key_already_used(mappings, count, "gV3") ? NULL : "gV3";
+                else                       assigned = first_unused_slot(voltage_slots, mappings, count);
+            } else if (strcmp(mappings[count].unit, "%") == 0) {
+                assigned = key_already_used(mappings, count, "bS") ? NULL : "bS";
+            } else if (strcmp(mappings[count].unit, "A") == 0) {
+                assigned = ""; // no LOTSE key for current
+            }
+
+            if (assigned) {
+                strncpy(mappings[count].lotse_key, assigned, LOTSE_KEY_LEN - 1);
+            } else {
                 mappings[count].lotse_key[0] = 0;
+            }
 
             count++;
         }
@@ -177,6 +213,17 @@ int transform_apply_mapping(const char *tasmota_json, const hub_config_t *cfg,
             if (converted < -500) converted = -500;
         }
 
+        // Skip duplicate lotse_key — keep first occurrence
+        bool dup = false;
+        for (int j = 0; j < out->count; j++) {
+            if (strcmp(out->values[j].lotse_key, key) == 0) {
+                ESP_LOGW(TAG, "map: duplicate lotse_key '%s' for var '%s', skipping", key, var);
+                dup = true;
+                break;
+            }
+        }
+        if (dup) continue;
+
         int idx = out->count;
         strncpy(out->values[idx].lotse_key, key, LOTSE_KEY_LEN-1);
         out->values[idx].value = converted;
@@ -213,12 +260,39 @@ char *transform_build_envelope(const lotse_payload_t *payload, uint32_t node_dec
     return result;
 }
 
+static const char *find_plus_line(const char *script)
+{
+    const char *p = script;
+    while (*p == ' ' || *p == '\t') p++;
+    if (*p == '+') return p;
+
+    while ((p = strchr(p, '\n')) != NULL) {
+        p++;
+        while (*p == ' ' || *p == '\t') p++;
+        if (*p == '+') return p;
+    }
+    return NULL;
+}
+
 static void parse_plus_line(const char *line, script_gpio_t *gpio)
 {
-    int tx, rx;
-    if (sscanf(line, "+%d,%d", &tx, &rx) >= 2) {
-        gpio->gpio_tx = tx;
-        gpio->gpio_rx = rx;
+    // +<M>,<rxGPIO>,<type>,<flag>,<baudrate>,<jsonPrefix>{,<txGPIO>,<txPeriod>,<cmdTelegram>}
+    int meter, rx = -1, tx = -1, flag = 0, baud = 0, period = 0;
+    char mode[16] = {0}, prefix[16] = {0}, cmd[64] = {0};
+
+    int n = sscanf(line, "+%d,%d,%15[^,],%d,%d,%15[^,],%d,%d,%63s",
+                   &meter, &rx, mode, &flag, &baud, prefix, &tx, &period, cmd);
+
+    gpio->gpio_rx = (rx >= 0) ? rx : -1;
+    gpio->gpio_tx = (tx >= 0) ? tx : -1;
+    gpio->has_plus = true;
+    gpio->meter_type = (n >= 3 && mode[0]) ? mode[0] : 0;
+    gpio->flag = (n >= 4) ? flag : 0;
+    gpio->baudrate = (n >= 5) ? baud : 0;
+    if (n >= 6) {
+        strncpy(gpio->prefix, prefix, sizeof(gpio->prefix) - 1);
+    } else {
+        gpio->prefix[0] = 0;
     }
 }
 
@@ -226,51 +300,44 @@ void transform_parse_gpio(const char *script, script_gpio_t *gpio)
 {
     gpio->gpio_rx = -1;
     gpio->gpio_tx = -1;
+    gpio->has_plus = false;
+    gpio->meter_type = 0;
+    gpio->flag = 0;
+    gpio->baudrate = 0;
+    gpio->prefix[0] = 0;
 
-    const char *d = strstr(script, ">D\n");
-    if (!d) {
-        d = strstr(script, ">D\r\n");
-    }
-
+    // Find >D followed by optional spaces/tabs then \n
+    const char *d = strstr(script, ">D");
     if (d) {
-        d += 3;
-        if (*d == '\r') d++;
-        if (*d == '\n') d++;
+        const char *after = d + 2;
+        while (*after == ' ' || *after == '\t') after++;
+        if (*after == '\r') after++;
+        if (*after == '\n') {
+            after++;
+            const char *section_end = strstr(after, "\n\n");
+            if (!section_end) section_end = after + strlen(after);
 
-        const char *section_end = strstr(d, "\n\n");
-        if (!section_end) section_end = d + strlen(d);
+            while (after < section_end) {
+                const char *nl = strchr(after, '\n');
+                if (!nl) nl = after + strlen(after);
+                if (nl > section_end) nl = section_end;
 
-        while (d < section_end) {
-            const char *nl = strchr(d, '\n');
-            if (!nl) nl = d + strlen(d);
-            if (nl > section_end) nl = section_end;
-
-            int pin = -1, func = -1;
-            if (sscanf(d, "GPIO%d=%d", &pin, &func) >= 2) {
-                if (func == 1) gpio->gpio_rx = pin;
-                else if (func == 3) gpio->gpio_tx = pin;
+                int pin = -1, func = -1;
+                if (sscanf(after, "GPIO%d=%d", &pin, &func) >= 2) {
+                    if (func == 1) gpio->gpio_rx = pin;
+                    else if (func == 3) gpio->gpio_tx = pin;
+                }
+                after = nl;
+                if (*after) after++;
             }
-
-            d = nl;
-            if (*d) d++;
         }
     }
 
-    // If not found in >D section, try +<tx>,<rx> format
+    // Fallback: try + line format
     if (gpio->gpio_rx < 0 || gpio->gpio_tx < 0) {
-        const char *p = script;
-
-        // Check if script starts with +
-        if (*p == '+') {
-            parse_plus_line(p, gpio);
-        } else {
-            while ((p = strchr(p, '\n')) != NULL) {
-                p++;
-                if (*p == '+') {
-                    parse_plus_line(p, gpio);
-                    break;
-                }
-            }
+        const char *plus = find_plus_line(script);
+        if (plus) {
+            parse_plus_line(plus, gpio);
         }
     }
 }
@@ -282,33 +349,28 @@ static void build_gpio_lines(char *buf, size_t size, int gpio_rx, int gpio_tx)
 
 static char *update_plus_line(const char *script, int gpio_rx, int gpio_tx)
 {
-    const char *plus = NULL;
-
-    if (*script == '+') {
-        plus = script;
-    } else {
-        plus = strstr(script, "\n+");
-        if (plus) plus++;
-    }
-
+    const char *plus = find_plus_line(script);
     if (!plus) return NULL;
 
-    int old_tx, old_rx;
-    char mode[16] = {0};
-    int baud = 0, interchar = 0;
-    char serialcfg[32] = {0};
-    int serialtype = 0, timeout = 0;
-    char init[64] = {0};
+    // +<M>,<rxGPIO>,<type>,<flag>,<baudrate>,<jsonPrefix>{,<txGPIO>,<txPeriod>,<cmdTelegram>}
+    int meter, old_rx = -1, old_tx = -1, flag = 0, baud = 0, period = 0;
+    char mode[16] = {0}, prefix[16] = {0}, cmd[64] = {0};
 
-    int n = sscanf(plus, "+%d,%d,%15[^,],%d,%d,%31[^,],%d,%d,%63s",
-                  &old_tx, &old_rx, mode, &baud, &interchar,
-                  serialcfg, &serialtype, &timeout, init);
+    int n = sscanf(plus, "+%d,%d,%15[^,],%d,%d,%15[^,],%d,%d,%63s",
+                   &meter, &old_rx, mode, &flag, &baud, prefix, &old_tx, &period, cmd);
     if (n < 3) return NULL;
 
     char new_line[128];
-    snprintf(new_line, sizeof(new_line), "+%d,%d,%s,%d,%d,%s,%d,%d,%s",
-             gpio_tx, gpio_rx, mode, baud, interchar,
-             serialcfg, serialtype, timeout, init);
+    if (n >= 7) {
+        snprintf(new_line, sizeof(new_line), "+%d,%d,%s,%d,%d,%s,%d,%d,%s",
+                 meter, gpio_rx, mode, flag, baud, prefix, gpio_tx, period, cmd);
+    } else if (n >= 6) {
+        snprintf(new_line, sizeof(new_line), "+%d,%d,%s,%d,%d,%s",
+                 meter, gpio_rx, mode, flag, baud, prefix);
+    } else {
+        snprintf(new_line, sizeof(new_line), "+%d,%d,%s,%d,%d",
+                 meter, gpio_rx, mode, flag, baud);
+    }
 
     const char *line_end = strchr(plus, '\n');
     if (!line_end) line_end = plus + strlen(plus);
@@ -335,24 +397,42 @@ char *transform_inject_gpio(const char *script, int gpio_rx, int gpio_tx)
     build_gpio_lines(gpio_lines, sizeof(gpio_lines), gpio_rx, gpio_tx);
     size_t gpio_len = strlen(gpio_lines);
 
-    const char *d = strstr(script, ">D\n");
+    // Find >D followed by optional spaces/tabs then \n
+    const char *d = strstr(script, ">D");
     if (d) {
-        const char *section_end = strstr(d, "\n\n");
-        if (!section_end) section_end = d + strlen(d);
-        const char *after = section_end;
-        while (*after == '\n') after++;
+        const char *after_marker = d + 2;
+        while (*after_marker == ' ' || *after_marker == '\t') after_marker++;
+        if (*after_marker == '\r') after_marker++;
+        if (*after_marker == '\n') {
+            after_marker++;
+            const char *section_end = strstr(after_marker, "\n\n");
+            if (!section_end) section_end = after_marker + strlen(after_marker);
+            const char *after = section_end;
+            while (*after == '\n') after++;
 
-        size_t before_len = d - script;
-        size_t after_len = strlen(after);
-        result = malloc(before_len + gpio_len + after_len + 1);
-        if (!result) return NULL;
-        memcpy(result, script, before_len);
-        memcpy(result + before_len, gpio_lines, gpio_len);
-        memcpy(result + before_len + gpio_len, after, after_len + 1);
-        return result;
+            size_t before_len = d - script;
+            size_t after_len = strlen(after);
+            result = malloc(before_len + gpio_len + after_len + 1);
+            if (!result) return NULL;
+            memcpy(result, script, before_len);
+            memcpy(result + before_len, gpio_lines, gpio_len);
+            memcpy(result + before_len + gpio_len, after, after_len + 1);
+            return result;
+        }
     }
 
-    const char *first_var = strstr(script, "1,");
+    // Find first 1, line (with optional leading whitespace)
+    const char *first_var = NULL;
+    {
+        const char *scan = script;
+        while (*scan) {
+            while (*scan == ' ' || *scan == '\t') scan++;
+            if (strncmp(scan, "1,", 2) == 0) { first_var = scan; break; }
+            scan = strchr(scan, '\n');
+            if (!scan) break;
+            scan++;
+        }
+    }
     if (first_var) {
         size_t before_len = first_var - script;
         size_t after_len = strlen(first_var);

@@ -193,22 +193,37 @@ static esp_err_t handle_post_config(httpd_req_t *req)
     if (maps && cJSON_IsArray(maps)) {
         g_cfg->mapping_count = 0;
         int cnt = cJSON_GetArraySize(maps);
-        for (int i = 0; i < cnt && i < MAX_MAPPINGS; i++) {
+        for (int i = 0; i < cnt && g_cfg->mapping_count < MAX_MAPPINGS; i++) {
             cJSON *m = cJSON_GetArrayItem(maps, i);
             if (!m) continue;
-            v = cJSON_GetObjectItem(m, "var_name");
-            if (v && v->valuestring)
-                strncpy(g_cfg->mappings[i].var_name, v->valuestring, sizeof(g_cfg->mappings[i].var_name)-1);
-            v = cJSON_GetObjectItem(m, "lotse_key");
-            if (v && v->valuestring)
-                strncpy(g_cfg->mappings[i].lotse_key, v->valuestring, sizeof(g_cfg->mappings[i].lotse_key)-1);
-            v = cJSON_GetObjectItem(m, "unit");
-            if (v && v->valuestring)
-                strncpy(g_cfg->mappings[i].unit, v->valuestring, sizeof(g_cfg->mappings[i].unit)-1);
-            v = cJSON_GetObjectItem(m, "label");
-            if (v && v->valuestring)
-                strncpy(g_cfg->mappings[i].label, v->valuestring, sizeof(g_cfg->mappings[i].label)-1);
-            g_cfg->mapping_count = i + 1;
+            cJSON *v_name = cJSON_GetObjectItem(m, "var_name");
+            cJSON *v_key = cJSON_GetObjectItem(m, "lotse_key");
+            cJSON *v_unit = cJSON_GetObjectItem(m, "unit");
+            cJSON *v_label = cJSON_GetObjectItem(m, "label");
+
+            const char *lk = (v_key && v_key->valuestring) ? v_key->valuestring : "";
+            // Skip duplicate non-empty lotse_key (keep first)
+            if (lk[0]) {
+                bool dup = false;
+                for (int j = 0; j < g_cfg->mapping_count; j++) {
+                    if (strcmp(g_cfg->mappings[j].lotse_key, lk) == 0) {
+                        ESP_LOGW(TAG, "config: duplicate lotse_key '%s' dropped (first kept)", lk);
+                        dup = true;
+                        break;
+                    }
+                }
+                if (dup) continue;
+            }
+
+            int idx = g_cfg->mapping_count;
+            if (v_name && v_name->valuestring)
+                strncpy(g_cfg->mappings[idx].var_name, v_name->valuestring, sizeof(g_cfg->mappings[idx].var_name)-1);
+            strncpy(g_cfg->mappings[idx].lotse_key, lk, LOTSE_KEY_LEN-1);
+            if (v_unit && v_unit->valuestring)
+                strncpy(g_cfg->mappings[idx].unit, v_unit->valuestring, sizeof(g_cfg->mappings[idx].unit)-1);
+            if (v_label && v_label->valuestring)
+                strncpy(g_cfg->mappings[idx].label, v_label->valuestring, sizeof(g_cfg->mappings[idx].label)-1);
+            g_cfg->mapping_count++;
         }
     }
 
@@ -244,6 +259,13 @@ static esp_err_t handle_script_parse(httpd_req_t *req)
     cJSON_AddNumberToObject(resp, "count", count);
     cJSON_AddNumberToObject(resp, "gpio_rx", gpio.gpio_rx);
     cJSON_AddNumberToObject(resp, "gpio_tx", gpio.gpio_tx);
+    if (gpio.has_plus) {
+        char type_str[2] = {gpio.meter_type, 0};
+        cJSON_AddStringToObject(resp, "meter_type", type_str);
+        cJSON_AddNumberToObject(resp, "flag", gpio.flag);
+        cJSON_AddNumberToObject(resp, "baudrate", gpio.baudrate);
+        cJSON_AddStringToObject(resp, "prefix", gpio.prefix);
+    }
     cJSON *arr = cJSON_AddArrayToObject(resp, "mappings");
     for (int i = 0; i < count; i++) {
         cJSON *m = cJSON_CreateObject();
@@ -414,23 +436,37 @@ static esp_err_t handle_tasmota_configure(httpd_req_t *req)
     g_cfg->mapping_count = 0;
     if (mappings && cJSON_IsArray(mappings)) {
         int cnt = cJSON_GetArraySize(mappings);
-        for (int i = 0; i < cnt && i < MAX_MAPPINGS; i++) {
+        for (int i = 0; i < cnt && g_cfg->mapping_count < MAX_MAPPINGS; i++) {
             cJSON *m = cJSON_GetArrayItem(mappings, i);
             if (!m) continue;
-            cJSON *v;
-            v = cJSON_GetObjectItem(m, "var_name");
-            if (v && v->valuestring)
-                strncpy(g_cfg->mappings[i].var_name, v->valuestring, sizeof(g_cfg->mappings[i].var_name)-1);
-            v = cJSON_GetObjectItem(m, "lotse_key");
-            if (v && v->valuestring)
-                strncpy(g_cfg->mappings[i].lotse_key, v->valuestring, sizeof(g_cfg->mappings[i].lotse_key)-1);
-            v = cJSON_GetObjectItem(m, "unit");
-            if (v && v->valuestring)
-                strncpy(g_cfg->mappings[i].unit, v->valuestring, sizeof(g_cfg->mappings[i].unit)-1);
-            v = cJSON_GetObjectItem(m, "label");
-            if (v && v->valuestring)
-                strncpy(g_cfg->mappings[i].label, v->valuestring, sizeof(g_cfg->mappings[i].label)-1);
-            g_cfg->mapping_count = i + 1;
+            cJSON *v_name = cJSON_GetObjectItem(m, "var_name");
+            cJSON *v_key = cJSON_GetObjectItem(m, "lotse_key");
+            cJSON *v_unit = cJSON_GetObjectItem(m, "unit");
+            cJSON *v_label = cJSON_GetObjectItem(m, "label");
+
+            const char *lk = (v_key && v_key->valuestring) ? v_key->valuestring : "";
+            // Skip duplicate non-empty lotse_key (keep first)
+            if (lk[0]) {
+                bool dup = false;
+                for (int j = 0; j < g_cfg->mapping_count; j++) {
+                    if (strcmp(g_cfg->mappings[j].lotse_key, lk) == 0) {
+                        ESP_LOGW(TAG, "tasmota_configure: duplicate lotse_key '%s' dropped", lk);
+                        dup = true;
+                        break;
+                    }
+                }
+                if (dup) continue;
+            }
+
+            int idx = g_cfg->mapping_count;
+            if (v_name && v_name->valuestring)
+                strncpy(g_cfg->mappings[idx].var_name, v_name->valuestring, sizeof(g_cfg->mappings[idx].var_name)-1);
+            strncpy(g_cfg->mappings[idx].lotse_key, lk, LOTSE_KEY_LEN-1);
+            if (v_unit && v_unit->valuestring)
+                strncpy(g_cfg->mappings[idx].unit, v_unit->valuestring, sizeof(g_cfg->mappings[idx].unit)-1);
+            if (v_label && v_label->valuestring)
+                strncpy(g_cfg->mappings[idx].label, v_label->valuestring, sizeof(g_cfg->mappings[idx].label)-1);
+            g_cfg->mapping_count++;
         }
     }
 

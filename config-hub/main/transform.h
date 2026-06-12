@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stdbool.h>
 #include "lotse_config.h"
 
 typedef struct {
@@ -21,6 +22,11 @@ char *transform_build_envelope(const lotse_payload_t *payload, uint32_t node_dec
 typedef struct {
     int gpio_rx;
     int gpio_tx;
+    char  meter_type;       // 'o','s','e','v','m' or 0
+    int   flag;
+    int   baudrate;
+    char  prefix[16];
+    bool  has_plus;         // true if + line was found
 } script_gpio_t;
 
 void transform_parse_gpio(const char *script, script_gpio_t *gpio);
