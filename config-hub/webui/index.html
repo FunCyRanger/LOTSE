@@ -126,6 +126,12 @@ select{padding:4px 6px;font-size:12px}
       <span id="verify-msg" style="font-size:13px;color:#666"></span>
     </div>
 
+    <div style="margin-top:12px;font-size:13px;color:#555;line-height:1.6">
+      Find SMI scripts for your meter:<br>
+      <a href="https://stromleser.de/pages/scripts" target="_blank" rel="noopener">Stromleser</a> &middot;
+      <a href="https://tasmota.github.io/docs/Smart-Meter-Interface/#easymeter-q3a-apator-apox-sml" target="_blank" rel="noopener">Tasmota SMI Docs</a> &middot;
+      <a href="https://sites.google.com/view/hichi-lesekopf/scripte" target="_blank" rel="noopener">Hichi Scripte</a>
+    </div>
     <label style="margin-top:16px">Paste Tasmota script from Hichi / Tasmota docs</label>
     <textarea id="script-input" placeholder="Paste the SMI script from the Hichi list or Tasmota docs..."></textarea>
     <div style="display:flex;gap:8px;margin-top:8px">
@@ -836,7 +842,7 @@ async function saveConfig(){
       tasmota_ip:$('tasmota-ip').value,
       region:$('region').value,
       node_decimal:parseInt($('node-decimal').value)||0,
-      send_interval:parseInt($('send-interval').value)||300,
+      send_interval:parseInt($('send-interval').value)||60,
       gpio_rx:parseInt($('gpio-rx').value)||3,
       gpio_tx:parseInt($('gpio-tx').value)||1,
       script:$('script-input').value,
@@ -871,7 +877,7 @@ async function factoryReset(){
     await api('/api/config',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({configured:false,wifi_ssid:'',wifi_pass:'',tasmota_ip:'',region:'',node_decimal:0,send_interval:300,script:'',mappings:[]})
+      body:JSON.stringify({configured:false,wifi_ssid:'',wifi_pass:'',tasmota_ip:'',region:'',node_decimal:0,send_interval:60,script:'',mappings:[]})
     });
     toast('Reset! Please restart the device.','success');
     msg.textContent='OK &mdash; power cycle the device (or press RST)';

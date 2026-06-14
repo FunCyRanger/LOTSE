@@ -87,7 +87,7 @@ static int json_to_config(const char *json, hub_config_t *cfg)
     if (v && cJSON_IsNumber(v)) cfg->gpio_tx = v->valueint;
     v = cJSON_GetObjectItem(root, "send_interval");
     if (v && cJSON_IsNumber(v)) cfg->send_interval = v->valueint;
-    if (cfg->send_interval < 60) cfg->send_interval = 300;
+    if (cfg->send_interval < 60) cfg->send_interval = 60;
 
     v = cJSON_GetObjectItem(root, "node_hash");
     if (v && v->valuestring) strncpy(cfg->node_hash, v->valuestring, sizeof(cfg->node_hash)-1);

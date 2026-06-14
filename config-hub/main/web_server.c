@@ -175,7 +175,7 @@ static esp_err_t handle_post_config(httpd_req_t *req)
     if (v && cJSON_IsNumber(v)) g_cfg->gpio_tx = v->valueint;
     v = cJSON_GetObjectItem(root, "send_interval");
     if (v && cJSON_IsNumber(v)) g_cfg->send_interval = v->valueint;
-    if (g_cfg->send_interval < 60) g_cfg->send_interval = 300;
+    if (g_cfg->send_interval < 60) g_cfg->send_interval = 60;
     v = cJSON_GetObjectItem(root, "node_hash");
     if (v && v->valuestring) strncpy(g_cfg->node_hash, v->valuestring, sizeof(g_cfg->node_hash)-1);
     v = cJSON_GetObjectItem(root, "node_hash");

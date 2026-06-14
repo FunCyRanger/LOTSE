@@ -5,6 +5,7 @@
 #include "freertos/task.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "esp_system.h"
 #include "esp_sntp.h"
 #include "driver/gpio.h"
 #include "nvs_flash.h"
@@ -35,10 +36,13 @@ static void on_mqtt_publish(const char *topic, const char *payload, int payload_
             return;
         }
         int interval = s_cfg.send_interval;
-        if (interval < 60) interval = 300;
+        if (interval < 60) interval = 60;
         if (s_last_send_us > 0) {
             int64_t elapsed = esp_timer_get_time() - s_last_send_us;
-            if (elapsed < (int64_t)interval * 1000000LL) { ESP_LOGD(TAG, "cb: rate-limited"); return; }
+            uint32_t jitter = (uint64_t)interval * 1000000ULL / 10;
+            if (jitter > 10000000ULL) jitter = 10000000ULL;
+            jitter = esp_random() % (jitter + 1);
+            if (elapsed < (int64_t)interval * 1000000LL + jitter) { ESP_LOGD(TAG, "cb: rate-limited"); return; }
         }
         lotse_payload_t lp;
         int n = transform_apply_mapping(payload, &s_cfg, &lp);
@@ -215,7 +219,7 @@ void app_main(void)
     config_store_load(&s_cfg);
     if (s_cfg.gpio_rx <= 0) s_cfg.gpio_rx = 3;
     if (s_cfg.gpio_tx <= 0) s_cfg.gpio_tx = 1;
-    if (s_cfg.send_interval < 60) s_cfg.send_interval = 300;
+    if (s_cfg.send_interval < 60) s_cfg.send_interval = 60;
 
     wifi_manager_init();
     check_factory_reset();
@@ -224,7 +228,7 @@ void app_main(void)
     config_store_load(&s_cfg);
     if (s_cfg.gpio_rx <= 0) s_cfg.gpio_rx = 3;
     if (s_cfg.gpio_tx <= 0) s_cfg.gpio_tx = 1;
-    if (s_cfg.send_interval < 60) s_cfg.send_interval = 300;
+    if (s_cfg.send_interval < 60) s_cfg.send_interval = 60;
 
     if (s_cfg.configured && s_cfg.wifi_ssid[0]) {
         wifi_manager_start(s_cfg.wifi_ssid, s_cfg.wifi_pass);
