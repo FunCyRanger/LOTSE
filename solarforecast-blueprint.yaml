@@ -1,0 +1,137 @@
+blueprint:
+  name: PV Hourly Forecast Template Sensor
+  description: Erzeugt einen Template-Sensor für stündliche PV-Ertrags- und Stabilitätsvorhersage basierend auf Weather-Integration. Geeignet für das Energy Dashboard (Today/Tomorrow). Stündliche Aktualisierung. Unterstützt mehrere Anlagen.
+  domain: template
+  input:
+    weather_entity:
+      name: Wetter-Entity
+      description: Weather-Entity mit stündlichem Forecast (z. B. weather.forecast_home_2)
+      selector:
+        entity:
+          domain: weather
+    peak_power:
+      name: Peak Leistung (kWp)
+      description: Installierte Peak-Leistung der PV-Anlage
+      default: 5.0
+      selector:
+        number:
+          min: 0.1
+          max: 50
+          step: 0.1
+          unit_of_measurement: kWp
+    azimuth:
+      name: Azimut (Ausrichtung)
+      description: 0° = Nord, 90° = Ost, 180° = Süd, 270° = West
+      default: 180
+      selector:
+        number:
+          min: 0
+          max: 360
+          step: 1
+    tilt:
+      name: Neigung (Tilt)
+      description: Neigungswinkel der Module in Grad
+      default: 35
+      selector:
+        number:
+          min: 0
+          max: 90
+          step: 1
+    sensor_name:
+      name: Basis-Sensor-Name
+      description: Name für den Haupt-Sensor (z. B. "PV Anlage Süd")
+      default: "PV Hourly Forecast"
+
+template:
+  - trigger:
+      - platform: time_pattern
+        hours: /1
+    action:
+      - action: weather.get_forecasts
+        target:
+          entity_id: !input weather_entity
+        data:
+          type: hourly
+        response_variable: weather_forecast
+    sensor:
+      # Haupt-Sensor mit stündlichen Details
+      - name: !input sensor_name
+        unique_id: "pv_hourly_forecast_{{ !input sensor_name | slugify }}"
+        state: "{{ now().isoformat() }}"
+        unit_of_measurement: "kWh"
+        state_class: measurement
+        attributes:
+          production: >
+            {% set data = weather_forecast[states(!input weather_entity)].forecast[:24] %}
+            {% set pv_peak = !input peak_power | float(5.0) %}
+            {% set azimuth = !input azimuth | float(180) %}
+            {% set tilt = !input tilt | float(35) %}
+            {% set efficiency = 0.86 %}
+            {% set temp_coeff = -0.004 %}
+            {% set lat = config.latitude | float %}
+            {% set results = namespace(production=[]) %}
+            {% for hour in data %}
+              {% set dt = hour.datetime | as_datetime %}
+              {% set cloud = (hour.cloud_cover | default(50) | float) / 100 %}
+              {% set wind = hour.wind_speed | default(0) | float %}
+              {% set temp = hour.temperature | default(20) | float %}
+              
+              # Sonnenstand-Berechnung
+              {% set hour_angle = (dt.hour - 12) * 15 %}
+              {% set decl = 23.45 * sin(360/365 * (dt.dayofyear - 81) * pi / 180) %}
+              {% set zenith = acos(cos(lat * pi/180) * cos(decl * pi/180) * cos(hour_angle * pi/180) + sin(lat * pi/180) * sin(decl * pi/180)) %}
+              {% set altitude = (90 - (zenith * 180 / pi)) | max(0) %}
+              {% set clear_ghi = 1000 * sin(altitude * pi / 180) | max(0) %}
+              
+              # Faktoren
+              {% set cloud_factor = (1 - 0.75 * cloud) | max(0.05) %}
+              {% set orientation_factor = ((cos((azimuth - 180) * pi / 180) * 0.65 + 0.35) * (cos(tilt * pi / 180) ** 0.75)) | max(0.25) | min(1.1) %}
+              {% set wind_factor = 1 if wind < 10 else 0.95 %}
+              {% set temp_factor = (1 + temp_coeff * (temp - 25)) | max(0.7) %}
+              
+              {% set prod = (pv_peak * clear_ghi / 1000 * cloud_factor * orientation_factor * wind_factor * efficiency * temp_factor) | round(2) %}
+              {% set results.production = results.production + [prod] %}
+            {% endfor %}
+            {{ results.production }}
+          
+          stability: >
+            {% set data = weather_forecast[states(!input weather_entity)].forecast[:24] %}
+            {% set results = namespace(stab=[]) %}
+            {% for hour in data %}
+              {% set cloud = hour.cloud_cover | default(50) | float %}
+              {% set wind = hour.wind_speed | default(0) | float %}
+              {% set cloud_score = (100 - cloud) * 0.7 %}
+              {% set wind_penalty = wind * 1.5 if wind > 8 else 0 %}
+              {% set stab = (cloud_score - wind_penalty) | max(0) | min(100) | round(0) %}
+              {% set results.stab = results.stab + [stab] %}
+            {% endfor %}
+            {{ results.stab }}
+
+      # Energy Dashboard: Heutige Vorhersage
+      - name: "{{ !input sensor_name }} Today"
+        unique_id: "pv_today_{{ !input sensor_name | slugify }}"
+        state: >
+          {% set prod = state_attr(!input sensor_name | replace(' ', '_') | lower, 'production') | default([]) %}
+          {% set remaining_hours = 24 - now().hour %}
+          {{ (prod[:remaining_hours] | sum) | round(1) if prod else 0 }}
+        unit_of_measurement: "kWh"
+        state_class: total_increasing
+        device_class: energy
+
+      # Energy Dashboard: Morgen-Vorhersage
+      - name: "{{ !input sensor_name }} Tomorrow"
+        unique_id: "pv_tomorrow_{{ !input sensor_name | slugify }}"
+        state: >
+          {% set prod = state_attr(!input sensor_name | replace(' ', '_') | lower, 'production') | default([]) %}
+          {% set remaining_hours = 24 - now().hour %}
+          {{ (prod[remaining_hours:remaining_hours + 24] | sum) | round(1) if prod | length > remaining_hours else 0 }}
+        unit_of_measurement: "kWh"
+        state_class: total_increasing
+        device_class: energy
+
+      # Nächste Stunde (für Karten)
+      - name: "{{ !input sensor_name }} Next Hour"
+        unique_id: "pv_next_hour_{{ !input sensor_name | slugify }}"
+        state: "{{ state_attr(!input sensor_name | replace(' ', '_') | lower, 'production')[0] | default(0) }}"
+        unit_of_measurement: "kWh"
+        state_class: measurement
