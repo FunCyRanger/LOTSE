@@ -9,6 +9,7 @@
 #include "esp_http_client.h"
 #include "cJSON.h"
 #include "nvs_flash.h"
+#include "esp_crt_bundle.h"
 #include "ota.h"
 #include "wifi_manager.h"
 
@@ -69,7 +70,8 @@ static void save_version_to_nvs(const char *ver)
     }
 }
 
-static esp_err_t fetch_latest_version(char *version_buf, size_t buf_size)
+static esp_err_t fetch_release_info(char *version_buf, size_t version_size,
+                                     char *dl_url_buf, size_t dl_url_size)
 {
     char url[128];
     snprintf(url, sizeof(url),
@@ -80,35 +82,44 @@ static esp_err_t fetch_latest_version(char *version_buf, size_t buf_size)
         .user_agent = "LOTSE-Config-Hub/1.0",
         .timeout_ms = 20000,
         .max_redirection_count = 5,
+        .crt_bundle_attach = esp_crt_bundle_attach,
     };
 
     esp_http_client_handle_t client = esp_http_client_init(&cfg);
     if (!client) return ESP_FAIL;
 
-    esp_err_t err = esp_http_client_perform(client);
+    esp_err_t err = esp_http_client_open(client, 0);
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "perform failed: %s", esp_err_to_name(err));
+        ESP_LOGE(TAG, "open failed: %s", esp_err_to_name(err));
         esp_http_client_cleanup(client);
         return err;
     }
 
+    int content_length = esp_http_client_fetch_headers(client);
     int status_code = esp_http_client_get_status_code(client);
+    ESP_LOGI(TAG, "response: status=%d cl=%d", status_code, content_length);
+
     if (status_code == 404) {
         ESP_LOGW(TAG, "no release found (404)");
         esp_http_client_cleanup(client);
         return ESP_ERR_NOT_FOUND;
     }
     if (status_code != 200) {
-        int cl = esp_http_client_get_content_length(client);
-        ESP_LOGW(TAG, "status %d, cl=%d", status_code, cl);
         esp_http_client_cleanup(client);
         return ESP_FAIL;
     }
 
-    char buf[3072];
+    int alloc = content_length > 0 ? content_length + 1 : 4096;
+    char *buf = malloc(alloc);
+    if (!buf) {
+        ESP_LOGE(TAG, "malloc(%d) failed", alloc);
+        esp_http_client_cleanup(client);
+        return ESP_ERR_NO_MEM;
+    }
+
     int total = 0;
     int r;
-    while ((r = esp_http_client_read(client, buf + total, sizeof(buf) - total - 1)) > 0) {
+    while ((r = esp_http_client_read(client, buf + total, alloc - total - 1)) > 0) {
         total += r;
     }
     buf[total] = 0;
@@ -116,12 +127,14 @@ static esp_err_t fetch_latest_version(char *version_buf, size_t buf_size)
 
     if (total <= 0) {
         ESP_LOGW(TAG, "empty response body");
+        free(buf);
         return ESP_FAIL;
     }
 
     cJSON *root = cJSON_Parse(buf);
+    free(buf);
     if (!root) {
-        ESP_LOGW(TAG, "JSON parse fail: %.200s", buf);
+        ESP_LOGW(TAG, "JSON parse fail");
         return ESP_FAIL;
     }
 
@@ -139,19 +152,39 @@ static esp_err_t fetch_latest_version(char *version_buf, size_t buf_size)
         return ESP_FAIL;
     }
 
-    strncpy(version_buf, tag->valuestring, buf_size - 1);
-    version_buf[buf_size - 1] = 0;
+    strncpy(version_buf, tag->valuestring, version_size - 1);
+    version_buf[version_size - 1] = 0;
+
+    // Find asset matching our target binary
+    cJSON *assets = cJSON_GetObjectItem(arr, "assets");
+    dl_url_buf[0] = 0;
+    if (assets && cJSON_IsArray(assets)) {
+        char target_name[64];
+        snprintf(target_name, sizeof(target_name), "lotse_config_hub-%s.bin", IDF_TARGET_NAME);
+        cJSON *asset;
+        cJSON_ArrayForEach(asset, assets) {
+            cJSON *name = cJSON_GetObjectItem(asset, "name");
+            if (name && name->valuestring && strcmp(name->valuestring, target_name) == 0) {
+                cJSON *dl = cJSON_GetObjectItem(asset, "browser_download_url");
+                if (dl && dl->valuestring) {
+                    strncpy(dl_url_buf, dl->valuestring, dl_url_size - 1);
+                    dl_url_buf[dl_url_size - 1] = 0;
+                }
+                break;
+            }
+        }
+    }
     cJSON_Delete(root);
+
+    if (!dl_url_buf[0]) {
+        ESP_LOGW(TAG, "no matching asset for %s", IDF_TARGET_NAME);
+        return ESP_ERR_NOT_FOUND;
+    }
     return ESP_OK;
 }
 
-static void ota_perform_update(const char *latest_version)
+static void ota_perform_update(const char *latest_version, const char *download_url)
 {
-    char download_url[256];
-    snprintf(download_url, sizeof(download_url),
-             "https://github.com/" OTA_REPO "/releases/latest/download/lotse_config_hub-%s.bin",
-             IDF_TARGET_NAME);
-
     ESP_LOGI(TAG, "downloading %s", download_url);
     set_status("downloading");
 
@@ -160,6 +193,9 @@ static void ota_perform_update(const char *latest_version)
         .user_agent = "LOTSE-Config-Hub/1.0",
         .timeout_ms = 120000,
         .max_redirection_count = 5,
+        .buffer_size = 4096,
+        .buffer_size_tx = 2048,
+        .crt_bundle_attach = esp_crt_bundle_attach,
     };
 
     esp_https_ota_config_t ota_config = {
@@ -201,20 +237,26 @@ void ota_check_and_update(void)
     while (!sntp_is_synced() && sntp_waited < 60) {
         vTaskDelay(pdMS_TO_TICKS(1000));
         sntp_waited++;
+        if (sntp_waited % 10 == 0)
+            ESP_LOGI(TAG, "waiting for SNTP... %ds", sntp_waited);
     }
     if (!sntp_is_synced()) {
-        ESP_LOGW(TAG, "SNTP not synced after 60s, proceeding anyway");
+        ESP_LOGW(TAG, "SNTP not synced after %ds, proceeding anyway", sntp_waited);
+    } else if (sntp_waited > 0) {
+        ESP_LOGI(TAG, "SNTP synced after %ds", sntp_waited);
     }
 
     char latest_ver[32] = "";
-    esp_err_t err = fetch_latest_version(latest_ver, sizeof(latest_ver));
+    char dl_url[256] = "";
+    esp_err_t err = fetch_release_info(latest_ver, sizeof(latest_ver),
+                                        dl_url, sizeof(dl_url));
     if (err == ESP_ERR_NOT_FOUND) {
-        ESP_LOGW(TAG, "no release found on GitHub");
+        ESP_LOGW(TAG, "no release / matching asset found");
         set_status("no_release");
         return;
     }
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "version check failed: %s", esp_err_to_name(err));
+        ESP_LOGE(TAG, "release info fetch failed: %s", esp_err_to_name(err));
         set_status("error:check");
         return;
     }
@@ -226,7 +268,7 @@ void ota_check_and_update(void)
         return;
     }
 
-    ota_perform_update(latest_ver);
+    ota_perform_update(latest_ver, dl_url);
 }
 
 static void ota_task(void *arg)
