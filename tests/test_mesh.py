@@ -160,8 +160,8 @@ def load_sender_template():
     path = ROOT / "sender-blueprint.yaml"
     with open(path) as f:
         blueprint = yaml.load(f, Loader=yaml.FullLoader)
-    # Envelope template is inside choose[1] (measurement path)
-    raw = blueprint["action"][1]["choose"][1]["sequence"][0]["variables"]["envelope"]
+    # Envelope template is inside action[2] (measurement if block)
+    raw = blueprint["action"][2]["then"][0]["variables"]["envelope"]
     return raw
 
 
