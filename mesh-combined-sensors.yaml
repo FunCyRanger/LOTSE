@@ -131,3 +131,73 @@ template:
           {% set entities = expand(states.sensor)
              | selectattr('entity_id', 'search', 'node_\\d+_gip$') | list %}
           {{ entities | length }}
+
+      # --- Config-derived sensors (from bC, sK, sA, sZ) ---
+
+      - name: "Weighted Average SOC"
+        unique_id: "weighted_avg_soc"
+        unit_of_measurement: "%"
+        device_class: "battery"
+        state_class: "measurement"
+        state: >
+          {% set bs_nodes = expand(states.sensor)
+             | selectattr('entity_id', 'search', 'node_\\d+_bs$') | list %}
+          {% set ns = namespace(weighted_sum=0, total_cap=0) %}
+          {% for node in bs_nodes %}
+            {% set nid = node.entity_id
+               | regex_replace(find='^sensor\\.node_(\\d+)_bs$', replace='\\1', ignorecase=False) %}
+            {% set cap = states('sensor.node_' ~ nid ~ '_bc') | float(0) %}
+            {% set soc = node.state | int(0) %}
+            {% if cap > 0 %}
+              {% set ns.weighted_sum = ns.weighted_sum + soc * cap %}
+              {% set ns.total_cap = ns.total_cap + cap %}
+            {% endif %}
+          {% endfor %}
+          {% if ns.total_cap > 0 %}
+            {{ (ns.weighted_sum / ns.total_cap) | round(0) }}
+          {% elif bs_nodes | length > 0 %}
+            {{ (bs_nodes | map(attribute='state') | map('int', 0) | sum / bs_nodes | length) | round(0) }}
+          {% else %}
+            0
+          {% endif %}
+
+      - name: "Combined Mesh Battery Capacity"
+        unique_id: "combined_mesh_battery_capacity"
+        unit_of_measurement: "kWh"
+        state_class: "measurement"
+        state: >
+          {% set entities = expand(states.sensor)
+             | selectattr('entity_id', 'search', 'node_\\d+_bc$') | list %}
+          {{ entities | map(attribute='state') | map('float', 0) | sum | round(1) }}
+
+      - name: "Combined Mesh Solar Capacity"
+        unique_id: "combined_mesh_solar_capacity"
+        unit_of_measurement: "kW"
+        device_class: "power"
+        state_class: "measurement"
+        state: >
+          {% set entities = expand(states.sensor)
+             | selectattr('entity_id', 'search', 'node_\\d+_sk$') | list %}
+          {{ entities | map(attribute='state') | map('float', 0) | sum | round(2) }}
+
+      - name: "Combined Solar Utilization"
+        unique_id: "combined_solar_utilization"
+        unit_of_measurement: "%"
+        state_class: "measurement"
+        state: >
+          {% set sp = expand(states.sensor)
+             | selectattr('entity_id', 'search', 'node_\\d+_sp$')
+             | map(attribute='state') | map('float', 0) | sum %}
+          {% set sk = expand(states.sensor)
+             | selectattr('entity_id', 'search', 'node_\\d+_sk$')
+             | map(attribute='state') | map('float', 0) | sum %}
+          {{ ((sp / sk) * 100) | round(1) if sk > 0 else 0 }}
+
+      - name: "Config-Ready Nodes"
+        unique_id: "combined_mesh_config_ready"
+        unit_of_measurement: "nodes"
+        state_class: "measurement"
+        state: >
+          {% set entities = expand(states.sensor)
+             | selectattr('entity_id', 'search', 'node_\\d+_bc$') | list %}
+          {{ entities | length }}

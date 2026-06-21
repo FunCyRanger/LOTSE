@@ -48,6 +48,11 @@ typedef struct {
     int  gpio_tx;
     int  send_interval;
     char node_hash[16];
+    // Config metadata (sent over mesh as registration)
+    float battery_capacity;   // kWh, 0 = unknown
+    float solar_peak;         // kWp, 0 = unknown
+    int   panel_angle;        // degrees from horizontal, -1 = unknown
+    int   panel_azimuth;      // degrees from north, -1 = unknown
 } hub_config_t;
 
 typedef enum {
@@ -58,6 +63,8 @@ typedef enum {
     LOTSE_KEY_SP, LOTSE_KEY_SE,
     LOTSE_KEY_BP, LOTSE_KEY_BS, LOTSE_KEY_BEI, LOTSE_KEY_BEO,
     LOTSE_KEY_WP, LOTSE_KEY_WE, LOTSE_KEY_WS,
+    // Config keys (static metadata, not measurement data)
+    LOTSE_KEY_BC, LOTSE_KEY_SK, LOTSE_KEY_SA, LOTSE_KEY_SZ,
     LOTSE_KEY_COUNT
 } lotse_key_t;
 

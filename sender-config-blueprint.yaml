@@ -1,0 +1,123 @@
+blueprint:
+  name: LOTSE Mesh — Publish Node Registration (bC, sK, sA, sZ)
+  description: >
+    Publish your node's static configuration (battery capacity, solar peak power,
+    panel angle, azimuth) into the LoRa mesh. Sent on HA startup and once daily
+    so all neighbors know your system specs. Only fields you fill in are included.
+  domain: automation
+  source_url: >
+    https://github.com/FunCyRanger/LOTSE/blob/main/sender-config-blueprint.yaml
+  input:
+    node_decimal:
+      name: Node Number
+      description: >
+        Your Heltec V3's decimal node number (Meshtastic Web UI > About page)
+      selector:
+        text:
+    region:
+      name: LoRa Region
+      description: Region code (e.g. EU_868, US_915)
+      default: EU_868
+      selector:
+        text:
+    channel:
+      name: MQTT Channel
+      description: Channel index for the mqtt downlink (0=LongFast, 1=first non-primary)
+      default: 1
+      selector:
+        number:
+          min: 0
+          max: 7
+    config_hour:
+      name: Daily Publish Hour
+      description: Hour of day (0-23) to re-publish config data
+      default: 3
+      selector:
+        number:
+          min: 0
+          max: 23
+    battery_capacity:
+      name: Battery Capacity (kWh)
+      description: Total battery capacity in kWh (e.g. 10.0)
+      default: ""
+      selector:
+        number:
+          min: 0
+          max: 1000
+          mode: box
+          unit_of_measurement: kWh
+    solar_peak:
+      name: Solar Peak Power (kWp)
+      description: Total installed solar peak power in kWp (e.g. 5.0)
+      default: ""
+      selector:
+        number:
+          min: 0
+          max: 100
+          mode: box
+          unit_of_measurement: kWp
+    panel_angle:
+      name: Panel Angle (°)
+      description: Solar panel tilt angle from horizontal (0-90)
+      default: ""
+      selector:
+        number:
+          min: 0
+          max: 90
+          unit_of_measurement: "°"
+    panel_azimuth:
+      name: Panel Azimuth (°)
+      description: Solar panel orientation from north (0-360)
+      default: ""
+      selector:
+        number:
+          min: 0
+          max: 360
+          unit_of_measurement: "°"
+
+trigger_variables:
+  config_hour: !input config_hour
+trigger:
+  - platform: homeassistant
+    event: start
+  - platform: time_pattern
+    hours: "/1"
+
+condition:
+  - condition: template
+    value_template: >
+      {{ trigger.platform == 'homeassistant'
+         or now().hour == (config_hour | int) }}
+
+action:
+  - variables:
+      node: !input node_decimal
+      region: !input region
+      channel_input: !input channel
+      cap: !input battery_capacity
+      pv: !input solar_peak
+      ang: !input panel_angle
+      az: !input panel_azimuth
+  - variables:
+      envelope: >
+        {% set items = [] %}
+        {% if cap | string != '' %}{% set items = items + [("bC", cap | float)] %}{% endif %}
+        {% if pv | string != '' %}{% set items = items + [("sK", pv | float)] %}{% endif %}
+        {% if ang | string != '' %}{% set items = items + [("sA", ang | int)] %}{% endif %}
+        {% if az | string != '' %}{% set items = items + [("sZ", az | int)] %}{% endif %}
+        {% set inner = dict(items) | to_json %}
+        {% if items | length > 0 %}
+        {% set outer_env = {"from": node|int(0), "type": "sendtext", "payload": inner, "channel": channel_input|int(0)} %}
+        {{ outer_env | to_json }}
+        {% endif %}
+  - condition: template
+    value_template: "{{ envelope | string != '' }}"
+  - delay: "{{ range(0, 60) | random }}"
+  - service: mqtt.publish
+    data:
+      qos: 0
+      retain: false
+      evaluate_payload: false
+      topic: "msh/{{ region }}/2/json/mqtt/{{ node }}"
+      payload: "{{ envelope }}"
+mode: single

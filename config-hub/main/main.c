@@ -123,6 +123,32 @@ static void check_factory_reset(void)
     }
 }
 
+static void publish_config_task(void *arg)
+{
+    hub_config_t *cfg = (hub_config_t *)arg;
+    // Wait for system startup + SNTP sync
+    vTaskDelay(pdMS_TO_TICKS(60 * 1000));
+
+    char topic_buf[128];
+    snprintf(topic_buf, sizeof(topic_buf), "msh/%s/2/json/mqtt/%s",
+             cfg->region, cfg->node_hash);
+
+    int hour_counter = 0;
+    while (1) {
+        // Publish on boot (first iteration) and then every 24h
+        if (hour_counter == 0) {
+            char *env = transform_build_config_envelope(cfg, cfg->node_decimal, 1);
+            if (env) {
+                ESP_LOGI(TAG, "config: publishing registration to %s", topic_buf);
+                mqtt_broker_publish(topic_buf, env, 0);
+                free(env);
+            }
+        }
+        vTaskDelay(pdMS_TO_TICKS(3600 * 1000)); // 1 hour
+        hour_counter = (hour_counter + 1) % 24;
+    }
+}
+
 static void poll_tasmota_sensor_task(void *arg)
 {
     hub_config_t *cfg = (hub_config_t *)arg;
@@ -243,6 +269,7 @@ void app_main(void)
     web_server_start(&s_cfg);
     xTaskCreate(poll_tasmota_sensor_task, "poll_sensor", 8192, &s_cfg, 5, NULL);
     xTaskCreate(sntp_sync_task, "sntp_sync", 4096, NULL, 5, NULL);
+    xTaskCreate(publish_config_task, "pub_config", 4096, &s_cfg, 3, NULL);
 
     ESP_LOGI(TAG, "LOTSE Config Hub initialized");
 }

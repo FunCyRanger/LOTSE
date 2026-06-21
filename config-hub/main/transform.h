@@ -18,6 +18,8 @@ int transform_apply_mapping(const char *tasmota_json, const hub_config_t *cfg,
                             lotse_payload_t *out);
 char *transform_build_envelope(const lotse_payload_t *payload, uint32_t node_decimal,
                                int channel);
+char *transform_build_config_envelope(const hub_config_t *cfg, uint32_t node_decimal,
+                                      int channel);
 
 typedef struct {
     int gpio_rx;

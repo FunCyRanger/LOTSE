@@ -7,5 +7,6 @@ const char *LOTSE_KEY_NAMES[LOTSE_KEY_COUNT] = {
     "gEI", "gEO",
     "sP",  "sE",
     "bP",  "bS",  "bEI", "bEO",
-    "wP",  "wE",  "wS"
+    "wP",  "wE",  "wS",
+    "bC",  "sK",  "sA",  "sZ"
 };

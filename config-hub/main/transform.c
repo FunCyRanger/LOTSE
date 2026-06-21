@@ -260,6 +260,36 @@ char *transform_build_envelope(const lotse_payload_t *payload, uint32_t node_dec
     return result;
 }
 
+char *transform_build_config_envelope(const hub_config_t *cfg, uint32_t node_decimal,
+                                      int channel)
+{
+    // Build inner JSON object with only non-zero config keys
+    cJSON *inner = cJSON_CreateObject();
+    if (cfg->battery_capacity > 0)
+        cJSON_AddNumberToObject(inner, "bC", cfg->battery_capacity);
+    if (cfg->solar_peak > 0)
+        cJSON_AddNumberToObject(inner, "sK", cfg->solar_peak);
+    if (cfg->panel_angle >= 0)
+        cJSON_AddNumberToObject(inner, "sA", cfg->panel_angle);
+    if (cfg->panel_azimuth >= 0)
+        cJSON_AddNumberToObject(inner, "sZ", cfg->panel_azimuth);
+
+    char *inner_str = cJSON_PrintUnformatted(inner);
+    cJSON_Delete(inner);
+    if (!inner_str) return NULL;
+
+    cJSON *envelope = cJSON_CreateObject();
+    cJSON_AddNumberToObject(envelope, "from", node_decimal);
+    cJSON_AddStringToObject(envelope, "type", "sendtext");
+    cJSON_AddStringToObject(envelope, "payload", inner_str);
+    cJSON_AddNumberToObject(envelope, "channel", channel);
+    free(inner_str);
+
+    char *result = cJSON_PrintUnformatted(envelope);
+    cJSON_Delete(envelope);
+    return result;
+}
+
 static const char *find_plus_line(const char *script)
 {
     const char *p = script;

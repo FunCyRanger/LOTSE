@@ -16,6 +16,8 @@ views:
         entities:
           - sensor.combined_mesh_sp
           - sensor.combined_mesh_solar_total
+          - sensor.combined_mesh_solar_capacity
+          - sensor.combined_solar_utilization
 
       - type: entities
         title: "Grid Cumulative Energy"
@@ -28,5 +30,8 @@ views:
         title: "Neighborhood"
         entities:
           - sensor.avg_neighbor_soc
+          - sensor.weighted_avg_soc
+          - sensor.combined_mesh_battery_capacity
           - sensor.combined_self_consumption
           - sensor.combined_mesh_node_count
+          - sensor.combined_mesh_config_ready

@@ -42,6 +42,21 @@ flowchart LR
    - All other fields are optional — leave empty to exclude from the payload
 4. Save — your node publishes on the next interval automatically
 
+### Step 1b — Install Config Blueprint (recommended)
+
+This sends your node's static system configuration (battery capacity, solar peak power, panel angle, azimuth) into the mesh so neighbors can compute capacity-weighted SOC and solar utilization. Sent on HA startup and once daily at a configurable hour.
+
+1. Import the blueprint:
+   `https://raw.githubusercontent.com/FunCyRanger/LOTSE/refs/heads/main/sender-config-blueprint.yaml`
+2. Click **Create Automation**, fill in:
+   - **Node Number** and **LoRa Region** — same as Step 1
+   - **Battery Capacity (kWh)** — total battery capacity (leave empty if none)
+   - **Solar Peak Power (kWp)** — total installed PV peak power (leave empty if none)
+   - **Panel Angle / Azimuth** — optional, for solar normalization
+3. Save. The config message publishes within 60 seconds and then daily at the configured hour.
+
+> **Tip:** After changing config values, restart HA to send the updated config immediately. Or use **Settings → Automations → click the config automation → Save** to re-trigger it.
+
 ### Step 2 — Install Auto-Discovery
 
 1. Copy or download [`auto-discovery-automation.yaml`](auto-discovery-automation.yaml)
@@ -53,18 +68,23 @@ No edits needed — the automation extracts the region from the MQTT topic dynam
 
 This step creates aggregated sensors that sum up all neighbors into a single reading. The three cumulative-energy sensors can be added to the Energy Dashboard once and never need updating — new neighbors are included automatically.
 
-**What it creates** (11 sensors):
+**What it creates** (16 sensors):
 
 | Sensor name | Source keys | What it shows | Energy Dashboard |
-|---|---|---|---|
+|---|---|---|---|---|
 | Combined Mesh Grid Power | `gP` | Net neighborhood power (+import, −export) | — |
 | Combined Mesh Grid Import Power | `gIP` | Sum of import power | — |
 | Combined Mesh Grid Export Power | `gEP` | Sum of export power | — |
 | Combined Mesh Solar Power | `sP` | Total solar generation | — |
 | Combined Mesh Total Solar Generation | `sP` | Same, alias for clarity | — |
 | Average Neighbor SOC | `bS` | Average battery level across all neighbors | — |
+| Weighted Average SOC | `bS`, `bC` | Capacity-weighted SOC (weighted by battery kWh) | — |
 | Combined Self-Consumption Rate | `sP`, `gEP` | % of solar consumed locally (no grid export) | — |
 | Participating Neighbors | `gIP` | Number of neighbors currently reporting | — |
+| Combined Mesh Battery Capacity | `bC` | Total battery capacity in kWh across all nodes | — |
+| Combined Mesh Solar Capacity | `sK` | Total installed solar peak power in kWp | — |
+| Combined Solar Utilization | `sP`, `sK` | % of installed PV capacity currently generated | — |
+| Config-Ready Nodes | `bC` | Number of nodes that have reported config data | — |
 | Combined Mesh Grid Import | `gEI` | Cumulative import energy | ✅ |
 | Combined Mesh Grid Export | `gEO` | Cumulative export energy | ✅ |
 | Combined Mesh Solar Energy | `sE` | Cumulative solar energy | ✅ |
@@ -94,9 +114,9 @@ HA does not support grouping YAML-defined template sensors under a device, so th
 
 1. Copy [`lotse-dashboard.yaml`](lotse-dashboard.yaml) to your HA `config/` folder.
 2. In HA: **Settings → Dashboards → Import** → pick the file → **Import**.
-3. A new tab **"LOTSE Neighborhood"** appears in your sidebar with all combined sensors grouped by category (Grid Power, Solar, Energy, Neighborhood).
+3. A new tab **"LOTSE Neighborhood"** appears in your sidebar with all sensors grouped by category (Grid Power, Solar, Grid Cumulative Energy, Neighborhood).
 
-> **Tip:** The three cumulative-energy sensors (`Combined Mesh Grid Import`, `Combined Mesh Grid Export`, `Combined Mesh Solar Energy`) are the ones to add to the Energy Dashboard (see section below).
+> **Tip:** The three cumulative-energy sensors are the ones to add to the Energy Dashboard (see section below). The config-derived sensors (Weighted SOC, Solar Capacity, etc.) populate as nodes install the config blueprint and send their registration data.
 
 > **Prerequisite:** At least one neighbor must have sent data so the individual `node_XXXX_*` sensors exist.
 

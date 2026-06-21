@@ -14,7 +14,7 @@ Dirs `firmware/`, `meshtastic-fork-clean/`, `simulation/`, `simulation_v2/` are 
 | **Topic trailing /** | `msh/{region}/2/json/mqtt/` — trailing `/` required (Meshtastic silently drops without it) |
 | **Random jitter** | HA blueprint: random 0-60s delay before publish. Config-hub: `esp_random() % min(interval*1e6/10, 10e6)` jitter per cycle. Both ensure nodes don't flood mesh in lockstep. |
 | **`evaluate_payload`** | Must be `false` on `mqtt.publish` service call |
-| **Inner payload** | ≤220 bytes; envelope ≤4096 bytes. Keys: 2-3 char abbreviations (`gP`, `bS`, `gIP`, `gEP`, `gP1`-`gP3`, `gV1`-`gV3`, `gEI`, `gEO`, `sP`, `sE`, `bP`, `bEI`, `bEO`, `wP`, `wE`, `wS`) |
+| **Inner payload** | ≤220 bytes; envelope ≤4096 bytes. Keys: 2-3 char abbreviations (`gP`, `bS`, `gIP`, `gEP`, `gP1`-`gP3`, `gV1`-`gV3`, `gEI`, `gEO`, `sP`, `sE`, `bP`, `bEI`, `bEO`, `wP`, `wE`, `wS`) plus config keys (`bC`, `sK`, `sA`, `sZ`) |
 | **Envelope format** | `{"from": <int>, "type": "sendtext", "payload": "<json_string>", "channel": 1}`. `from` must match node's own decimal number. |
 | **Receiver payload type** | Heltec V3 echoes with `payload` as **string** (not object). `auto-discovery-automation.yaml` handles both: `{% if value_json.payload is mapping %}...{% else %}... \| from_json({}){% endif %}`. `config-hub` has echo fix that reparses string to object before republishing. |
 | **Sender unit mismatch** | kWh sensor assigned to kW slot → key silently omitted. `energy_units` tuple (`Wh`,`kWh`,`MWh`) excludes them from power slots and vice versa. |
@@ -55,8 +55,9 @@ Push/PR to `main`. Spins up `eclipse-mosquitto` Docker, runs config-hub C tests 
 | File | Details |
 |------|---------|
 | `sender-blueprint.yaml` | Unit conversion: W→kW (*0.001), MW→kW (*1000), mV→V (*0.001), kV→V (*1000), Wh→kWh (*0.001), MWh→kWh (*1000). Clamping: power ±500, energy ≥0, bS/wS 0-100 int. Skips `unavailable`/`unknown`/`none`/`NaN`/`inf`/`-inf`. Publishes to `msh/{{region}}/2/json/mqtt/{{node}}` with `evaluate_payload: false`. |
-| `auto-discovery-automation.yaml` | Trigger: `msh/+/2/json/mqtt/+`. Extracts `from` (decimal) from `payload_json.from`, `sender` (hex) from topic, `region` from topic. For payload string→dict: `{% if payload is mapping %}payload{% else %}payload \| from_json({}){% endif %}`. Device identifiers: `mesh_node_{{ from }}`. |
-| `mesh-combined-sensors.yaml` | Drop into HA `config/packages/`. Regex: `node_\d+_gp$`, `node_\d+_bs$`, etc. Sum power/energy, average SOC. |
+| `sender-config-blueprint.yaml` | Optional fields bC/sK/sA/sZ. Publishes config-only envelope on HA startup + daily. Same topic/envelope pattern. |
+| `auto-discovery-automation.yaml` | Trigger: `msh/+/2/json/mqtt/+`. Extracts `from` (decimal) from `payload_json.from`, `sender` (hex) from topic, `region` from topic. For payload string→dict: `{% if payload is mapping %}payload{% else %}payload \| from_json({}){% endif %}`. Device identifiers: `mesh_node_{{ from }}`. Config keys (`bC`, `sK`, `sA`, `sZ`) only update when present (no overwrite with 0). |
+| `mesh-combined-sensors.yaml` | Drop into HA `config/packages/`. 16 sensors: regex `node_\d+_gp$`, `node_\d+_bs$`, etc. Sum power/energy, weighted SOC, total PV/battery capacity. |
 
 ## Known stale / non-code content
 
@@ -78,12 +79,12 @@ Custom MQTT 3.1.1 broker (select-based, QoS 0, max 8 clients) on raw LWIP socket
 
 Key files:
 - `main/main.c` — Init → NVS → WiFi → MQTT broker → HTTP server. Contains echo fix: detects own-node echo, parses `payload` string into object, republishes for HA compatibility.
-- `main/transform.c` — SMI script parser, Tasmota JSON→LOTSE transform, envelope builder
+- `main/transform.c` — SMI script parser, Tasmota JSON→LOTSE transform, envelope builder, `build_config_envelope()`
 - `main/mqtt_broker.c` — Minimal MQTT 3.1.1 broker
 - `main/tasmota_client.c` — HTTP client for Tasmota `/cm` API
 - `main/web_server.c` — HTTP server with embedded SPA
 - `main/config_store.c` — NVS JSON persistence
-- `main/lotse_config.{c,h}` — Shared types, key names, mappings (24 max, 20 keys)
+- `main/lotse_config.{c,h}` — Shared types, key names, mappings (24 max, 24 keys: 20 measurement + 4 config)
 - `webui/index.html` — SPA source; `scripts/embed_webui.py` converts it to `main/html.h`
 
 ### Build & flash

@@ -35,6 +35,10 @@ static char *config_to_json(const hub_config_t *cfg)
     cJSON_AddNumberToObject(root, "gpio_rx", cfg->gpio_rx);
     cJSON_AddNumberToObject(root, "gpio_tx", cfg->gpio_tx);
     cJSON_AddNumberToObject(root, "send_interval", cfg->send_interval);
+    cJSON_AddNumberToObject(root, "battery_capacity", cfg->battery_capacity);
+    cJSON_AddNumberToObject(root, "solar_peak", cfg->solar_peak);
+    cJSON_AddNumberToObject(root, "panel_angle", cfg->panel_angle);
+    cJSON_AddNumberToObject(root, "panel_azimuth", cfg->panel_azimuth);
     cJSON_AddStringToObject(root, "node_hash", cfg->node_hash);
 
     char *json = cJSON_PrintUnformatted(root);
@@ -91,6 +95,15 @@ static int json_to_config(const char *json, hub_config_t *cfg)
 
     v = cJSON_GetObjectItem(root, "node_hash");
     if (v && v->valuestring) strncpy(cfg->node_hash, v->valuestring, sizeof(cfg->node_hash)-1);
+
+    v = cJSON_GetObjectItem(root, "battery_capacity");
+    if (v && cJSON_IsNumber(v)) cfg->battery_capacity = (float)v->valuedouble;
+    v = cJSON_GetObjectItem(root, "solar_peak");
+    if (v && cJSON_IsNumber(v)) cfg->solar_peak = (float)v->valuedouble;
+    v = cJSON_GetObjectItem(root, "panel_angle");
+    if (v && cJSON_IsNumber(v)) cfg->panel_angle = v->valueint;
+    v = cJSON_GetObjectItem(root, "panel_azimuth");
+    if (v && cJSON_IsNumber(v)) cfg->panel_azimuth = v->valueint;
 
     cJSON *maps = cJSON_GetObjectItem(root, "mappings");
     if (maps) {
