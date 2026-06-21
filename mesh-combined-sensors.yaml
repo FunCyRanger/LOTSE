@@ -249,9 +249,38 @@ template:
           {% set forecast = states('sensor.solar_forecast_today') | float(0) %}
           {{ (actual / forecast * 100) | round(1) if forecast > 0 else 0 }}
 
+      # Energy Dashboard solar production sensor with forecast attribute.
+      # State tracks actual cumulative production; forecast attribute is built
+      # from the hourly REST data below.
+      - name: "Solar Production with Forecast"
+        unique_id: "solar_production_forecast"
+        device_class: "energy"
+        state_class: "total_increasing"
+        unit_of_measurement: "kWh"
+        state: >
+          {{ states('sensor.combined_mesh_se') | float(0) | round(2) }}
+        attributes:
+          forecast: >
+            {% set raw = state_attr('sensor.solar_forecast_today', 'result') %}
+            {% set wh = raw.watt_hours if raw else none %}
+            {% if wh %}
+              {% set tz = now().strftime('%z') %}
+              {% set tz_s = tz[:3] + ':' + tz[3:] if tz else '+00:00' %}
+              [
+              {% for ts, val in wh.items() %}
+                {"time": "{{ ts | replace(' ', 'T') }}{{ tz_s }}", "wh_hours": {{ val | int }}}
+                {% if not loop.last %},{% endif %}
+              {% endfor %}
+              ]
+            {% else %}
+              []
+            {% endif %}
+
 rest:
+  # Hourly data (includes watt_hours_day + per-period watt_hours).
+  # The `result` attribute holds the full API response for the forecast template above.
   - resource_template: >
-      https://api.forecast.solar/estimate/watthours/day/
+      https://api.forecast.solar/estimate/watthours/
       {{ state_attr('zone.home', 'latitude') | string | truncate(7, true, '') }}/
       {{ state_attr('zone.home', 'longitude') | string | truncate(7, true, '') }}/
       {{ states('sensor.combined_solar_panel_angle') | int }}/
@@ -259,6 +288,9 @@ rest:
       {{ (ha_az - 180) | int }}/
       {{ states('sensor.combined_mesh_solar_capacity') | float(0) }}
     scan_interval: 3600
+    json_attributes_path: "$"
+    json_attributes:
+      - "result"
     sensor:
       - name: "Solar Forecast Today"
         unique_id: "solar_forecast_today"

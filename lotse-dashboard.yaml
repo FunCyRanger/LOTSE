@@ -41,6 +41,7 @@ views:
         entities:
           - sensor.solar_forecast_today
           - sensor.solar_forecast_tomorrow
+          - sensor.solar_production_forecast
           - sensor.combined_solar_panel_angle
           - sensor.combined_solar_panel_azimuth
           - sensor.combined_mesh_solar_capacity
