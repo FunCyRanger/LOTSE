@@ -90,7 +90,20 @@ static esp_err_t fetch_latest_version(char *version_buf, size_t buf_size)
     }
 
     int content_length = esp_http_client_fetch_headers(client);
+    int status_code = esp_http_client_get_status_code(client);
     if (content_length <= 0) {
+        esp_http_client_close(client);
+        esp_http_client_cleanup(client);
+        return ESP_FAIL;
+    }
+    if (status_code == 404) {
+        ESP_LOGW(TAG, "no release found (404)");
+        esp_http_client_close(client);
+        esp_http_client_cleanup(client);
+        return ESP_ERR_NOT_FOUND;
+    }
+    if (status_code != 200) {
+        ESP_LOGW(TAG, "unexpected HTTP status %d", status_code);
         esp_http_client_close(client);
         esp_http_client_cleanup(client);
         return ESP_FAIL;
@@ -195,6 +208,11 @@ void ota_check_and_update(void)
 
     char latest_ver[32] = "";
     esp_err_t err = fetch_latest_version(latest_ver, sizeof(latest_ver));
+    if (err == ESP_ERR_NOT_FOUND) {
+        ESP_LOGW(TAG, "no release found on GitHub");
+        set_status("no_release");
+        return;
+    }
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "version check failed");
         set_status("error:check");

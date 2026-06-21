@@ -440,7 +440,7 @@ async function refreshStatus(){
     $('fw-status').textContent=v.status||'-';
   }catch(e){}
 }
-(async () => {
+async function init(){
   try{
     const cfg=await api('/api/config');
     if(cfg.configured){
@@ -494,7 +494,7 @@ async function refreshStatus(){
     refreshStatus();
     setInterval(refreshStatus,5000);
   }catch(e){}
-})();
+}
 
 let brokerLogVisible=false;
 let brokerLogInterval=null;
@@ -909,7 +909,11 @@ async function checkFirmware(){
       try{
         const s=await api('/api/ota/status');
         $('fw-status').textContent=s.status||'-';
-        if(s.status==='up_to_date'){
+        if(s.status==='no_release'){
+          msg.textContent='No release found online (create a GitHub release first)';
+          clearInterval(poll);
+          btn.disabled=false;
+        }else if(s.status==='up_to_date'){
           msg.textContent='Already up to date';
           clearInterval(poll);
           btn.disabled=false;
