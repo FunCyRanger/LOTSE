@@ -13,6 +13,7 @@ if(LOTSE_VERSION STREQUAL "")
     set(LOTSE_VERSION "v0.0.0-dev")
 endif()
 add_compile_definitions(LOTSE_VERSION="${LOTSE_VERSION}")
+add_compile_definitions(IDF_TARGET_NAME="${IDF_TARGET}")
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(lotse_config_hub)

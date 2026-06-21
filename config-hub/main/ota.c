@@ -78,6 +78,7 @@ static esp_err_t fetch_latest_version(char *version_buf, size_t buf_size)
         .url = url,
         .user_agent = "LOTSE-Config-Hub/1.0",
         .timeout_ms = 10000,
+        .max_redirection_count = 5,
     };
 
     esp_http_client_handle_t client = esp_http_client_init(&cfg);
@@ -92,6 +93,7 @@ static esp_err_t fetch_latest_version(char *version_buf, size_t buf_size)
     int content_length = esp_http_client_fetch_headers(client);
     int status_code = esp_http_client_get_status_code(client);
     if (content_length <= 0) {
+        ESP_LOGW(TAG, "no content, status=%d", status_code);
         esp_http_client_close(client);
         esp_http_client_cleanup(client);
         return ESP_FAIL;
@@ -132,11 +134,16 @@ static esp_err_t fetch_latest_version(char *version_buf, size_t buf_size)
     }
 
     cJSON *root = cJSON_Parse(buf);
+    if (!root) {
+        ESP_LOGW(TAG, "JSON parse failed, body=%.200s", buf);
+        free(buf);
+        return ESP_FAIL;
+    }
     free(buf);
-    if (!root) return ESP_FAIL;
 
     cJSON *tag = cJSON_GetObjectItem(root, "tag_name");
     if (!tag || !tag->valuestring) {
+        ESP_LOGW(TAG, "no tag_name in JSON response");
         cJSON_Delete(root);
         return ESP_FAIL;
     }
@@ -151,7 +158,8 @@ static void ota_perform_update(const char *latest_version)
 {
     char download_url[256];
     snprintf(download_url, sizeof(download_url),
-             "https://github.com/" OTA_REPO "/releases/latest/download/lotse_config_hub.bin");
+             "https://github.com/" OTA_REPO "/releases/latest/download/lotse_config_hub-%s.bin",
+             IDF_TARGET_NAME);
 
     ESP_LOGI(TAG, "downloading %s", download_url);
     set_status("downloading");
@@ -160,6 +168,7 @@ static void ota_perform_update(const char *latest_version)
         .url = download_url,
         .user_agent = "LOTSE-Config-Hub/1.0",
         .timeout_ms = 120000,
+        .max_redirection_count = 5,
     };
 
     esp_https_ota_config_t ota_config = {

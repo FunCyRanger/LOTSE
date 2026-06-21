@@ -67,18 +67,23 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq git wget flex bison gperf \
             cmake ninja-build ccache libffi-dev libssl-dev dfu-util
-      - name: Install ESP-IDF
+      - name: Install ESP-IDF (all targets)
         run: |
           git clone --depth 1 --branch v5.4 \
             https://github.com/espressif/esp-idf.git $HOME/esp-idf
-          $HOME/esp-idf/install.sh esp32
-      - name: Build firmware
+          $HOME/esp-idf/install.sh esp32,esp32s3,esp32c3
+      - name: Build firmware for all targets
         working-directory: config-hub
         run: |
           . $HOME/esp-idf/export.sh
-          idf.py fullclean
-          idf.py build
+          for target in esp32 esp32s3 esp32c3; do
+            echo "=== Building for $target ==="
+            idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.$target" \
+                   -B "build_$target" set-target $target build
+            cp "build_$target/lotse_config_hub.bin" "lotse_config_hub-$target.bin"
+          done
+          ls -la *.bin
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: config-hub/build/lotse_config_hub.bin
+          files: config-hub/lotse_config_hub-*.bin

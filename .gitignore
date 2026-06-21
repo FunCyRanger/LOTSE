@@ -3,6 +3,7 @@ simulation_v2/results/
 
 # ESP-IDF build artifacts
 config-hub/build/
+config-hub/build_*/
 config-hub/sdkconfig
 config-hub/sdkconfig.old
 
