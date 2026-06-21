@@ -72,78 +72,69 @@ static void save_version_to_nvs(const char *ver)
 static esp_err_t fetch_latest_version(char *version_buf, size_t buf_size)
 {
     char url[128];
-    snprintf(url, sizeof(url), "https://api.github.com/repos/" OTA_REPO "/releases/latest");
+    snprintf(url, sizeof(url),
+             "https://api.github.com/repos/" OTA_REPO "/releases?per_page=1");
 
     esp_http_client_config_t cfg = {
         .url = url,
         .user_agent = "LOTSE-Config-Hub/1.0",
-        .timeout_ms = 10000,
+        .timeout_ms = 20000,
         .max_redirection_count = 5,
     };
 
     esp_http_client_handle_t client = esp_http_client_init(&cfg);
     if (!client) return ESP_FAIL;
 
-    esp_err_t err = esp_http_client_open(client, 0);
+    esp_err_t err = esp_http_client_perform(client);
     if (err != ESP_OK) {
+        ESP_LOGE(TAG, "perform failed: %s", esp_err_to_name(err));
         esp_http_client_cleanup(client);
         return err;
     }
 
-    int content_length = esp_http_client_fetch_headers(client);
     int status_code = esp_http_client_get_status_code(client);
-    if (content_length <= 0) {
-        ESP_LOGW(TAG, "no content, status=%d", status_code);
-        esp_http_client_close(client);
-        esp_http_client_cleanup(client);
-        return ESP_FAIL;
-    }
     if (status_code == 404) {
         ESP_LOGW(TAG, "no release found (404)");
-        esp_http_client_close(client);
         esp_http_client_cleanup(client);
         return ESP_ERR_NOT_FOUND;
     }
     if (status_code != 200) {
-        ESP_LOGW(TAG, "unexpected HTTP status %d", status_code);
-        esp_http_client_close(client);
+        int cl = esp_http_client_get_content_length(client);
+        ESP_LOGW(TAG, "status %d, cl=%d", status_code, cl);
         esp_http_client_cleanup(client);
         return ESP_FAIL;
     }
 
-    char *buf = malloc(content_length + 1);
-    if (!buf) {
-        esp_http_client_close(client);
-        esp_http_client_cleanup(client);
-        return ESP_ERR_NO_MEM;
-    }
-
+    char buf[3072];
     int total = 0;
-    while (total < content_length) {
-        int r = esp_http_client_read(client, buf + total, content_length - total);
-        if (r <= 0) break;
+    int r;
+    while ((r = esp_http_client_read(client, buf + total, sizeof(buf) - total - 1)) > 0) {
         total += r;
     }
     buf[total] = 0;
-    esp_http_client_close(client);
     esp_http_client_cleanup(client);
 
     if (total <= 0) {
-        free(buf);
+        ESP_LOGW(TAG, "empty response body");
         return ESP_FAIL;
     }
 
     cJSON *root = cJSON_Parse(buf);
     if (!root) {
-        ESP_LOGW(TAG, "JSON parse failed, body=%.200s", buf);
-        free(buf);
+        ESP_LOGW(TAG, "JSON parse fail: %.200s", buf);
         return ESP_FAIL;
     }
-    free(buf);
 
-    cJSON *tag = cJSON_GetObjectItem(root, "tag_name");
+    cJSON *arr = cJSON_GetArrayItem(root, 0);
+    if (!arr) {
+        ESP_LOGW(TAG, "empty releases array");
+        cJSON_Delete(root);
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    cJSON *tag = cJSON_GetObjectItem(arr, "tag_name");
     if (!tag || !tag->valuestring) {
-        ESP_LOGW(TAG, "no tag_name in JSON response");
+        ESP_LOGW(TAG, "no tag_name in first release");
         cJSON_Delete(root);
         return ESP_FAIL;
     }
@@ -223,7 +214,7 @@ void ota_check_and_update(void)
         return;
     }
     if (err != ESP_OK) {
-        ESP_LOGW(TAG, "version check failed");
+        ESP_LOGE(TAG, "version check failed: %s", esp_err_to_name(err));
         set_status("error:check");
         return;
     }
