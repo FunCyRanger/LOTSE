@@ -13,6 +13,7 @@
 #include "mqtt_broker.h"
 #include "tasmota_client.h"
 #include "transform.h"
+#include "ota.h"
 
 static const char *TAG = "web_server";
 static hub_config_t *g_cfg = NULL;
@@ -60,14 +61,16 @@ static esp_err_t send_json_obj(httpd_req_t *req, cJSON *obj)
 
 static esp_err_t serve_file(httpd_req_t *req, const char *path)
 {
-    const struct { const char *path; const char *data; size_t len; const char *type; } files[] = {
-        {"/",          HTML_INDEX_HTML, HTML_INDEX_HTML_LEN, HTML_INDEX_HTML_TYPE},
-        {"/index.html", HTML_INDEX_HTML, HTML_INDEX_HTML_LEN, HTML_INDEX_HTML_TYPE},
+    const struct { const char *path; const uint8_t *data; size_t len; const char *type; int gzipped; } files[] = {
+        {"/",          HTML_INDEX_HTML, HTML_INDEX_HTML_LEN, HTML_INDEX_HTML_TYPE, HTML_INDEX_HTML_GZIPPED},
+        {"/index.html", HTML_INDEX_HTML, HTML_INDEX_HTML_LEN, HTML_INDEX_HTML_TYPE, HTML_INDEX_HTML_GZIPPED},
     };
     for (int i = 0; i < sizeof(files)/sizeof(files[0]); i++) {
         if (strcmp(path, files[i].path) == 0) {
             httpd_resp_set_type(req, files[i].type);
-            httpd_resp_send(req, files[i].data, files[i].len);
+            if (files[i].gzipped)
+                httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
+            httpd_resp_send(req, (const char *)files[i].data, files[i].len);
             return ESP_OK;
         }
     }
@@ -142,6 +145,10 @@ static esp_err_t handle_get_config(httpd_req_t *req)
         cJSON_AddStringToObject(m, "label", g_cfg->mappings[i].label);
         cJSON_AddItemToArray(maps, m);
     }
+    cJSON_AddNumberToObject(root, "battery_capacity", (double)g_cfg->battery_capacity);
+    cJSON_AddNumberToObject(root, "solar_peak", (double)g_cfg->solar_peak);
+    cJSON_AddNumberToObject(root, "panel_angle", g_cfg->panel_angle);
+    cJSON_AddNumberToObject(root, "panel_azimuth", g_cfg->panel_azimuth);
     return send_json_obj(req, root);
 }
 
@@ -188,6 +195,15 @@ static esp_err_t handle_post_config(httpd_req_t *req)
     }
     v = cJSON_GetObjectItem(root, "script");
     if (v && v->valuestring) strncpy(g_cfg->script, v->valuestring, sizeof(g_cfg->script)-1);
+
+    v = cJSON_GetObjectItem(root, "battery_capacity");
+    if (v && cJSON_IsNumber(v)) g_cfg->battery_capacity = (float)v->valuedouble;
+    v = cJSON_GetObjectItem(root, "solar_peak");
+    if (v && cJSON_IsNumber(v)) g_cfg->solar_peak = (float)v->valuedouble;
+    v = cJSON_GetObjectItem(root, "panel_angle");
+    if (v && cJSON_IsNumber(v)) g_cfg->panel_angle = v->valueint;
+    v = cJSON_GetObjectItem(root, "panel_azimuth");
+    if (v && cJSON_IsNumber(v)) g_cfg->panel_azimuth = v->valueint;
 
     cJSON *maps = cJSON_GetObjectItem(root, "mappings");
     if (maps && cJSON_IsArray(maps)) {
@@ -725,12 +741,40 @@ static esp_err_t handle_mesh_discover(httpd_req_t *req)
     return err;
 }
 
+// ─── OTA / version endpoints ─────────────────────────────────────────────
+
+static esp_err_t handle_get_version(httpd_req_t *req)
+{
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "current", ota_get_current_version());
+    cJSON_AddStringToObject(root, "status", ota_get_status());
+    return send_json_obj(req, root);
+}
+
+static esp_err_t handle_ota_check(httpd_req_t *req)
+{
+    esp_err_t err = ota_request_check();
+    if (err != ESP_OK)
+        return send_json(req, "{\"error\":\"ota_in_progress\"}", 400);
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "status", ota_get_status());
+    return send_json_obj(req, root);
+}
+
+static esp_err_t handle_ota_status(httpd_req_t *req)
+{
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "status", ota_get_status());
+    cJSON_AddStringToObject(root, "current", ota_get_current_version());
+    return send_json_obj(req, root);
+}
+
 esp_err_t web_server_start(hub_config_t *cfg)
 {
     g_cfg = cfg;
 
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.max_uri_handlers = 16;
+    config.max_uri_handlers = 20;
     config.stack_size = 8192;
     config.lru_purge_enable = true;
 
@@ -756,6 +800,9 @@ esp_err_t web_server_start(hub_config_t *cfg)
         {.uri = "/api/wifi/scan",    .method = HTTP_GET,  .handler = handle_wifi_scan},
         {.uri = "/api/wifi/networks",.method = HTTP_GET,  .handler = handle_wifi_networks},
         {.uri = "/api/mesh/discover",.method = HTTP_GET,  .handler = handle_mesh_discover},
+        {.uri = "/api/version",      .method = HTTP_GET,  .handler = handle_get_version},
+        {.uri = "/api/ota/check",    .method = HTTP_POST, .handler = handle_ota_check},
+        {.uri = "/api/ota/status",   .method = HTTP_GET,  .handler = handle_ota_status},
     };
 
     for (int i = 0; i < sizeof(uris)/sizeof(uris[0]); i++) {

@@ -7,6 +7,7 @@ idf_component_register(
         tasmota_client.c
         config_store.c
         transform.c
+        ota.c
     INCLUDE_DIRS
         "."
 )

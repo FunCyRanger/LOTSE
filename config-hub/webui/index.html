@@ -217,6 +217,30 @@ select{padding:4px 6px;font-size:12px}
   </div>
 
   <div class="card">
+    <h2>Registration</h2>
+    <p style="font-size:13px;color:#666;margin-bottom:8px">Sent on boot + daily via LoRa for weighted calculations by neighbors.</p>
+    <label>Battery capacity (kWh)</label>
+    <input id="battery-capacity" type="number" step="0.01" min="0" placeholder="e.g. 13.5">
+    <label>Solar peak (kWp)</label>
+    <input id="solar-peak" type="number" step="0.01" min="0" placeholder="e.g. 10.0">
+    <label>Panel angle (° from horizontal)</label>
+    <input id="panel-angle" type="number" min="0" max="90" placeholder="e.g. 30">
+    <label>Panel azimuth (° from north)</label>
+    <input id="panel-azimuth" type="number" min="0" max="360" placeholder="e.g. 180">
+    <button class="btn btn-primary" onclick="saveConfig()" style="margin-top:12px">Save</button>
+  </div>
+
+  <div class="card">
+    <h2>Firmware</h2>
+    <table>
+      <tr><td>Version</td><td id="fw-version">-</td></tr>
+      <tr><td>Status</td><td id="fw-status">-</td></tr>
+    </table>
+    <button class="btn btn-primary" onclick="checkFirmware()" style="margin-top:8px" id="fw-btn">&#8635; Check for updates</button>
+    <span id="fw-msg" style="font-size:13px;margin-left:8px"></span>
+  </div>
+
+  <div class="card">
     <h2>Factory Reset</h2>
     <p style="font-size:13px;color:#666;margin-bottom:8px">Reset all settings and return to AP mode.</p>
     <button class="btn btn-danger" onclick="factoryReset()">&#9888;&#65039; Factory reset</button>
@@ -410,9 +434,12 @@ async function refreshStatus(){
     $('mqtt-status-txt').textContent=s.mqtt_clients>0?'Active':'Waiting for clients...';
     $('mqtt-clients').textContent=s.mqtt_clients;
   }catch(e){}
+  try{
+    const v=await api('/api/version');
+    $('fw-version').textContent=v.current||'-';
+    $('fw-status').textContent=v.status||'-';
+  }catch(e){}
 }
-
-async function init(){
   try{
     const cfg=await api('/api/config');
     if(cfg.configured){
@@ -434,6 +461,10 @@ async function init(){
         currentMappings=cfg.mappings;
         renderMappings();
       }
+      if(cfg.battery_capacity!=null) $('battery-capacity').value=cfg.battery_capacity;
+      if(cfg.solar_peak!=null) $('solar-peak').value=cfg.solar_peak;
+      if(cfg.panel_angle!=null) $('panel-angle').value=cfg.panel_angle;
+      if(cfg.panel_azimuth!=null) $('panel-azimuth').value=cfg.panel_azimuth;
       if (cfg.script) {
         try{
           const r=await api('/api/script/parse',{
@@ -846,10 +877,58 @@ async function saveConfig(){
       gpio_rx:parseInt($('gpio-rx').value)||3,
       gpio_tx:parseInt($('gpio-tx').value)||1,
       script:$('script-input').value,
-      mappings:currentMappings
+      mappings:currentMappings,
+      battery_capacity:parseFloat($('battery-capacity').value)||0,
+      solar_peak:parseFloat($('solar-peak').value)||0,
+      panel_angle:parseInt($('panel-angle').value)||0,
+      panel_azimuth:parseInt($('panel-azimuth').value)||0
     })
   });
   toast('Saved','success');
+  refreshFirmwareInfo();
+}
+
+async function refreshFirmwareInfo(){
+  try{
+    const v=await api('/api/version');
+    $('fw-version').textContent=v.current||'-';
+    $('fw-status').textContent=v.status||'-';
+  }catch(e){}
+}
+
+async function checkFirmware(){
+  const btn=$('fw-btn');
+  const msg=$('fw-msg');
+  btn.disabled=true;
+  msg.innerHTML='<span id="spinner"></span> Checking...';
+  try{
+    const r=await api('/api/ota/check',{method:'POST'});
+    const poll=setInterval(async ()=>{
+      try{
+        const s=await api('/api/ota/status');
+        $('fw-status').textContent=s.status||'-';
+        if(s.status==='up_to_date'){
+          msg.textContent='Already up to date';
+          clearInterval(poll);
+          btn.disabled=false;
+        }else if(s.status==='downloading'){
+          msg.textContent='Downloading firmware...';
+        }else if(s.status==='rebooting'){
+          msg.textContent='Update complete! Rebooting...';
+          clearInterval(poll);
+        }else if(s.status.startsWith('error')){
+          msg.textContent='Error: '+s.status;
+          clearInterval(poll);
+          btn.disabled=false;
+        }else{
+          msg.textContent='Status: '+s.status;
+        }
+      }catch(e){}
+    },2000);
+  }catch(e){
+    msg.textContent='Failed to start check';
+    btn.disabled=false;
+  }
 }
 
 async function saveMappings(){

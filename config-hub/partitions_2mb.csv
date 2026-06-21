@@ -1,0 +1,8 @@
+# ESP32 2MB flash, dual OTA (960KB per slot) with rollback
+# Firmware must be <= 960KB to fit.
+# Name,   Type, SubType, Offset,  Size,    Flags
+nvs,      data, nvs,     0x9000,  0x4000,
+phy_init, data, phy,     0xD000,  0x1000,
+ota_data, data, ota,     0xE000,  0x2000,
+ota_0,    app,  ota_0,   0x10000, 0xF0000,
+ota_1,    app,  ota_1,   0x100000,0xF0000,

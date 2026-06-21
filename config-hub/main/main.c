@@ -15,6 +15,7 @@
 #include "web_server.h"
 #include "transform.h"
 #include "tasmota_client.h"
+#include "ota.h"
 #include "cJSON.h"
 
 static const char *TAG = "lotse_main";
@@ -270,6 +271,7 @@ void app_main(void)
     xTaskCreate(poll_tasmota_sensor_task, "poll_sensor", 8192, &s_cfg, 5, NULL);
     xTaskCreate(sntp_sync_task, "sntp_sync", 4096, NULL, 5, NULL);
     xTaskCreate(publish_config_task, "pub_config", 4096, &s_cfg, 3, NULL);
+    ota_init();
 
     ESP_LOGI(TAG, "LOTSE Config Hub initialized");
 }
