@@ -234,8 +234,12 @@ trigger_variables:
   interval: !input interval
   config_hour: !input config_hour
 trigger:
+  - platform: homeassistant
+    event: start
+    id: boot
   - platform: time_pattern
     minutes: "/1"
+    id: tick
 
 action:
   - variables:
@@ -272,9 +276,9 @@ action:
   - if:
       - condition: template
         value_template: >
-          {{ now().minute % (interval | int) == 0
-             and (this.attributes.last_triggered == None
-                  or now().hour == (config_hour | int)) }}
+          {{ trigger.id == 'boot'
+             or (now().minute % (interval | int) == 0
+                 and now().hour == (config_hour | int)) }}
     then:
       - variables:
           config_payload: >
