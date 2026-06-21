@@ -56,7 +56,7 @@ No edits needed — the automation extracts the region from the MQTT topic dynam
 
 This step creates aggregated sensors that sum up all neighbors into a single reading. The three cumulative-energy sensors can be added to the Energy Dashboard once and never need updating — new neighbors are included automatically.
 
-**What it creates** (16 sensors):
+**What it creates** (21 sensors):
 
 | Sensor name | Source keys | What it shows | Energy Dashboard |
 |---|---|---|---|---|
@@ -73,9 +73,16 @@ This step creates aggregated sensors that sum up all neighbors into a single rea
 | Combined Mesh Solar Capacity | `sK` | Total installed solar peak power in kWp | — |
 | Combined Solar Utilization | `sP`, `sK` | % of installed PV capacity currently generated | — |
 | Config-Ready Nodes | `bC` | Number of nodes that have reported config data | — |
+| Combined Solar Panel Angle | `sA` weighted by `sK` | Average panel tilt across all nodes | — |
+| Combined Solar Panel Azimuth | `sZ` weighted by `sK` | Average panel orientation across all nodes | — |
+| Solar Forecast Today | Forecast.Solar API | Expected solar production today (kWh) | — |
+| Solar Forecast Tomorrow | Forecast.Solar API | Expected solar production tomorrow (kWh) | — |
+| Solar Forecast Utilization | `se`, forecast | % of today's forecast produced so far | — |
 | Combined Mesh Grid Import | `gEI` | Cumulative import energy | ✅ |
 | Combined Mesh Grid Export | `gEO` | Cumulative export energy | ✅ |
 | Combined Mesh Solar Energy | `sE` | Cumulative solar energy | ✅ |
+
+**Forecast.Solar** is queried every hour via the free public API (no API key needed). The combined panel angle and azimuth are weighted by each node's `sK` (kWp). The zone's lat/lon from `zone.home` is used automatically. If you have a multi-orientation installation, consider upgrading to a Personal or Professional plan for multi-plane aggregation.
 
 **Installation:**
 
@@ -296,7 +303,7 @@ Then create a template sensor to show solar utilization as % of peak power:
 
 This normalizes across households: a 3 kWp system at 2 kW and a 6 kWp system at 4 kW both read 67%.
 
-**Solar forecast** (Solcast, PVOutput) is a separate HA integration, not related to the mesh payload.
+**Solar forecast** is now integrated — see the **Solar Forecast** section in the sensor table above. The combined sensors call the [Forecast.Solar free API](https://doc.forecast.solar/api:estimate) hourly with the weighted-average panel specs. No API key needed; rate limit is 12 req/h (hourly poll uses 1).
 
 ---
 

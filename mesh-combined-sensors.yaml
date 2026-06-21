@@ -201,3 +201,78 @@ template:
           {% set entities = expand(states.sensor)
              | selectattr('entity_id', 'search', 'node_\\d+_bc$') | list %}
           {{ entities | length }}
+
+      # --- Forecast.Solar: weighted combined plane ---
+
+      - name: "Combined Solar Panel Angle"
+        unique_id: "combined_solar_panel_angle"
+        unit_of_measurement: "°"
+        state_class: "measurement"
+        state: >
+          {% set ns = namespace(total_kwp=0, weighted=0) %}
+          {% for s in expand(states.sensor) | selectattr('entity_id', 'search', 'node_\\d+_sk$') %}
+            {% set kwp = s.state | float(0) %}
+            {% if kwp > 0 %}
+              {% set nid = s.entity_id
+                 | regex_replace(find='^sensor\\.node_(\\d+)_sk$', replace='\\1', ignorecase=False) %}
+              {% set ang = states('sensor.node_' ~ nid ~ '_sa') | float(0) %}
+              {% set ns.weighted = ns.weighted + kwp * ang %}
+              {% set ns.total_kwp = ns.total_kwp + kwp %}
+            {% endif %}
+          {% endfor %}
+          {{ (ns.weighted / ns.total_kwp) | round(1) if ns.total_kwp > 0 else 0 }}
+
+      - name: "Combined Solar Panel Azimuth"
+        unique_id: "combined_solar_panel_azimuth"
+        unit_of_measurement: "°"
+        state_class: "measurement"
+        state: >
+          {% set ns = namespace(total_kwp=0, weighted=0) %}
+          {% for s in expand(states.sensor) | selectattr('entity_id', 'search', 'node_\\d+_sk$') %}
+            {% set kwp = s.state | float(0) %}
+            {% if kwp > 0 %}
+              {% set nid = s.entity_id
+                 | regex_replace(find='^sensor\\.node_(\\d+)_sk$', replace='\\1', ignorecase=False) %}
+              {% set az = states('sensor.node_' ~ nid ~ '_sz') | float(0) %}
+              {% set ns.weighted = ns.weighted + kwp * az %}
+              {% set ns.total_kwp = ns.total_kwp + kwp %}
+            {% endif %}
+          {% endfor %}
+          {{ (ns.weighted / ns.total_kwp) | round(1) if ns.total_kwp > 0 else 0 }}
+
+      - name: "Solar Forecast Utilization"
+        unique_id: "solar_forecast_utilization"
+        unit_of_measurement: "%"
+        state_class: "measurement"
+        state: >
+          {% set actual = states('sensor.combined_mesh_se') | float(0) %}
+          {% set forecast = states('sensor.solar_forecast_today') | float(0) %}
+          {{ (actual / forecast * 100) | round(1) if forecast > 0 else 0 }}
+
+rest:
+  - resource_template: >
+      https://api.forecast.solar/estimate/watthours/day/
+      {{ state_attr('zone.home', 'latitude') | string | truncate(7, true, '') }}/
+      {{ state_attr('zone.home', 'longitude') | string | truncate(7, true, '') }}/
+      {{ states('sensor.combined_solar_panel_angle') | int }}/
+      {% set ha_az = states('sensor.combined_solar_panel_azimuth') | float(0) %}
+      {{ (ha_az - 180) | int }}/
+      {{ states('sensor.combined_mesh_solar_capacity') | float(0) }}
+    scan_interval: 3600
+    sensor:
+      - name: "Solar Forecast Today"
+        unique_id: "solar_forecast_today"
+        unit_of_measurement: "kWh"
+        device_class: "energy"
+        state_class: "measurement"
+        value_template: >
+          {% set wh = value_json.result.watt_hours_day.values() | first | default(0) %}
+          {{ (wh / 1000) | round(1) }}
+      - name: "Solar Forecast Tomorrow"
+        unique_id: "solar_forecast_tomorrow"
+        unit_of_measurement: "kWh"
+        device_class: "energy"
+        state_class: "measurement"
+        value_template: >
+          {% set vals = value_json.result.watt_hours_day.values() | list %}
+          {{ (vals[1] / 1000) | round(1) if vals | length > 1 else 0 }}
