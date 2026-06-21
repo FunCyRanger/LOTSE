@@ -74,6 +74,7 @@ jobs:
         working-directory: config-hub
         run: |
           . $HOME/esp-idf/export.sh
+          idf.py fullclean
           idf.py build
       - name: Create Release
         uses: softprops/action-gh-release@v2
