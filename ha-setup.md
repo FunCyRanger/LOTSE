@@ -318,4 +318,43 @@ This normalizes across households: a 3 kWp system at 2 kW and a 6 kWp system at 
 | Sensors don't appear after first message | Auto-discovery not running | Verify `auto-discovery-automation.yaml` is saved and enabled in HA → Automations. Check MQTT topic `msh/{region}/2/json/mqtt/!{your_hex}` for incoming messages (Mosquitto add-on → Listen). |
 | Neighbor sensor not listed in Energy Dashboard | Dashboard only shows `total_increasing` sensors | Auto-discovery sets this automatically. If the sensor exists but is missing from the dropdown, check its state class in **Settings → Devices & Services → Devices**. |
 | Energy dashboard shows gaps | Send interval too long | In the sender blueprint, adjust "Send interval" (default 5 min) to 2 min. Note this increases LoRa channel usage. |
-| Neighbor values are stale | Node went offline or LoRa range issue | Check neighbor's node is still powered. Increase send interval. Verify both nodes are within LoRa range (~1-2 km urban, more rural). |
+ | Neighbor values are stale | Node went offline or LoRa range issue | Check neighbor's node is still powered. Increase send interval. Verify both nodes are within LoRa range (~1-2 km urban, more rural). |
+
+---
+
+## Firmware Updates (OTA)
+
+The config-hub firmware can be updated over-the-air via the web UI. Updates are distributed as GitHub Releases.
+
+### Prerequisites
+
+- The config-hub must be connected to WiFi and have internet access (can reach `https://api.github.com`)
+- A firmware release must be published on GitHub (tagged `v*`)
+
+### How it works
+
+- On boot, the config-hub checks GitHub for a newer release
+- It also checks every 24 hours automatically
+- A **Firmware** card on the web UI shows the current version and a **Check for updates** button
+- Status indicators: *Up to date*, *Update available*, *Downloading...*, *Ready to reboot* (flashing), *Error*
+
+### Update process
+
+1. Open the config-hub web UI in your browser (http://config-hub-ip/)
+2. The **Firmware** card shows your current version
+3. Click **Check for updates** — the config-hub queries GitHub Releases
+4. If a newer version is found, the button changes to **Update to vX.Y.Z** and auto-downloads the firmware
+5. Once downloaded (usually a few seconds), the button changes to **Restart to apply update** and starts flashing
+6. Click it — the device reboots into the new firmware
+
+### Rollback safety
+
+If the new firmware fails to boot (crashes, WiFi doesn't connect, etc.), the ESP32 bootloader automatically **rolls back** to the previous version after a watchdog reset. No action needed.
+
+### Manual power cycle
+
+If you need to force a rollback before the watchdog triggers, disconnect and reconnect power. The bootloader will attempt the new slot up to **3 times** before permanently rolling back.
+
+### Which devices support OTA?
+
+Any ESP32 with 2 MB+ flash running the config-hub firmware. The dual-OTA partition layout reserves 960 KB per slot — new firmware must fit within that limit.
