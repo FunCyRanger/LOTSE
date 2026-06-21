@@ -1,5 +1,6 @@
 #include <string.h>
 #include <stdlib.h>
+#include <time.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
@@ -42,6 +43,7 @@ esp_err_t ota_request_check(void)
 {
     if (strcmp(s_ota_status, "downloading") == 0)
         return ESP_ERR_INVALID_STATE;
+    set_status("checking");
     s_check_pending = true;
     return ESP_OK;
 }
@@ -165,6 +167,14 @@ static void ota_perform_update(const char *latest_version)
     esp_restart();
 }
 
+static bool sntp_is_synced(void)
+{
+    time_t now = time(NULL);
+    struct tm ti;
+    localtime_r(&now, &ti);
+    return ti.tm_year >= (2025 - 1900);
+}
+
 void ota_check_and_update(void)
 {
     if (wifi_manager_get_state() != WIFI_STATE_STATION) {
@@ -173,6 +183,15 @@ void ota_check_and_update(void)
     }
 
     set_status("checking");
+
+    int sntp_waited = 0;
+    while (!sntp_is_synced() && sntp_waited < 60) {
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        sntp_waited++;
+    }
+    if (!sntp_is_synced()) {
+        ESP_LOGW(TAG, "SNTP not synced after 60s, proceeding anyway");
+    }
 
     char latest_ver[32] = "";
     esp_err_t err = fetch_latest_version(latest_ver, sizeof(latest_ver));
@@ -208,19 +227,17 @@ static void ota_task(void *arg)
         return;
     }
 
-    // Check immediately on boot, then sleep in minute ticks
-    // responding to manual trigger requests
-    int minute = 0;
+    int tick = 0;
     while (1) {
-        if (minute == 0 || s_check_pending) {
+        if (tick % (24 * 60) == 0 || s_check_pending) {
             if (s_check_pending) {
                 s_check_pending = false;
-                minute = 0; // reset 24h countdown on manual trigger
+                tick = 0;
             }
             ota_check_and_update();
         }
-        minute = (minute + 1) % (24 * 60); // every 24h at minute=0
-        vTaskDelay(pdMS_TO_TICKS(60 * 1000));
+        tick = (tick + 1) % (24 * 60);
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
 
