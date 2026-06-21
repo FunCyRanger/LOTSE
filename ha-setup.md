@@ -49,10 +49,63 @@ flowchart LR
 
 No edits needed — the automation extracts the region from the MQTT topic dynamically. Neighbor sensors appear automatically when the first message arrives.
 
-### Step 3 — Verify
+### Step 3 — Install Combined Sensors (optional)
+
+This step creates aggregated sensors that sum up all neighbors into a single reading. The three cumulative-energy sensors can be added to the Energy Dashboard once and never need updating — new neighbors are included automatically.
+
+**What it creates** (11 sensors):
+
+| Sensor name | Source keys | What it shows | Energy Dashboard |
+|---|---|---|---|
+| Combined Mesh Grid Power | `gP` | Net neighborhood power (+import, −export) | — |
+| Combined Mesh Grid Import Power | `gIP` | Sum of import power | — |
+| Combined Mesh Grid Export Power | `gEP` | Sum of export power | — |
+| Combined Mesh Solar Power | `sP` | Total solar generation | — |
+| Combined Mesh Total Solar Generation | `sP` | Same, alias for clarity | — |
+| Average Neighbor SOC | `bS` | Average battery level across all neighbors | — |
+| Combined Self-Consumption Rate | `sP`, `gEP` | % of solar consumed locally (no grid export) | — |
+| Participating Neighbors | `gIP` | Number of neighbors currently reporting | — |
+| Combined Mesh Grid Import | `gEI` | Cumulative import energy | ✅ |
+| Combined Mesh Grid Export | `gEO` | Cumulative export energy | ✅ |
+| Combined Mesh Solar Energy | `sE` | Cumulative solar energy | ✅ |
+
+**Installation:**
+
+*Option A — Add to `configuration.yaml` (recommended):*
+
+1. Open your HA `configuration.yaml` (via Studio Code Server, Samba, or the File Editor add-on).
+2. Add this line at the end:
+   ```yaml
+   template: !include mesh-combined-sensors.yaml
+   ```
+3. Copy [`mesh-combined-sensors.yaml`](mesh-combined-sensors.yaml) into the same folder as `configuration.yaml`.
+4. Restart Home Assistant.
+5. The 11 sensors appear in **Settings → Devices & Services → Entities** (search "Combined Mesh").
+
+*Option B — Packages folder:*
+
+If you already use `packages: !include_dir_named packages` in your `configuration.yaml`, drop the file into the `packages/` folder and restart.
+
+---
+
+**Optional: Dashboard (see all 11 sensors on one page)**
+
+HA does not support grouping YAML-defined template sensors under a device, so the sensors appear as individual entities. To view them all at a glance, import the LOTSE dashboard:
+
+1. Copy [`lotse-dashboard.yaml`](lotse-dashboard.yaml) to your HA `config/` folder.
+2. In HA: **Settings → Dashboards → Import** → pick the file → **Import**.
+3. A new tab **"LOTSE Neighborhood"** appears in your sidebar with all combined sensors grouped by category (Grid Power, Solar, Energy, Neighborhood).
+
+> **Tip:** The three cumulative-energy sensors (`Combined Mesh Grid Import`, `Combined Mesh Grid Export`, `Combined Mesh Solar Energy`) are the ones to add to the Energy Dashboard (see section below).
+
+> **Prerequisite:** At least one neighbor must have sent data so the individual `node_XXXX_*` sensors exist.
+
+### Step 4 — Verify
 
 After the first send interval (default 5 minutes, plus a random 0–60 s delay) elapses:
 - Neighbor sensors appear under **Settings → Devices & Services → Devices**
+- Combined sensors appear under **Settings → Devices & Services → Entities** (search "Combined Mesh")
+- If you imported the dashboard, a new **LOTSE Neighborhood** tab appears in your sidebar showing all combined sensors on one page
 - The **Energy** dashboard shows your first recorded data point
 
 New neighbors that join later are handled automatically — no additional setup needed.
@@ -184,11 +237,21 @@ JSON payload with keys grouped by category. Sign convention: import/charge = pos
 
 ## Energy Dashboard
 
-The Energy Dashboard tracks cumulative import/export/solar per household. Each neighbor's cumulative sensors appear automatically (e.g., `Node 2892019402 gEI`, `Node 2892019402 gEO`, `Node 2892019402 sE`).
+The Energy Dashboard tracks cumulative import/export/solar per household.
 
-### Linking sensors
+### Linking sensors — option A: combined sensors (recommended)
 
-In **Settings → Energy**:
+If you installed the combined sensors (Quick Start Step 3), add these to the Energy Dashboard. New neighbors are included automatically — no manual updates needed.
+
+| Dashboard slot | Add sensor (entity) |
+|---|---|
+| Grid consumption | `Combined Mesh Grid Import` |
+| Return to grid | `Combined Mesh Grid Export` |
+| Solar production | `Combined Mesh Solar Energy` |
+
+### Linking sensors — option B: per-neighbor (without combined sensors)
+
+Each neighbor's cumulative sensors appear automatically (e.g., `Node 2892019402 gEI`, `Node 2892019402 gEO`, `Node 2892019402 sE`). In **Settings → Energy**:
 
 | Dashboard slot | Add each neighbor's sensor |
 |---------------|---------------------------|

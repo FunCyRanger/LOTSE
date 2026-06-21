@@ -7,7 +7,8 @@
 #   template: !include mesh-combined-sensors.yaml
 # (the packages/ folder method also works if you have packages configured).
 #
-# After install, search "Combined Mesh" in Settings → Devices → Entities.
+# After install, search "Combined Mesh" in Settings → Devices & Services → Entities.
+# For a single-page view, import lotse-dashboard.yaml (see ha-setup.md Step 3).
 
 template:
   - sensor:
@@ -18,11 +19,6 @@ template:
         unit_of_measurement: "kW"
         device_class: "power"
         state_class: "measurement"
-        device:
-          name: "LOTSE Neighborhood"
-          identifiers: ["lotse_neighborhood"]
-          model: "Combined Sensors"
-          manufacturer: "LOTSE"
         state: >
           {% set entities = expand(states.sensor)
              | selectattr('entity_id', 'search', 'node_\\d+_gp$') | list %}
@@ -33,11 +29,6 @@ template:
         unit_of_measurement: "kW"
         device_class: "power"
         state_class: "measurement"
-        device:
-          name: "LOTSE Neighborhood"
-          identifiers: ["lotse_neighborhood"]
-          model: "Combined Sensors"
-          manufacturer: "LOTSE"
         state: >
           {% set entities = expand(states.sensor)
              | selectattr('entity_id', 'search', 'node_\\d+_gip$') | list %}
@@ -48,11 +39,6 @@ template:
         unit_of_measurement: "kW"
         device_class: "power"
         state_class: "measurement"
-        device:
-          name: "LOTSE Neighborhood"
-          identifiers: ["lotse_neighborhood"]
-          model: "Combined Sensors"
-          manufacturer: "LOTSE"
         state: >
           {% set entities = expand(states.sensor)
              | selectattr('entity_id', 'search', 'node_\\d+_gep$') | list %}
@@ -64,11 +50,6 @@ template:
         unit_of_measurement: "kW"
         device_class: "power"
         state_class: "measurement"
-        device:
-          name: "LOTSE Neighborhood"
-          identifiers: ["lotse_neighborhood"]
-          model: "Combined Sensors"
-          manufacturer: "LOTSE"
         state: >
           {% set entities = expand(states.sensor)
              | selectattr('entity_id', 'search', 'node_\\d+_sp$') | list %}
@@ -80,11 +61,6 @@ template:
         unit_of_measurement: "%"
         device_class: "battery"
         state_class: "measurement"
-        device:
-          name: "LOTSE Neighborhood"
-          identifiers: ["lotse_neighborhood"]
-          model: "Combined Sensors"
-          manufacturer: "LOTSE"
         state: >
           {% set entities = expand(states.sensor)
              | selectattr('entity_id', 'search', 'node_\\d+_bs$') | list %}
@@ -97,11 +73,6 @@ template:
         unit_of_measurement: "kWh"
         device_class: "energy"
         state_class: "total_increasing"
-        device:
-          name: "LOTSE Neighborhood"
-          identifiers: ["lotse_neighborhood"]
-          model: "Combined Sensors"
-          manufacturer: "LOTSE"
         state: >
           {% set entities = expand(states.sensor)
              | selectattr('entity_id', 'search', 'node_\\d+_gei$') | list %}
@@ -112,11 +83,6 @@ template:
         unit_of_measurement: "kWh"
         device_class: "energy"
         state_class: "total_increasing"
-        device:
-          name: "LOTSE Neighborhood"
-          identifiers: ["lotse_neighborhood"]
-          model: "Combined Sensors"
-          manufacturer: "LOTSE"
         state: >
           {% set entities = expand(states.sensor)
              | selectattr('entity_id', 'search', 'node_\\d+_geo$') | list %}
@@ -127,11 +93,6 @@ template:
         unit_of_measurement: "kWh"
         device_class: "energy"
         state_class: "total_increasing"
-        device:
-          name: "LOTSE Neighborhood"
-          identifiers: ["lotse_neighborhood"]
-          model: "Combined Sensors"
-          manufacturer: "LOTSE"
         state: >
           {% set entities = expand(states.sensor)
              | selectattr('entity_id', 'search', 'node_\\d+_se$') | list %}
@@ -144,11 +105,6 @@ template:
         unit_of_measurement: "kW"
         device_class: "power"
         state_class: "measurement"
-        device:
-          name: "LOTSE Neighborhood"
-          identifiers: ["lotse_neighborhood"]
-          model: "Combined Sensors"
-          manufacturer: "LOTSE"
         state: >
           {% set entities = expand(states.sensor)
              | selectattr('entity_id', 'search', 'node_\\d+_sp$') | list %}
@@ -158,11 +114,6 @@ template:
         unique_id: "combined_self_consumption"
         unit_of_measurement: "%"
         state_class: "measurement"
-        device:
-          name: "LOTSE Neighborhood"
-          identifiers: ["lotse_neighborhood"]
-          model: "Combined Sensors"
-          manufacturer: "LOTSE"
         state: >
           {% set solar = expand(states.sensor)
              | selectattr('entity_id', 'search', 'node_\\d+_sp$')
@@ -176,11 +127,6 @@ template:
         unique_id: "combined_mesh_node_count"
         unit_of_measurement: "nodes"
         state_class: "measurement"
-        device:
-          name: "LOTSE Neighborhood"
-          identifiers: ["lotse_neighborhood"]
-          model: "Combined Sensors"
-          manufacturer: "LOTSE"
         state: >
           {% set entities = expand(states.sensor)
              | selectattr('entity_id', 'search', 'node_\\d+_gip$') | list %}

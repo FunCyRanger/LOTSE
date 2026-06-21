@@ -1,0 +1,32 @@
+title: LOTSE Neighborhood
+views:
+  - title: "Combined Mesh"
+    path: combined-mesh
+    badges: []
+    cards:
+      - type: entities
+        title: "Grid Power"
+        entities:
+          - sensor.combined_mesh_gp
+          - sensor.combined_mesh_gip
+          - sensor.combined_mesh_gep
+
+      - type: entities
+        title: "Solar Power"
+        entities:
+          - sensor.combined_mesh_sp
+          - sensor.combined_mesh_solar_total
+
+      - type: entities
+        title: "Grid Cumulative Energy"
+        entities:
+          - sensor.combined_mesh_gei
+          - sensor.combined_mesh_geo
+          - sensor.combined_mesh_se
+
+      - type: entities
+        title: "Neighborhood"
+        entities:
+          - sensor.avg_neighbor_soc
+          - sensor.combined_self_consumption
+          - sensor.combined_mesh_node_count
