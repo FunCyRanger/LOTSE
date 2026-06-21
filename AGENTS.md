@@ -4,7 +4,7 @@ Two codebases:
 - **Root**: HA Jinja templates, YAML blueprints, Python tests
 - **`config-hub/`**: ESP-IDF project (C) — Tasmota SML → MQTT → transform → Meshtastic envelope
 
-Dirs `firmware/`, `meshtastic-fork-clean/`, `simulation/`, `simulation_v2/` are planned but never committed.
+Dirs `firmware/`, `meshtastic-fork-clean/`, `simulation/`, `simulation_v2/` are not present in the working tree — abandoned planning directories. `simulation_v2/results/` is `gitignore`d.
 
 ## Critical gotchas
 
@@ -24,13 +24,13 @@ Dirs `firmware/`, `meshtastic-fork-clean/`, `simulation/`, `simulation_v2/` are 
 ```bash
 pip install -r tests/requirements.txt    # pyyaml, jinja2, paho-mqtt
 
-python3 tests/test_mesh.py               # 32 template + roundtrip tests
-python3 tests/test_schema.py             # 9 schema tests
+python3 tests/test_mesh.py               # 39 template + roundtrip tests
+python3 tests/test_schema.py             # 11 schema tests
 python3 tests/test_e2e_mqtt.py           # requires Docker (eclipse-mosquitto), auto-skipped
 python3 tests/check_installation.py --ha-url <url> --token <token>
 
-# Config-hub C (Unity, vendored, no cmock):
-make -C config-hub/tests run             # 30+ transform/parse/GPIO/envelope tests
+# Config-hub C (Unity, vendored, no cmock), compiles natively with gcc:
+make -C config-hub/tests run             # 52 transform/parse/GPIO/envelope tests
 ```
 
 Test infra: `ha_environment()` — standard Jinja `Environment`, custom `to_json`/`from_json`/`float`/`int` filters, mock `states`/`state_attr`/`expand` globals.
@@ -64,6 +64,7 @@ Push/PR to `main`. Spins up `eclipse-mosquitto` Docker, runs config-hub C tests 
 - `archive/prototype-build.md` — references firmware never committed
 - `archive/20260517 AI review/` — AI firmware reviews (may contain errors)
 - `.opencode/plans/` — agent session scratch, not docs
+- `.opencode/node_modules/` — auto-generated (`@opencode-ai/plugin`), gitignored
 
 ## Security
 

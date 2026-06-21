@@ -2,15 +2,17 @@
 
 Every household runs its own Home Assistant + MQTT broker. Each Heltec V3 has the `mqtt` channel with downlink enabled. Each HA publishes its own meter data into the LoRa mesh using its own node's decimal number — no single point of failure, no extra hardware beyond the node and Tasmota sensor.
 
-```
-Household 1:                        Household 2:
-Tasmota ──MQTT──► HA automation          Tasmota ──MQTT──► HA automation
-                    │                                              │
-                    ▼ msh/.../mqtt/ (from:node1)                   ▼ msh/.../mqtt/ (from:node2)
-              Heltec V3 (mqtt ch+downlink)                    Heltec V3 (mqtt ch+downlink)
-                    │                                              │
-                    ▼ LoRa 868                                     ▼ LoRa 868
-               all neighbors                                   all neighbors
+```mermaid
+flowchart LR
+    subgraph H1["Household 1"]
+        T1["Tasmota IR Sensor"] -->|"MQTT"| A1["HA Automation"]
+        A1 -->|"msh/{region}/2/json/mqtt/{node}"| V1["Heltec V3<br/>(mqtt ch + downlink)"]
+    end
+    subgraph H2["Household 2 (every other household)"]
+        T2["Tasmota IR Sensor"] -->|"MQTT"| A2["HA Automation"]
+        A2 -->|"msh/{region}/2/json/mqtt/{node}"| V2["Heltec V3<br/>(mqtt ch + downlink)"]
+    end
+    V1 <-->|"LoRa 868 MHz"| V2
 ```
 
 **LoRa is the only inter-household link.** No shared MQTT broker, no shared WiFi between houses, no VPN, no bridge scripts.
@@ -49,11 +51,69 @@ No edits needed — the automation extracts the region from the MQTT topic dynam
 
 ### Step 3 — Verify
 
-After the first send interval (default 5 minutes) elapses:
+After the first send interval (default 5 minutes, plus a random 0–60 s delay) elapses:
 - Neighbor sensors appear under **Settings → Devices & Services → Devices**
 - The **Energy** dashboard shows your first recorded data point
 
 New neighbors that join later are handled automatically — no additional setup needed.
+
+---
+
+## Expected Message Flow
+
+### Send direction
+
+```
+HA publishes to:        msh/EU_868/2/json/mqtt/2892010904
+Payload (JSON):
+  {"from": 2892010904, "type": "sendtext",
+   "payload": "{\"gP\":-1.2,\"gP1\":-0.4,\"gP2\":-0.4,\"gP3\":-0.4,\"bS\":85,\"sP\":3.5}",
+   "channel": 1}
+
+Your node receives MQTT:
+  ✅ "from" == 2892010904 (matches own number)
+  ✅ channel is "mqtt" with downlink
+  ✅ injects into LoRa mesh on mqtt channel
+```
+
+### Receive direction
+
+```
+LoRa message arrives at your node:
+  from: 2712679380 (neighbor's decimal)
+  payload: {"gP": -1.2, "gP1": -0.4, "gP2": -0.4, "gP3": -0.4, "bS": 85, "sP": 3.5}
+
+Your node publishes to MQTT:
+  Topic: msh/EU_868/2/json/mqtt/!your_node_hex
+  Payload: {"from": 2712679380, "type": "text",
+            "payload": {"gP": -1.2, "gP1": -0.4, "gP2": -0.4, "gP3": -0.4, "bS": 85, "sP": 3.5},
+            "channel": 1, ...}
+
+Your HA receives it, checks from == NEIGHBOR_DECIMAL,
+  value_json.payload.gP → sensor value
+```
+
+```mermaid
+sequenceDiagram
+    participant Tasmota
+    participant HA as HA Automation
+    participant MQTT as MQTT Broker
+    participant V3 as Your Heltec V3
+    participant LoRa as LoRa Mesh
+    participant NeighborV3 as Neighbor's Heltec V3
+    participant NeighborHA as Neighbor's HA
+
+    Tasmota->>HA: MQTT SENSOR (meter data)
+    Note over HA: interval + random 0-60s jitter
+    HA->>HA: Build sendtext envelope
+    HA->>MQTT: msh/EU_868/2/json/mqtt/2892010904
+    MQTT->>V3: {"from":2892010904,"type":"sendtext", "payload":"{...}","channel":1}
+    Note over V3: validates from==own number
+    V3->>LoRa: inject into mesh (mqtt channel)
+    LoRa->>NeighborV3: forward packet
+    NeighborV3->>NeighborHA: publish to msh/…/mqtt/!hex
+    Note over NeighborHA: auto-discovery creates sensors
+```
 
 ---
 
@@ -108,10 +168,10 @@ JSON payload with keys grouped by category. Sign convention: import/charge = pos
 
 **Example payload (all keys):**
 ```
-{"gP":-1.2,"gIP":0.0,"gEP":1.2,"gP1":-0.4,"gP2":-0.4,"gP3":-0.4,"gV1":230,"gV2":229,"gV3":231,"gEI":12.5,"gEO":3.2,"sP":3.5,"sE":15.2,"bP":1.0,"bS":85,"bEI":8.5,"bEO":2.3,"wP":0.0,"wE":2.1,"wS":80}
+{"gP":-1.2,"gIP":0.0,"gEP":1.2,"gP1":-0.4,"gP2":-0.4,"gP3":-0.4,"gV1":230.0,"gV2":229.0,"gV3":231.0,"gEI":12.5,"gEO":3.2,"sP":3.5,"sE":15.2,"bP":1.0,"bS":85,"bEI":8.5,"bEO":2.3,"wP":0.0,"wE":2.1,"wS":80}
 ```
 
-**Size:** ~170 bytes with all keys, ~10 bytes with just `gIP` — both fit within Meshtastic's ~220-byte limit.
+**Size:** ~200 bytes with all keys, ~12 bytes with just `gIP` — both fit within Meshtastic's ~220-byte limit.
 
 **Edge cases:**
 - Sensors with state `unavailable`, `unknown`, `none`, `NaN`, `inf` are **omitted** from the payload (no key sent)
@@ -166,42 +226,6 @@ Then create a template sensor to show solar utilization as % of peak power:
 This normalizes across households: a 3 kWp system at 2 kW and a 6 kWp system at 4 kW both read 67%.
 
 **Solar forecast** (Solcast, PVOutput) is a separate HA integration, not related to the mesh payload.
-
----
-
-## Expected Message Flow
-
-### Send direction
-
-```
-HA publishes to:        msh/EU_868/2/json/mqtt/
-Payload (JSON):
-  {"from": 2892010904, "type": "sendtext",
-   "payload": "{\"gP\":-1.2,\"gP1\":-0.4,\"gP2\":-0.4,\"gP3\":-0.4,\"bS\":85,\"sP\":3.5}",
-   "channel": 1}
-
-Your node receives MQTT:
-  ✅ "from" == 2892010904 (matches own number)
-  ✅ channel is "mqtt" with downlink
-  ✅ injects into LoRa mesh on mqtt channel
-```
-
-### Receive direction
-
-```
-LoRa message arrives at your node:
-  from: 2712679380 (neighbor's decimal)
-  payload: {"gP": -1.2, "gP1": -0.4, "gP2": -0.4, "gP3": -0.4, "bS": 85, "sP": 3.5}
-
-Your node publishes to MQTT:
-  Topic: msh/EU_868/2/json/mqtt/!your_node_hex
-  Payload: {"from": 2712679380, "type": "text",
-            "payload": {"gP": -1.2, "gP1": -0.4, "gP2": -0.4, "gP3": -0.4, "bS": 85, "sP": 3.5},
-            "channel": 1, ...}
-
-Your HA receives it, checks from == NEIGHBOR_DECIMAL,
-  value_json.payload.gP → sensor value
-```
 
 ---
 
