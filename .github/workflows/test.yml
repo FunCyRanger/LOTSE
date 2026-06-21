@@ -50,14 +50,30 @@ jobs:
 
   build:
     if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
-      - name: Setup ESP-IDF
-        uses: espressif/esp-idf-cargo-action@v1
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install ESP-IDF prerequisites
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq git wget flex bison gperf \
+            cmake ninja-build ccache libffi-dev libssl-dev dfu-util
+      - name: Install ESP-IDF
+        run: |
+          git clone --depth 1 --branch v5.4 \
+            https://github.com/espressif/esp-idf.git $HOME/esp-idf
+          $HOME/esp-idf/install.sh esp32
       - name: Build firmware
         working-directory: config-hub
         run: |
+          . $HOME/esp-idf/export.sh
           idf.py build
       - name: Create Release
         uses: softprops/action-gh-release@v2
