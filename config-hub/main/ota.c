@@ -263,12 +263,10 @@ esp_err_t ota_init(void)
 {
     load_version_from_nvs();
 
-    // If no NVS version stored yet, use the compile-time built version
-    if (!s_current_ver[0]) {
-        strncpy(s_current_ver, LOTSE_VERSION, sizeof(s_current_ver) - 1);
-        s_current_ver[sizeof(s_current_ver) - 1] = 0;
-        save_version_to_nvs(s_current_ver);
-    }
+    // Always sync NVS with compile-time version so reflashing updates it
+    strncpy(s_current_ver, LOTSE_VERSION, sizeof(s_current_ver) - 1);
+    s_current_ver[sizeof(s_current_ver) - 1] = 0;
+    save_version_to_nvs(s_current_ver);
 
     // Mark app valid (cancel rollback if we booted from an OTA update)
     const esp_partition_t *running = esp_ota_get_running_partition();
