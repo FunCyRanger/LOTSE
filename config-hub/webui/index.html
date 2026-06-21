@@ -440,6 +440,7 @@ async function refreshStatus(){
     $('fw-status').textContent=v.status||'-';
   }catch(e){}
 }
+(async () => {
   try{
     const cfg=await api('/api/config');
     if(cfg.configured){
@@ -493,7 +494,7 @@ async function refreshStatus(){
     refreshStatus();
     setInterval(refreshStatus,5000);
   }catch(e){}
-}
+})();
 
 let brokerLogVisible=false;
 let brokerLogInterval=null;
