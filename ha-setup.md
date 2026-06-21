@@ -39,23 +39,11 @@ flowchart LR
    - **LoRa Region** — pre-filled to `EU_868`, change for your country (required)
    - **Grid Import Power (gIP)** — pick your sensor (required)
    - **MQTT Channel** — pre-filled to 1 (required)
+   - **Battery Capacity / Solar Peak Power / Panel Angle / Panel Azimuth** — optional system specs for weighted SOC and solar utilization on neighbors' dashboards
    - All other fields are optional — leave empty to exclude from the payload
-4. Save — your node publishes on the next interval automatically
+4. Save — your node publishes measurement data on the next interval, and config data (if any fields filled) on startup + daily at the configured hour.
 
-### Step 1b — Install Config Blueprint (recommended)
-
-This sends your node's static system configuration (battery capacity, solar peak power, panel angle, azimuth) into the mesh so neighbors can compute capacity-weighted SOC and solar utilization. Sent on HA startup and once daily at a configurable hour.
-
-1. Import the blueprint:
-   `https://raw.githubusercontent.com/FunCyRanger/LOTSE/refs/heads/main/sender-config-blueprint.yaml`
-2. Click **Create Automation**, fill in:
-   - **Node Number** and **LoRa Region** — same as Step 1
-   - **Battery Capacity (kWh)** — total battery capacity (leave empty if none)
-   - **Solar Peak Power (kWp)** — total installed PV peak power (leave empty if none)
-   - **Panel Angle / Azimuth** — optional, for solar normalization
-3. Save. The config message publishes within 60 seconds and then daily at the configured hour.
-
-> **Tip:** After changing config values, restart HA to send the updated config immediately. Or use **Settings → Automations → click the config automation → Save** to re-trigger it.
+> **Tip:** After changing config values, restart HA to send the updated config immediately, or go to **Settings → Automations → click your automation → Save** to re-trigger it.
 
 ### Step 2 — Install Auto-Discovery
 

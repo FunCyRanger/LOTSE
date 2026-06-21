@@ -54,8 +54,7 @@ Push/PR to `main`. Spins up `eclipse-mosquitto` Docker, runs config-hub C tests 
 
 | File | Details |
 |------|---------|
-| `sender-blueprint.yaml` | Unit conversion: W→kW (*0.001), MW→kW (*1000), mV→V (*0.001), kV→V (*1000), Wh→kWh (*0.001), MWh→kWh (*1000). Clamping: power ±500, energy ≥0, bS/wS 0-100 int. Skips `unavailable`/`unknown`/`none`/`NaN`/`inf`/`-inf`. Publishes to `msh/{{region}}/2/json/mqtt/{{node}}` with `evaluate_payload: false`. |
-| `sender-config-blueprint.yaml` | Optional fields bC/sK/sA/sZ. Publishes config-only envelope on HA startup + daily. Same topic/envelope pattern. |
+| `sender-blueprint.yaml` | Unit conversion: W→kW (*0.001), MW→kW (*1000), mV→V (*0.001), kV→V (*1000), Wh→kWh (*0.001), MWh→kWh (*1000). Clamping: power ±500, energy ≥0, bS/wS 0-100 int. Skips `unavailable`/`unknown`/`none`/`NaN`/`inf`/`-inf`. Publishes measurement data to `msh/{{region}}/2/json/mqtt/{{node}}` with `evaluate_payload: false`. Also publishes config-only envelope (bC/sK/sA/sZ) on HA startup + daily as a separate message when config fields are filled. |
 | `auto-discovery-automation.yaml` | Trigger: `msh/+/2/json/mqtt/+`. Extracts `from` (decimal) from `payload_json.from`, `sender` (hex) from topic, `region` from topic. For payload string→dict: `{% if payload is mapping %}payload{% else %}payload \| from_json({}){% endif %}`. Device identifiers: `mesh_node_{{ from }}`. Config keys (`bC`, `sK`, `sA`, `sZ`) only update when present (no overwrite with 0). |
 | `mesh-combined-sensors.yaml` | Drop into HA `config/packages/`. 16 sensors: regex `node_\d+_gp$`, `node_\d+_bs$`, etc. Sum power/energy, weighted SOC, total PV/battery capacity. |
 

@@ -131,7 +131,7 @@ def load_sender_template():
     path = ROOT / "sender-blueprint.yaml"
     with open(path) as f:
         blueprint = yaml.load(f, Loader=yaml.FullLoader)
-    return blueprint["action"][1]["variables"]["envelope"]
+    return blueprint["action"][1]["choose"][1]["sequence"][0]["variables"]["envelope"]
 
 
 def make_sender_vars(**overrides):
@@ -300,9 +300,13 @@ def test_sender_topic_with_node():
     with open(path) as f:
         blueprint = yaml.load(f, Loader=yaml.FullLoader)
     publish = None
-    for act in blueprint["action"]:
-        if isinstance(act, dict) and act.get("service") == "mqtt.publish":
-            publish = act
+    # mqtt.publish is inside choose sequences
+    for choice in blueprint["action"][1]["choose"]:
+        for step in choice.get("sequence", []):
+            if isinstance(step, dict) and step.get("service") == "mqtt.publish":
+                publish = step
+                break
+        if publish:
             break
     assert publish is not None, "mqtt.publish action not found"
     topic_tpl = publish["data"]["topic"]
