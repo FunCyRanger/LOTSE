@@ -262,7 +262,7 @@ template:
         attributes:
           forecast: >
             {% set raw = states('sensor.solar_forecast_hourly_raw') %}
-            {% set wh = raw | from_json if raw and raw != 'none' and raw != '' else none %}
+            {% set wh = raw | from_json if raw not in ('unknown', 'unavailable', 'none', '') else none %}
             {% if wh %}
               {% set tz = now().strftime('%z') %}
               {% set tz_s = tz[:3] + ':' + tz[3:] if tz else '+00:00' %}
@@ -283,7 +283,7 @@ rest:
       https://api.forecast.solar/estimate/watthours/
       {{ state_attr('zone.home', 'latitude') | string | truncate(7, true, '') }}/
       {{ state_attr('zone.home', 'longitude') | string | truncate(7, true, '') }}/
-      {{ states('sensor.combined_solar_panel_angle') | int }}/
+      {{ states('sensor.combined_solar_panel_angle') | float(0) | int }}/
       {% set ha_az = states('sensor.combined_solar_panel_azimuth') | float(0) %}
       {{ (ha_az - 180) | int }}/
       {{ states('sensor.combined_mesh_solar_capacity') | float(0) }}
