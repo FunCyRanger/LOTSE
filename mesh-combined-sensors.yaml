@@ -261,8 +261,8 @@ template:
           {{ states('sensor.combined_mesh_se') | float(0) | round(2) }}
         attributes:
           forecast: >
-            {% set raw = state_attr('sensor.solar_forecast_today', 'result') %}
-            {% set wh = raw.watt_hours if raw else none %}
+            {% set raw = states('sensor.solar_forecast_hourly_raw') %}
+            {% set wh = raw | from_json if raw and raw != 'none' and raw != '' else none %}
             {% if wh %}
               {% set tz = now().strftime('%z') %}
               {% set tz_s = tz[:3] + ':' + tz[3:] if tz else '+00:00' %}
@@ -288,9 +288,6 @@ rest:
       {{ (ha_az - 180) | int }}/
       {{ states('sensor.combined_mesh_solar_capacity') | float(0) }}
     scan_interval: 3600
-    json_attributes_path: "$"
-    json_attributes:
-      - "result"
     sensor:
       - name: "Solar Forecast Today"
         unique_id: "solar_forecast_today"
@@ -308,3 +305,7 @@ rest:
         value_template: >
           {% set vals = value_json.result.watt_hours_day.values() | list %}
           {{ (vals[1] / 1000) | round(1) if vals | length > 1 else 0 }}
+      - name: "Solar Forecast Hourly Raw"
+        unique_id: "solar_forecast_hourly_raw"
+        value_template: >
+          {{ value_json.result.watt_hours | to_json }}
