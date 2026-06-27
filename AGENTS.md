@@ -19,6 +19,7 @@ Dirs `firmware/`, `meshtastic-fork-clean/`, `simulation/`, `simulation_v2/` are 
 | **Receiver payload type** | Heltec V3 echoes with `payload` as **string** (not object). `auto-discovery-automation.yaml` handles both: `{% if value_json.payload is mapping %}...{% else %}... \| from_json({}){% endif %}`. `config-hub` has echo fix that reparses string to object before republishing. |
 | **Config envelope retain** | `sender-blueprint.yaml` publishes config envelope with `retain: true` so receivers' config sensors get the value on first subscription. Measurement envelopes use `retain: false`. |
 | **Sender unit mismatch** | kWh sensor assigned to kW slot → key silently omitted. `energy_units` tuple (`Wh`,`kWh`,`MWh`) excludes them from power slots and vice versa. |
+| **Case-sensitive units** | All `state_attr(X,'unit_of_measurement')` calls normalized with `.lower()` in Jinja. Dict keys are lowercase (`'w':'kw':'mw'`, `'wh':'kwh':'mwh'`, `'mv':'v':'kv'`). C code uses `strcasecmp`/`strcasestr`. |
 
 ## Testing (no pytest — standalone scripts)
 

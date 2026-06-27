@@ -362,31 +362,31 @@ action:
     then:
       - variables:
           envelope: >
-            {% set kW = {'W': 0.001, 'kW': 1, 'MW': 1000} %}
-            {% set kWh = {'Wh': 0.001, 'kWh': 1, 'MWh': 1000} %}
-            {% set V_dict = {'mV': 0.001, 'V': 1, 'kV': 1000} %}
+            {% set kW = {'w': 0.001, 'kw': 1, 'mw': 1000} %}
+            {% set kWh = {'wh': 0.001, 'kwh': 1, 'mwh': 1000} %}
+            {% set V_dict = {'mv': 0.001, 'v': 1, 'kv': 1000} %}
             {% set bad = ('unavailable','unknown','none','NaN','nan','inf','-inf') %}
-            {% set energy_units = ('Wh','kWh','MWh') %}
+            {% set energy_units = ('wh','kwh','mwh') %}
             {% set items = [] %}
-            {% if gP %}{% set uo=state_attr(gP,'unit_of_measurement') %}{% if states(gP)not in bad and uo not in energy_units %}{% set v=(states(gP)|float(0)*kW.get(uo,1))|round(2) %}{% set items=items+[("gP",[[v,500]|min,-500]|max)] %}{% endif %}{% endif %}
-            {% if gIP %}{% set uo=state_attr(gIP,'unit_of_measurement') %}{% if states(gIP)not in bad and uo not in energy_units %}{% set v=(states(gIP)|float(0)*kW.get(uo,1))|round(2) %}{% set items=items+[("gIP",[[v,500]|min,0]|max)] %}{% endif %}{% endif %}
-            {% if gEP %}{% set uo=state_attr(gEP,'unit_of_measurement') %}{% if states(gEP)not in bad and uo not in energy_units %}{% set v=(states(gEP)|float(0)*kW.get(uo,1))|round(2) %}{% set items=items+[("gEP",[[v,500]|min,0]|max)] %}{% endif %}{% endif %}
-            {% if gP1 %}{% set uo=state_attr(gP1,'unit_of_measurement') %}{% if states(gP1)not in bad and uo not in energy_units %}{% set v=(states(gP1)|float(0)*kW.get(uo,1))|round(2) %}{% set items=items+[("gP1",[[v,500]|min,-500]|max)] %}{% endif %}{% endif %}
-            {% if gP2 %}{% set uo=state_attr(gP2,'unit_of_measurement') %}{% if states(gP2)not in bad and uo not in energy_units %}{% set v=(states(gP2)|float(0)*kW.get(uo,1))|round(2) %}{% set items=items+[("gP2",[[v,500]|min,-500]|max)] %}{% endif %}{% endif %}
-            {% if gP3 %}{% set uo=state_attr(gP3,'unit_of_measurement') %}{% if states(gP3)not in bad and uo not in energy_units %}{% set v=(states(gP3)|float(0)*kW.get(uo,1))|round(2) %}{% set items=items+[("gP3",[[v,500]|min,-500]|max)] %}{% endif %}{% endif %}
-            {% if gV1 %}{% set uo=state_attr(gV1,'unit_of_measurement') %}{% if states(gV1)not in bad %}{% set items=items+[("gV1",(states(gV1)|float(0)*V_dict.get(uo,1))|round(1))] %}{% endif %}{% endif %}
-            {% if gV2 %}{% set uo=state_attr(gV2,'unit_of_measurement') %}{% if states(gV2)not in bad %}{% set items=items+[("gV2",(states(gV2)|float(0)*V_dict.get(uo,1))|round(1))] %}{% endif %}{% endif %}
-            {% if gV3 %}{% set uo=state_attr(gV3,'unit_of_measurement') %}{% if states(gV3)not in bad %}{% set items=items+[("gV3",(states(gV3)|float(0)*V_dict.get(uo,1))|round(1))] %}{% endif %}{% endif %}
-            {% if gEI %}{% set uo=state_attr(gEI,'unit_of_measurement') %}{% if states(gEI)not in bad and uo not in ('W','kW','MW') %}{% set v=(states(gEI)|float(0)*kWh.get(uo,1))|round(2) %}{% set items=items+[("gEI",[v,0]|max)] %}{% endif %}{% endif %}
-            {% if gEO %}{% set uo=state_attr(gEO,'unit_of_measurement') %}{% if states(gEO)not in bad and uo not in ('W','kW','MW') %}{% set v=(states(gEO)|float(0)*kWh.get(uo,1))|round(2) %}{% set items=items+[("gEO",[v,0]|max)] %}{% endif %}{% endif %}
-            {% if sP %}{% set uo=state_attr(sP,'unit_of_measurement') %}{% if states(sP)not in bad and uo not in energy_units %}{% set v=(states(sP)|float(0)*kW.get(uo,1))|round(2) %}{% set items=items+[("sP",[[v,500]|min,-500]|max)] %}{% endif %}{% endif %}
-            {% if sE %}{% set uo=state_attr(sE,'unit_of_measurement') %}{% if states(sE)not in bad and uo not in ('W','kW','MW') %}{% set v=(states(sE)|float(0)*kWh.get(uo,1))|round(2) %}{% set items=items+[("sE",[v,0]|max)] %}{% endif %}{% endif %}
-            {% if bP %}{% set uo=state_attr(bP,'unit_of_measurement') %}{% if states(bP)not in bad and uo not in energy_units %}{% set v=(states(bP)|float(0)*kW.get(uo,1))|round(2) %}{% set items=items+[("bP",[[v,500]|min,-500]|max)] %}{% endif %}{% endif %}
+            {% if gP %}{% set uo=(state_attr(gP,'unit_of_measurement') or '').lower() %}{% if states(gP)not in bad and uo not in energy_units %}{% set v=(states(gP)|float(0)*kW.get(uo,1))|round(2) %}{% set items=items+[("gP",[[v,500]|min,-500]|max)] %}{% endif %}{% endif %}
+            {% if gIP %}{% set uo=(state_attr(gIP,'unit_of_measurement') or '').lower() %}{% if states(gIP)not in bad and uo not in energy_units %}{% set v=(states(gIP)|float(0)*kW.get(uo,1))|round(2) %}{% set items=items+[("gIP",[[v,500]|min,0]|max)] %}{% endif %}{% endif %}
+            {% if gEP %}{% set uo=(state_attr(gEP,'unit_of_measurement') or '').lower() %}{% if states(gEP)not in bad and uo not in energy_units %}{% set v=(states(gEP)|float(0)*kW.get(uo,1))|round(2) %}{% set items=items+[("gEP",[[v,500]|min,0]|max)] %}{% endif %}{% endif %}
+            {% if gP1 %}{% set uo=(state_attr(gP1,'unit_of_measurement') or '').lower() %}{% if states(gP1)not in bad and uo not in energy_units %}{% set v=(states(gP1)|float(0)*kW.get(uo,1))|round(2) %}{% set items=items+[("gP1",[[v,500]|min,-500]|max)] %}{% endif %}{% endif %}
+            {% if gP2 %}{% set uo=(state_attr(gP2,'unit_of_measurement') or '').lower() %}{% if states(gP2)not in bad and uo not in energy_units %}{% set v=(states(gP2)|float(0)*kW.get(uo,1))|round(2) %}{% set items=items+[("gP2",[[v,500]|min,-500]|max)] %}{% endif %}{% endif %}
+            {% if gP3 %}{% set uo=(state_attr(gP3,'unit_of_measurement') or '').lower() %}{% if states(gP3)not in bad and uo not in energy_units %}{% set v=(states(gP3)|float(0)*kW.get(uo,1))|round(2) %}{% set items=items+[("gP3",[[v,500]|min,-500]|max)] %}{% endif %}{% endif %}
+            {% if gV1 %}{% set uo=(state_attr(gV1,'unit_of_measurement') or '').lower() %}{% if states(gV1)not in bad %}{% set items=items+[("gV1",(states(gV1)|float(0)*V_dict.get(uo,1))|round(1))] %}{% endif %}{% endif %}
+            {% if gV2 %}{% set uo=(state_attr(gV2,'unit_of_measurement') or '').lower() %}{% if states(gV2)not in bad %}{% set items=items+[("gV2",(states(gV2)|float(0)*V_dict.get(uo,1))|round(1))] %}{% endif %}{% endif %}
+            {% if gV3 %}{% set uo=(state_attr(gV3,'unit_of_measurement') or '').lower() %}{% if states(gV3)not in bad %}{% set items=items+[("gV3",(states(gV3)|float(0)*V_dict.get(uo,1))|round(1))] %}{% endif %}{% endif %}
+            {% if gEI %}{% set uo=(state_attr(gEI,'unit_of_measurement') or '').lower() %}{% if states(gEI)not in bad and uo not in ('w','kw','mw') %}{% set v=(states(gEI)|float(0)*kWh.get(uo,1))|round(2) %}{% set items=items+[("gEI",[v,0]|max)] %}{% endif %}{% endif %}
+            {% if gEO %}{% set uo=(state_attr(gEO,'unit_of_measurement') or '').lower() %}{% if states(gEO)not in bad and uo not in ('w','kw','mw') %}{% set v=(states(gEO)|float(0)*kWh.get(uo,1))|round(2) %}{% set items=items+[("gEO",[v,0]|max)] %}{% endif %}{% endif %}
+            {% if sP %}{% set uo=(state_attr(sP,'unit_of_measurement') or '').lower() %}{% if states(sP)not in bad and uo not in energy_units %}{% set v=(states(sP)|float(0)*kW.get(uo,1))|round(2) %}{% set items=items+[("sP",[[v,500]|min,-500]|max)] %}{% endif %}{% endif %}
+            {% if sE %}{% set uo=(state_attr(sE,'unit_of_measurement') or '').lower() %}{% if states(sE)not in bad and uo not in ('w','kw','mw') %}{% set v=(states(sE)|float(0)*kWh.get(uo,1))|round(2) %}{% set items=items+[("sE",[v,0]|max)] %}{% endif %}{% endif %}
+            {% if bP %}{% set uo=(state_attr(bP,'unit_of_measurement') or '').lower() %}{% if states(bP)not in bad and uo not in energy_units %}{% set v=(states(bP)|float(0)*kW.get(uo,1))|round(2) %}{% set items=items+[("bP",[[v,500]|min,-500]|max)] %}{% endif %}{% endif %}
             {% if bS and states(bS) not in bad %}{% set v=states(bS)|int(0) %}{% set items=items+[("bS",[[v,100]|min,0]|max)] %}{% endif %}
-            {% if bEI %}{% set uo=state_attr(bEI,'unit_of_measurement') %}{% if states(bEI)not in bad and uo not in ('W','kW','MW') %}{% set v=(states(bEI)|float(0)*kWh.get(uo,1))|round(2) %}{% set items=items+[("bEI",[v,0]|max)] %}{% endif %}{% endif %}
-            {% if bEO %}{% set uo=state_attr(bEO,'unit_of_measurement') %}{% if states(bEO)not in bad and uo not in ('W','kW','MW') %}{% set v=(states(bEO)|float(0)*kWh.get(uo,1))|round(2) %}{% set items=items+[("bEO",[v,0]|max)] %}{% endif %}{% endif %}
-            {% if wP %}{% set uo=state_attr(wP,'unit_of_measurement') %}{% if states(wP)not in bad and uo not in energy_units %}{% set v=(states(wP)|float(0)*kW.get(uo,1))|round(2) %}{% set items=items+[("wP",[[v,500]|min,-500]|max)] %}{% endif %}{% endif %}
-            {% if wE %}{% set uo=state_attr(wE,'unit_of_measurement') %}{% if states(wE)not in bad and uo not in ('W','kW','MW') %}{% set v=(states(wE)|float(0)*kWh.get(uo,1))|round(2) %}{% set items=items+[("wE",[v,0]|max)] %}{% endif %}{% endif %}
+            {% if bEI %}{% set uo=(state_attr(bEI,'unit_of_measurement') or '').lower() %}{% if states(bEI)not in bad and uo not in ('w','kw','mw') %}{% set v=(states(bEI)|float(0)*kWh.get(uo,1))|round(2) %}{% set items=items+[("bEI",[v,0]|max)] %}{% endif %}{% endif %}
+            {% if bEO %}{% set uo=(state_attr(bEO,'unit_of_measurement') or '').lower() %}{% if states(bEO)not in bad and uo not in ('w','kw','mw') %}{% set v=(states(bEO)|float(0)*kWh.get(uo,1))|round(2) %}{% set items=items+[("bEO",[v,0]|max)] %}{% endif %}{% endif %}
+            {% if wP %}{% set uo=(state_attr(wP,'unit_of_measurement') or '').lower() %}{% if states(wP)not in bad and uo not in energy_units %}{% set v=(states(wP)|float(0)*kW.get(uo,1))|round(2) %}{% set items=items+[("wP",[[v,500]|min,-500]|max)] %}{% endif %}{% endif %}
+            {% if wE %}{% set uo=(state_attr(wE,'unit_of_measurement') or '').lower() %}{% if states(wE)not in bad and uo not in ('w','kw','mw') %}{% set v=(states(wE)|float(0)*kWh.get(uo,1))|round(2) %}{% set items=items+[("wE",[v,0]|max)] %}{% endif %}{% endif %}
             {% if wS and states(wS) not in bad %}{% set v=states(wS)|int(0) %}{% set items=items+[("wS",[[v,100]|min,0]|max)] %}{% endif %}
             {% set inner = dict(items) | to_json %}
             {% set outer_env = {"from": node|int(0), "type": "sendtext", "payload": inner, "channel": channel_input|int(0)} %}

@@ -109,16 +109,16 @@ int transform_parse_script(const char *script, var_mapping_t *mappings, int max)
 
             // Auto-suggest LOTSE key — phase-aware for power/voltage, cycle for others
             const char *assigned = NULL;
-            if (strcmp(mappings[count].unit, "W") == 0 || strcmp(mappings[count].unit, "kW") == 0) {
+            if (strcasecmp(mappings[count].unit, "W") == 0 || strcasecmp(mappings[count].unit, "kW") == 0) {
                 const char *nm = mappings[count].label;
                 if (!nm[0]) nm = mappings[count].var_name;
                 if      (strstr(nm, "L1")) assigned = key_already_used(mappings, count, "gP1") ? NULL : "gP1";
                 else if (strstr(nm, "L2")) assigned = key_already_used(mappings, count, "gP2") ? NULL : "gP2";
                 else if (strstr(nm, "L3")) assigned = key_already_used(mappings, count, "gP3") ? NULL : "gP3";
                 else                       assigned = first_unused_slot(power_slots, mappings, count);
-            } else if (strstr(mappings[count].unit, "Wh")) {
+            } else if (strcasestr(mappings[count].unit, "Wh")) {
                 assigned = first_unused_slot(energy_slots, mappings, count);
-            } else if (strstr(mappings[count].unit, "V") && strlen(mappings[count].unit) <= 2) {
+            } else if (strcasestr(mappings[count].unit, "V") && strlen(mappings[count].unit) <= 2) {
                 const char *nm = mappings[count].label;
                 if (!nm[0]) nm = mappings[count].var_name;
                 if      (strstr(nm, "L1")) assigned = key_already_used(mappings, count, "gV1") ? NULL : "gV1";
@@ -190,12 +190,12 @@ int transform_apply_mapping(const char *tasmota_json, const hub_config_t *cfg,
         double converted = raw;
 
         // Convert to LOTSE standard units
-        if (strcmp(unit, "W") == 0) converted = raw * 0.001;  // W → kW
-        else if (strcmp(unit, "MW") == 0) converted = raw * 1000.0;
-        else if (strcmp(unit, "Wh") == 0) converted = raw * 0.001;
-        else if (strcmp(unit, "MWh") == 0) converted = raw * 1000.0;
-        else if (strcmp(unit, "mV") == 0) converted = raw * 0.001;
-        else if (strcmp(unit, "kV") == 0) converted = raw * 1000.0;
+        if (strcasecmp(unit, "W") == 0) converted = raw * 0.001;  // W → kW
+        else if (strcasecmp(unit, "MW") == 0) converted = raw * 1000.0;
+        else if (strcasecmp(unit, "Wh") == 0) converted = raw * 0.001;
+        else if (strcasecmp(unit, "MWh") == 0) converted = raw * 1000.0;
+        else if (strcasecmp(unit, "mV") == 0) converted = raw * 0.001;
+        else if (strcasecmp(unit, "kV") == 0) converted = raw * 1000.0;
 
         // Clamp
         if (strcmp(key, "bS") == 0) {
