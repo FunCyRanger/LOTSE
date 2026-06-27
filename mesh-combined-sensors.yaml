@@ -67,6 +67,36 @@ template:
           {% set vals = entities | map(attribute='state') | map('int', 0) | list %}
           {{ (vals | sum / vals | length) | round(0) if vals | length > 0 else 0 }}
 
+      - name: "Combined Mesh Battery Power"
+        unique_id: "combined_mesh_bp"
+        unit_of_measurement: "kW"
+        device_class: "power"
+        state_class: "measurement"
+        state: >
+          {% set entities = expand(states.sensor)
+             | selectattr('entity_id', 'search', 'node_\\d+_bp$') | list %}
+          {{ entities | map(attribute='state') | map('float', 0) | sum | round(2) }}
+
+      - name: "Combined Mesh Battery Energy In"
+        unique_id: "combined_mesh_bei"
+        unit_of_measurement: "kWh"
+        device_class: "energy"
+        state_class: "total_increasing"
+        state: >
+          {% set entities = expand(states.sensor)
+             | selectattr('entity_id', 'search', 'node_\\d+_bei$') | list %}
+          {{ entities | map(attribute='state') | map('float', 0) | sum | round(2) }}
+
+      - name: "Combined Mesh Battery Energy Out"
+        unique_id: "combined_mesh_beo"
+        unit_of_measurement: "kWh"
+        device_class: "energy"
+        state_class: "total_increasing"
+        state: >
+          {% set entities = expand(states.sensor)
+             | selectattr('entity_id', 'search', 'node_\\d+_beo$') | list %}
+          {{ entities | map(attribute='state') | map('float', 0) | sum | round(2) }}
+
       # --- Grid Cumulative Energy (for Energy Dashboard) ---
       - name: "Combined Mesh Grid Import"
         unique_id: "combined_mesh_gei"

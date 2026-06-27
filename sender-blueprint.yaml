@@ -306,7 +306,7 @@ action:
       - service: mqtt.publish
         data:
           qos: 0
-          retain: false
+          retain: true
           evaluate_payload: false
           topic: "msh/{{ region }}/2/json/mqtt/{{ node }}"
           payload: "{{ config_payload }}"

@@ -17,6 +17,7 @@ Dirs `firmware/`, `meshtastic-fork-clean/`, `simulation/`, `simulation_v2/` are 
 | **Inner payload** | ≤220 bytes; envelope ≤4096 bytes. Keys: 2-3 char abbreviations (`gP`, `bS`, `gIP`, `gEP`, `gP1`-`gP3`, `gV1`-`gV3`, `gEI`, `gEO`, `sP`, `sE`, `bP`, `bEI`, `bEO`, `wP`, `wE`, `wS`) plus config keys (`bC`, `sK`, `sA`, `sZ`) |
 | **Envelope format** | `{"from": <int>, "type": "sendtext", "payload": "<json_string>", "channel": 1}`. `from` must match node's own decimal number. |
 | **Receiver payload type** | Heltec V3 echoes with `payload` as **string** (not object). `auto-discovery-automation.yaml` handles both: `{% if value_json.payload is mapping %}...{% else %}... \| from_json({}){% endif %}`. `config-hub` has echo fix that reparses string to object before republishing. |
+| **Config envelope retain** | `sender-blueprint.yaml` publishes config envelope with `retain: true` so receivers' config sensors get the value on first subscription. Measurement envelopes use `retain: false`. |
 | **Sender unit mismatch** | kWh sensor assigned to kW slot → key silently omitted. `energy_units` tuple (`Wh`,`kWh`,`MWh`) excludes them from power slots and vice versa. |
 
 ## Testing (no pytest — standalone scripts)
@@ -48,15 +49,19 @@ for f in sorted(pathlib.Path().rglob('*.yaml')):
 
 ## CI (`.github/workflows/test.yml`)
 
-Push/PR to `main`. Spins up `eclipse-mosquitto` Docker, runs config-hub C tests + all Python tests + YAML validation.
+Two jobs:
+- **test** — Push/PR to `main`. Spins up `eclipse-mosquitto` Docker, runs config-hub C tests + all Python tests + YAML validation.
+- **build** — Tag `v*` only. Installs ESP-IDF v5.4, builds `config-hub` for esp32 + esp32s3 (`idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.$target" -B build_$target set-target $target build`), creates GitHub Release with `lotse_config_hub-$target.bin` artifacts.
 
 ## HA blueprints key behavior
 
 | File | Details |
 |------|---------|
-| `sender-blueprint.yaml` | Unit conversion: W→kW (*0.001), MW→kW (*1000), mV→V (*0.001), kV→V (*1000), Wh→kWh (*0.001), MWh→kWh (*1000). Clamping: power ±500, energy ≥0, bS/wS 0-100 int. Skips `unavailable`/`unknown`/`none`/`NaN`/`inf`/`-inf`. Publishes measurement data to `msh/{{region}}/2/json/mqtt/{{node}}` with `evaluate_payload: false`. Also publishes config-only envelope (bC/sK/sA/sZ) on HA startup + daily as a separate message when config fields are filled. |
-| `auto-discovery-automation.yaml` | Trigger: `msh/+/2/json/mqtt/+`. Extracts `from` (decimal) from `payload_json.from`, `sender` (hex) from topic, `region` from topic. For payload string→dict: `{% if payload is mapping %}payload{% else %}payload \| from_json({}){% endif %}`. Device identifiers: `mesh_node_{{ from }}`. Config keys (`bC`, `sK`, `sA`, `sZ`) only update when present (no overwrite with 0). |
+| `sender-blueprint.yaml` | Unit conversion: W→kW (*0.001), MW→kW (*1000), mV→V (*0.001), kV→V (*1000), Wh→kWh (*0.001), MWh→kWh (*1000). Clamping: power ±500, energy ≥0, bS/wS 0-100 int. Skips `unavailable`/`unknown`/`none`/`NaN`/`inf`/`-inf`. Publishes measurement data to `msh/{{region}}/2/json/mqtt/{{node}}` with `evaluate_payload: false`. Also publishes config-only envelope (bC/sK/sA/sZ) on HA startup + daily as a separate message when config fields are filled. Config envelope is **retained** (`retain: true`) so receivers' sensors get the value on first subscription. |
+| `auto-discovery-automation.yaml` | Trigger: `msh/+/2/json/mqtt/+`. Extracts `from` (decimal) from `payload_json.from`, `sender` (hex) from topic, `region` from topic. For payload string→dict: `{% if payload is mapping %}payload{% else %}payload \| from_json({}){% endif %}`. Device identifiers: `mesh_node_{{ from }}`. Config keys (`bC`, `sK`, `sA`, `sZ`) use same state_topic as measurement keys (`msh/.../{{sender}}`) with guarded value_template — only update when key is present in payload. |
 | `mesh-combined-sensors.yaml` | Drop into HA `config/packages/`. 16 sensors: regex `node_\d+_gp$`, `node_\d+_bs$`, etc. Sum power/energy, weighted SOC, total PV/battery capacity. |
+| `solarforecast-blueprint.yaml` | PV forecast template sensor blueprint (hourly, for Energy Dashboard). Uses HA weather entity + peak kWp. |
+| `lotse-dashboard.yaml` | HA dashboard YAML — combined neighborhood view with grid/solar/battery/wallbox cards. |
 
 ## Known stale / non-code content
 
@@ -65,6 +70,7 @@ Push/PR to `main`. Spins up `eclipse-mosquitto` Docker, runs config-hub C tests 
 - `archive/20260517 AI review/` — AI firmware reviews (may contain errors)
 - `.opencode/plans/` — agent session scratch, not docs
 - `.opencode/node_modules/` — auto-generated (`@opencode-ai/plugin`), gitignored
+- `ha-setup.md`, `mesh-setup.md` — human-readable setup guides, not agent instructions
 
 ## Security
 
@@ -83,6 +89,7 @@ Key files:
 - `main/tasmota_client.c` — HTTP client for Tasmota `/cm` API
 - `main/web_server.c` — HTTP server with embedded SPA
 - `main/config_store.c` — NVS JSON persistence
+- `main/ota.{c,h}` — Firmware OTA update via HTTP
 - `main/lotse_config.{c,h}` — Shared types, key names, mappings (24 max, 24 keys: 20 measurement + 4 config)
 - `webui/index.html` — SPA source; `scripts/embed_webui.py` converts it to `main/html.h`
 
@@ -90,12 +97,16 @@ Key files:
 
 ```bash
 cd config-hub/
-idf.py set-target esp32 && idf.py build
+idf.py set-target esp32 && idf.py build              # single target
+idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.esp32s3" \
+       -B build_esp32s3 set-target esp32s3 build       # multi-target
 idf.py -p /dev/ttyUSB0 flash
 # De-assert RTS/DTR to avoid keeping ESP32 in reset:
 python3 -c "import serial; ser=serial.Serial('/dev/ttyUSB0'); ser.setDTR(False); ser.setRTS(False); ser.close()"
 idf.py -p /dev/ttyUSB0 monitor    # TTY required
 ```
+
+Firmware version compiled from `git describe --tags --always --dirty --match "v*"` via `CMakeLists.txt`; available as `LOTSE_VERSION` compile define.
 
 ### Tasmota requirements
 

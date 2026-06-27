@@ -615,6 +615,73 @@ def test_combined_soc_empty():
     assert float(r) == 0.0, f"Expected 0.0, got {r}"
 
 
+COMBINED_BP = """\
+{% set entities = expand(states.sensor)\
+ | selectattr('entity_id', 'search', 'node_\\\\d+_bp$') | list %}\
+{{ entities | map(attribute='state') | map('float', 0) | sum | round(2) }}"""
+
+COMBINED_BEI = """\
+{% set entities = expand(states.sensor)\
+ | selectattr('entity_id', 'search', 'node_\\\\d+_bei$') | list %}\
+{{ entities | map(attribute='state') | map('float', 0) | sum | round(2) }}"""
+
+COMBINED_BEO = """\
+{% set entities = expand(states.sensor)\
+ | selectattr('entity_id', 'search', 'node_\\\\d+_beo$') | list %}\
+{{ entities | map(attribute='state') | map('float', 0) | sum | round(2) }}"""
+
+
+def test_combined_bp_sum():
+    """bp sum: 3 neighbors → 4.5 kW."""
+    ids = ["sensor.node_1_bp", "sensor.node_2_bp", "sensor.node_3_bp"]
+    for eid, v in zip(ids, [1.2, 2.3, 1.0]):
+        MOCK_DATA[eid] = {"state": v, "unit_of_measurement": "kW"}
+    r = render_combined(COMBINED_BP, ids)
+    for eid in ids:
+        del MOCK_DATA[eid]
+    assert abs(float(r) - 4.5) < 0.01, f"Expected 4.5, got {r}"
+
+
+def test_combined_bp_empty():
+    """bp sum: no matching entities → 0."""
+    r = render_combined(COMBINED_BP, [])
+    assert float(r) == 0.0, f"Expected 0.0, got {r}"
+
+
+def test_combined_bei_sum():
+    """bei sum: 3 neighbors → 50.3 kWh."""
+    ids = ["sensor.node_1_bei", "sensor.node_2_bei", "sensor.node_3_bei"]
+    for eid, v in zip(ids, [20.1, 15.0, 15.2]):
+        MOCK_DATA[eid] = {"state": v, "unit_of_measurement": "kWh"}
+    r = render_combined(COMBINED_BEI, ids)
+    for eid in ids:
+        del MOCK_DATA[eid]
+    assert abs(float(r) - 50.3) < 0.01, f"Expected 50.3, got {r}"
+
+
+def test_combined_bei_empty():
+    """bei sum: no matching entities → 0."""
+    r = render_combined(COMBINED_BEI, [])
+    assert float(r) == 0.0, f"Expected 0.0, got {r}"
+
+
+def test_combined_beo_sum():
+    """beo sum: 3 neighbors → 10.5 kWh."""
+    ids = ["sensor.node_1_beo", "sensor.node_2_beo", "sensor.node_3_beo"]
+    for eid, v in zip(ids, [3.0, 4.5, 3.0]):
+        MOCK_DATA[eid] = {"state": v, "unit_of_measurement": "kWh"}
+    r = render_combined(COMBINED_BEO, ids)
+    for eid in ids:
+        del MOCK_DATA[eid]
+    assert abs(float(r) - 10.5) < 0.01, f"Expected 10.5, got {r}"
+
+
+def test_combined_beo_empty():
+    """beo sum: no matching entities → 0."""
+    r = render_combined(COMBINED_BEO, [])
+    assert float(r) == 0.0, f"Expected 0.0, got {r}"
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # TESTS — AUTO‑DISCOVERY CONFIG JSON
 # ═══════════════════════════════════════════════════════════════════════════
