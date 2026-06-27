@@ -310,7 +310,10 @@ rest:
   # Hourly data (includes watt_hours_day + per-period watt_hours).
   # The `result` attribute holds the full API response for the forecast template above.
   - resource_template: >-
-      https://api.forecast.solar/estimate/watthours/{{ state_attr('zone.home', 'latitude') | string | truncate(7, true, '') }}/{{ state_attr('zone.home', 'longitude') | string | truncate(7, true, '') }}/{{ states('sensor.combined_solar_panel_angle') | float(0) | int }}/{% set ha_az = states('sensor.combined_solar_panel_azimuth') | float(0) %}{{ (ha_az - 180) | int }}/{{ states('sensor.combined_mesh_solar_capacity') | float(0) }}
+      {% set cap = states('sensor.combined_mesh_solar_capacity') | float(0) %}
+      {%- if cap > 0 -%}
+      https://api.forecast.solar/estimate/watthours/{{ state_attr('zone.home', 'latitude') | string | truncate(7, true, '') }}/{{ state_attr('zone.home', 'longitude') | string | truncate(7, true, '') }}/{{ states('sensor.combined_solar_panel_angle') | float(0) | int }}/{% set ha_az = states('sensor.combined_solar_panel_azimuth') | float(0) %}{{ (ha_az - 180) | int }}/{{ cap }}
+      {%- endif -%}
     scan_interval: 3600
     sensor:
       - name: "Solar Forecast Today"

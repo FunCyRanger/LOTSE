@@ -367,7 +367,7 @@ action:
              "unique_id": "mesh_{{ from }}_ws",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
 
-  # --- Config keys (static metadata, only update when present) ---
+  # --- Config keys (static metadata, separate topic so sensor isn't tied to mesh topic) ---
 
   - if:
       - condition: template
@@ -380,11 +380,17 @@ action:
           topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-bc/config"
           payload: >
             {"name": "Node {{ from }} bC",
-             "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
-             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{% set p = value_json.payload if value_json.payload is mapping else value_json.payload | from_json({}) %}{% if p.bC is defined %}{{ p.bC }}{% endif %}{% endif %}{% endraw %}",
+             "state_topic": "lotse/node/{{ from }}/bc",
+             "value_template": "{{ value_json }}",
              "unit_of_measurement": "kWh", "state_class": "measurement",
              "unique_id": "mesh_{{ from }}_bc",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
+      - service: mqtt.publish
+        data:
+          qos: 0
+          retain: true
+          topic: "lotse/node/{{ from }}/bc"
+          payload: "{{ pp.bC }}"
 
   - if:
       - condition: template
@@ -397,11 +403,17 @@ action:
           topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-sk/config"
           payload: >
             {"name": "Node {{ from }} sK",
-             "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
-             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{% set p = value_json.payload if value_json.payload is mapping else value_json.payload | from_json({}) %}{% if p.sK is defined %}{{ p.sK }}{% endif %}{% endif %}{% endraw %}",
+             "state_topic": "lotse/node/{{ from }}/sk",
+             "value_template": "{{ value_json }}",
              "unit_of_measurement": "kW", "device_class": "power", "state_class": "measurement",
              "unique_id": "mesh_{{ from }}_sk",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
+      - service: mqtt.publish
+        data:
+          qos: 0
+          retain: true
+          topic: "lotse/node/{{ from }}/sk"
+          payload: "{{ pp.sK }}"
 
   - if:
       - condition: template
@@ -414,11 +426,17 @@ action:
           topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-sa/config"
           payload: >
             {"name": "Node {{ from }} sA",
-             "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
-             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{% set p = value_json.payload if value_json.payload is mapping else value_json.payload | from_json({}) %}{% if p.sA is defined %}{{ p.sA }}{% endif %}{% endif %}{% endraw %}",
+             "state_topic": "lotse/node/{{ from }}/sa",
+             "value_template": "{{ value_json }}",
              "unit_of_measurement": "°", "state_class": "measurement",
              "unique_id": "mesh_{{ from }}_sa",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
+      - service: mqtt.publish
+        data:
+          qos: 0
+          retain: true
+          topic: "lotse/node/{{ from }}/sa"
+          payload: "{{ pp.sA }}"
 
   - if:
       - condition: template
@@ -431,9 +449,72 @@ action:
           topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-sz/config"
           payload: >
             {"name": "Node {{ from }} sZ",
-             "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
-             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{% set p = value_json.payload if value_json.payload is mapping else value_json.payload | from_json({}) %}{% if p.sZ is defined %}{{ p.sZ }}{% endif %}{% endif %}{% endraw %}",
+             "state_topic": "lotse/node/{{ from }}/sz",
+             "value_template": "{{ value_json }}",
              "unit_of_measurement": "°", "state_class": "measurement",
              "unique_id": "mesh_{{ from }}_sz",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
+      - service: mqtt.publish
+        data:
+          qos: 0
+          retain: true
+          topic: "lotse/node/{{ from }}/sz"
+          payload: "{{ pp.sZ }}"
+
+  # --- Republish stored config values on every message (keeps retained message alive) ---
+
+  - variables:
+      bC_val: >
+        {% if pp.bC is defined %}
+          {{ pp.bC }}
+        {% else %}
+          {% set s = states('sensor.node_' ~ from ~ '_bc') %}
+          {% if s not in ('unknown','unavailable','none','') %}{{ s }}{% endif %}
+        {% endif %}
+      sK_val: >
+        {% if pp.sK is defined %}{{ pp.sK }}{% else %}{% set s = states('sensor.node_' ~ from ~ '_sk') %}{% if s not in ('unknown','unavailable','none','') %}{{ s }}{% endif %}{% endif %}
+      sA_val: >
+        {% if pp.sA is defined %}{{ pp.sA }}{% else %}{% set s = states('sensor.node_' ~ from ~ '_sa') %}{% if s not in ('unknown','unavailable','none','') %}{{ s }}{% endif %}{% endif %}
+      sZ_val: >
+        {% if pp.sZ is defined %}{{ pp.sZ }}{% else %}{% set s = states('sensor.node_' ~ from ~ '_sz') %}{% if s not in ('unknown','unavailable','none','') %}{{ s }}{% endif %}{% endif %}
+  - if:
+      - condition: template
+        value_template: "{{ bC_val | string != '' }}"
+    then:
+      - service: mqtt.publish
+        data:
+          qos: 0
+          retain: true
+          topic: "lotse/node/{{ from }}/bc"
+          payload: "{{ bC_val }}"
+  - if:
+      - condition: template
+        value_template: "{{ sK_val | string != '' }}"
+    then:
+      - service: mqtt.publish
+        data:
+          qos: 0
+          retain: true
+          topic: "lotse/node/{{ from }}/sk"
+          payload: "{{ sK_val }}"
+  - if:
+      - condition: template
+        value_template: "{{ sA_val | string != '' }}"
+    then:
+      - service: mqtt.publish
+        data:
+          qos: 0
+          retain: true
+          topic: "lotse/node/{{ from }}/sa"
+          payload: "{{ sA_val }}"
+  - if:
+      - condition: template
+        value_template: "{{ sZ_val | string != '' }}"
+    then:
+      - service: mqtt.publish
+        data:
+          qos: 0
+          retain: true
+          topic: "lotse/node/{{ from }}/sz"
+          payload: "{{ sZ_val }}"
 mode: queued
