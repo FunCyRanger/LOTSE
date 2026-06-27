@@ -310,6 +310,51 @@ action:
           evaluate_payload: false
           topic: "msh/{{ region }}/2/json/mqtt/{{ node }}"
           payload: "{{ config_payload }}"
+      # --- Direct config value publishes (retained, for receiver persistence) ---
+      - if:
+          - condition: template
+            value_template: "{{ cap | string != '' }}"
+        then:
+          - service: mqtt.publish
+            data:
+              qos: 0
+              retain: true
+              evaluate_payload: false
+              topic: "lotse/config/{{ node }}/bc"
+              payload: "{{ cap | float | round(2) }}"
+      - if:
+          - condition: template
+            value_template: "{{ pv | string != '' }}"
+        then:
+          - service: mqtt.publish
+            data:
+              qos: 0
+              retain: true
+              evaluate_payload: false
+              topic: "lotse/config/{{ node }}/sk"
+              payload: "{{ pv | float | round(2) }}"
+      - if:
+          - condition: template
+            value_template: "{{ ang | string != '' }}"
+        then:
+          - service: mqtt.publish
+            data:
+              qos: 0
+              retain: true
+              evaluate_payload: false
+              topic: "lotse/config/{{ node }}/sa"
+              payload: "{{ ang | int }}"
+      - if:
+          - condition: template
+            value_template: "{{ az | string != '' }}"
+        then:
+          - service: mqtt.publish
+            data:
+              qos: 0
+              retain: true
+              evaluate_payload: false
+              topic: "lotse/config/{{ node }}/sz"
+              payload: "{{ az | int }}"
   # --- Measurement section: every interval (existing behavior) ---
   - if:
       - condition: template
