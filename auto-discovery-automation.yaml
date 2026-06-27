@@ -381,7 +381,7 @@ action:
           payload: >
             {"name": "Node {{ from }} bC",
              "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
-             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{% set p = value_json.payload if value_json.payload is mapping else value_json.payload | from_json({}) %}{% if p.bC is defined %}{{ p.bC }}{% endif %}{% endif %}{% endraw %}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{% set p = value_json.payload if value_json.payload is mapping else value_json.payload | from_json({}) %}{{ p.bC | default(states('sensor.node_{% endraw %}{{ from }}{% raw %}_bc')) }}{% endif %}{% endraw %}",
              "unit_of_measurement": "kWh", "state_class": "measurement",
              "unique_id": "mesh_{{ from }}_bc",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
@@ -398,7 +398,7 @@ action:
           payload: >
             {"name": "Node {{ from }} sK",
              "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
-             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{% set p = value_json.payload if value_json.payload is mapping else value_json.payload | from_json({}) %}{% if p.sK is defined %}{{ p.sK }}{% endif %}{% endif %}{% endraw %}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{% set p = value_json.payload if value_json.payload is mapping else value_json.payload | from_json({}) %}{{ p.sK | default(states('sensor.node_{% endraw %}{{ from }}{% raw %}_sk')) }}{% endif %}{% endraw %}",
              "unit_of_measurement": "kW", "device_class": "power", "state_class": "measurement",
              "unique_id": "mesh_{{ from }}_sk",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
@@ -415,7 +415,7 @@ action:
           payload: >
             {"name": "Node {{ from }} sA",
              "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
-             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{% set p = value_json.payload if value_json.payload is mapping else value_json.payload | from_json({}) %}{% if p.sA is defined %}{{ p.sA }}{% endif %}{% endif %}{% endraw %}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{% set p = value_json.payload if value_json.payload is mapping else value_json.payload | from_json({}) %}{{ p.sA | default(states('sensor.node_{% endraw %}{{ from }}{% raw %}_sa')) }}{% endif %}{% endraw %}",
              "unit_of_measurement": "°", "state_class": "measurement",
              "unique_id": "mesh_{{ from }}_sa",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
@@ -432,7 +432,7 @@ action:
           payload: >
             {"name": "Node {{ from }} sZ",
              "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
-             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{% set p = value_json.payload if value_json.payload is mapping else value_json.payload | from_json({}) %}{% if p.sZ is defined %}{{ p.sZ }}{% endif %}{% endif %}{% endraw %}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{% set p = value_json.payload if value_json.payload is mapping else value_json.payload | from_json({}) %}{{ p.sZ | default(states('sensor.node_{% endraw %}{{ from }}{% raw %}_sz')) }}{% endif %}{% endraw %}",
              "unit_of_measurement": "°", "state_class": "measurement",
              "unique_id": "mesh_{{ from }}_sz",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
