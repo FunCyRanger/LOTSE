@@ -1,7 +1,7 @@
 {
   "domain": "lotse_forecast",
   "name": "LOTSE Solar Forecast",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "requirements": [],
   "codeowners": [],
   "config_flow": true,
