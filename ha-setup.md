@@ -54,7 +54,7 @@ No edits needed — the automation extracts the region from the MQTT topic dynam
 
 ### Step 3 — Install Combined Sensors (optional)
 
-This step creates aggregated sensors that sum up all neighbors into a single reading. The three cumulative-energy sensors can be added to the Energy Dashboard once and never need updating — new neighbors are included automatically.
+This step creates aggregated sensors that sum up all neighbors into a single reading. The cumulative-energy sensors can be added to the Energy Dashboard once and never need updating — new neighbors are included automatically.
 
 **What it creates** (21 sensors):
 
@@ -78,14 +78,14 @@ This step creates aggregated sensors that sum up all neighbors into a single rea
 | Solar Forecast Today | Forecast.Solar API | Expected solar production today (kWh) | — |
 | Solar Forecast Tomorrow | Forecast.Solar API | Expected solar production tomorrow (kWh) | — |
 | Solar Forecast Utilization | `se`, forecast | % of today's forecast produced so far | — |
-| Solar Production with Forecast | `se` + hourly forecast | Actual production + `forecast` attribute for Energy Dashboard | ✅ |
+| Solar Production with Forecast | `se` + forecast API | Actual production + `forecast` attribute for Energy Dashboard | ✅ |
 | Combined Mesh Grid Import | `gEI` | Cumulative import energy | ✅ |
 | Combined Mesh Grid Export | `gEO` | Cumulative export energy | ✅ |
 | Combined Mesh Solar Energy | `sE` | Cumulative solar energy | ✅ |
 
-**Forecast.Solar** is queried every hour via the free public API (no API key needed, 12 req/h limit). The combined panel angle and azimuth are weighted by each node's `sK` (kWp). The zone's lat/lon from `zone.home` is used automatically.
+**Forecast.Solar** is queried every 10 minutes via the free public API (no API key needed, well within the rate limit). The combined panel angle and azimuth are weighted by each node's `sK` (kWp). The zone's lat/lon from `zone.home` is used automatically.
 
-To add the solar forecast to the **Energy Dashboard**, configure `Solar Production with Forecast` (`sensor.solar_production_forecast`) as the **Solar Production** sensor in **Settings → Energy**. Its `forecast` attribute is populated hourly from the Forecast.Solar API with the current combined panel specs — no manual updates needed when nodes change.
+To add the solar forecast to the **Energy Dashboard**, configure `Solar Production with Forecast` (`sensor.solar_production_forecast`) as the **Solar Production** sensor in **Settings → Energy**. Its `forecast` attribute is populated every 10 minutes from the Forecast.Solar API with the current combined panel specs — no manual updates needed when nodes change.
 
 **Installation:**
 
@@ -114,7 +114,7 @@ HA does not support grouping YAML-defined template sensors under a device, so th
 2. In HA: **Settings → Dashboards → Import** → pick the file → **Import**.
 3. A new tab **"LOTSE Neighborhood"** appears in your sidebar with all sensors grouped by category (Grid Power, Solar, Grid Cumulative Energy, Neighborhood).
 
-> **Tip:** The three cumulative-energy sensors are the ones to add to the Energy Dashboard (see section below). The config-derived sensors (Weighted SOC, Solar Capacity, etc.) populate as nodes install the config blueprint and send their registration data.
+> **Tip:** The cumulative-energy sensors are the ones to add to the Energy Dashboard (see section below). The config-derived sensors (Weighted SOC, Solar Capacity, etc.) populate as nodes install the config blueprint and send their registration data.
 
 > **Prerequisite:** At least one neighbor must have sent data so the individual `node_XXXX_*` sensors exist.
 
@@ -265,7 +265,7 @@ If you installed the combined sensors (Quick Start Step 3), add these to the Ene
 |---|---|
 | Grid consumption | `Combined Mesh Grid Import` |
 | Return to grid | `Combined Mesh Grid Export` |
-| Solar production | `Combined Mesh Solar Energy` |
+| Solar production | `Solar Production with Forecast` |
 
 ### Linking sensors — option B: per-neighbor (without combined sensors)
 
@@ -287,26 +287,11 @@ Import = positive, export = negative:
 - `sE` is always ≥0
 - No sign adjustment needed
 
-### Optional: per-household metadata
+### Per-node metadata (auto-discovered)
 
-Normalize solar output or track battery capacity across neighbors. Create one `input_number` helper per neighbor per field via **Settings → Helpers**:
+Config data (battery capacity `bC`, solar peak `sK`, panel angle `sA`, azimuth `sZ`) arrives automatically via the mesh registration messages sent on startup + daily. Auto-discovery creates individual sensors (`sensor.node_{NUMBER}_bc`, `sensor.node_{NUMBER}_sk`, etc.) and the combined sensors provide aggregate views like `Combined Solar Utilization`, `Combined Mesh Solar Capacity`, and `Weighted Average SOC` — no manual helpers or template sensors needed.
 
-| Helper | Purpose | Value |
-|--------|---------|-------|
-| `input_number.node_{NUMBER}_solar_kwp` | PV system peak power | e.g. 5.0 kWp |
-| `input_number.node_{NUMBER}_battery_kwh` | Battery capacity | e.g. 10 kWh |
-
-Then create a template sensor to show solar utilization as % of peak power:
-
-```jinja
-{% set sP = states('sensor.node_{NUMBER}_sp') | float(0) %}
-{% set kwp = states('input_number.node_{NUMBER}_solar_kwp') | float(1) %}
-{{ (sP / kwp * 100) | round(1) }}
-```
-
-This normalizes across households: a 3 kWp system at 2 kW and a 6 kWp system at 4 kW both read 67%.
-
-**Solar forecast** is now integrated — see the **Solar Forecast** section in the sensor table above. The combined sensors call the [Forecast.Solar free API](https://doc.forecast.solar/api:estimate) hourly with the weighted-average panel specs. No API key needed; rate limit is 12 req/h (hourly poll uses 1).
+**Solar forecast** is now integrated — see the **Solar Forecast** section in the sensor table above. The combined sensors call the [Forecast.Solar free API](https://doc.forecast.solar/api:estimate) every 10 minutes with the weighted-average panel specs. No API key needed.
 
 ---
 
@@ -326,7 +311,7 @@ This normalizes across households: a 3 kWp system at 2 kW and a 6 kWp system at 
 |---------|-------------|------|
 | Blueprint import fails with "invalid config" | Node number or sensor fields have wrong types | Ensure Node Number is a plain decimal (no quotes). Check sensor entities exist and are numeric. |
 | Sensors don't appear after first message | Auto-discovery not running | Verify `auto-discovery-automation.yaml` is saved and enabled in HA → Automations. Check MQTT topic `msh/{region}/2/json/mqtt/!{your_hex}` for incoming messages (Mosquitto add-on → Listen). |
-| Neighbor sensor not listed in Energy Dashboard | Dashboard only shows `total_increasing` sensors | Auto-discovery sets this automatically. If the sensor exists but is missing from the dropdown, check its state class in **Settings → Devices & Services → Devices**. |
+| Neighbor sensor not listed in Energy Dashboard | Dashboard requires `total` or `total_increasing` state class | Auto-discovery sets this automatically. If the sensor exists but is missing from the dropdown, check its state class in **Settings → Devices & Services → Devices**. |
 | Energy dashboard shows gaps | Send interval too long | In the sender blueprint, adjust "Send interval" (default 5 min) to 2 min. Note this increases LoRa channel usage. |
  | Neighbor values are stale | Node went offline or LoRa range issue | Check neighbor's node is still powered. Increase send interval. Verify both nodes are within LoRa range (~1-2 km urban, more rural). |
 

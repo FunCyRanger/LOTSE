@@ -187,7 +187,7 @@ action:
             {"name": "Node {{ from }} gEI",
              "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
              "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{% set p = value_json.payload if value_json.payload is mapping else value_json.payload | from_json({}) %}{{ p.gEI | float(0) }}{% endif %}{% endraw %}",
-             "unit_of_measurement": "kWh", "device_class": "energy", "state_class": "total_increasing",
+             "unit_of_measurement": "kWh", "device_class": "energy", "state_class": "total",
              "unique_id": "mesh_{{ from }}_gei",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
 
@@ -204,7 +204,7 @@ action:
             {"name": "Node {{ from }} gEO",
              "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
              "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{% set p = value_json.payload if value_json.payload is mapping else value_json.payload | from_json({}) %}{{ p.gEO | float(0) }}{% endif %}{% endraw %}",
-             "unit_of_measurement": "kWh", "device_class": "energy", "state_class": "total_increasing",
+             "unit_of_measurement": "kWh", "device_class": "energy", "state_class": "total",
              "unique_id": "mesh_{{ from }}_geo",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
 
@@ -240,7 +240,7 @@ action:
             {"name": "Node {{ from }} sE",
              "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
              "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{% set p = value_json.payload if value_json.payload is mapping else value_json.payload | from_json({}) %}{{ p.sE | float(0) }}{% endif %}{% endraw %}",
-             "unit_of_measurement": "kWh", "device_class": "energy", "state_class": "total_increasing",
+             "unit_of_measurement": "kWh", "device_class": "energy", "state_class": "total",
              "unique_id": "mesh_{{ from }}_se",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
 
@@ -293,7 +293,7 @@ action:
             {"name": "Node {{ from }} bEI",
              "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
              "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{% set p = value_json.payload if value_json.payload is mapping else value_json.payload | from_json({}) %}{{ p.bEI | float(0) }}{% endif %}{% endraw %}",
-             "unit_of_measurement": "kWh", "device_class": "energy", "state_class": "total_increasing",
+             "unit_of_measurement": "kWh", "device_class": "energy", "state_class": "total",
              "unique_id": "mesh_{{ from }}_bei",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
 
@@ -310,7 +310,7 @@ action:
             {"name": "Node {{ from }} bEO",
              "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
              "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{% set p = value_json.payload if value_json.payload is mapping else value_json.payload | from_json({}) %}{{ p.bEO | float(0) }}{% endif %}{% endraw %}",
-             "unit_of_measurement": "kWh", "device_class": "energy", "state_class": "total_increasing",
+             "unit_of_measurement": "kWh", "device_class": "energy", "state_class": "total",
              "unique_id": "mesh_{{ from }}_beo",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
 
@@ -346,7 +346,7 @@ action:
             {"name": "Node {{ from }} wE",
              "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
              "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{% set p = value_json.payload if value_json.payload is mapping else value_json.payload | from_json({}) %}{{ p.wE | float(0) }}{% endif %}{% endraw %}",
-             "unit_of_measurement": "kWh", "device_class": "energy", "state_class": "total_increasing",
+             "unit_of_measurement": "kWh", "device_class": "energy", "state_class": "total",
              "unique_id": "mesh_{{ from }}_we",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
 

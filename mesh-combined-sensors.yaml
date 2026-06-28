@@ -81,7 +81,7 @@ template:
         unique_id: "combined_mesh_bei"
         unit_of_measurement: "kWh"
         device_class: "energy"
-        state_class: "total_increasing"
+        state_class: "total"
         state: >
           {% set entities = expand(states.sensor)
              | selectattr('entity_id', 'search', 'node_\\d+_bei$') | list %}
@@ -91,7 +91,7 @@ template:
         unique_id: "combined_mesh_beo"
         unit_of_measurement: "kWh"
         device_class: "energy"
-        state_class: "total_increasing"
+        state_class: "total"
         state: >
           {% set entities = expand(states.sensor)
              | selectattr('entity_id', 'search', 'node_\\d+_beo$') | list %}
@@ -102,7 +102,7 @@ template:
         unique_id: "combined_mesh_gei"
         unit_of_measurement: "kWh"
         device_class: "energy"
-        state_class: "total_increasing"
+        state_class: "total"
         state: >
           {% set entities = expand(states.sensor)
              | selectattr('entity_id', 'search', 'node_\\d+_gei$') | list %}
@@ -112,7 +112,7 @@ template:
         unique_id: "combined_mesh_geo"
         unit_of_measurement: "kWh"
         device_class: "energy"
-        state_class: "total_increasing"
+        state_class: "total"
         state: >
           {% set entities = expand(states.sensor)
              | selectattr('entity_id', 'search', 'node_\\d+_geo$') | list %}
@@ -122,7 +122,7 @@ template:
         unique_id: "combined_mesh_se"
         unit_of_measurement: "kWh"
         device_class: "energy"
-        state_class: "total_increasing"
+        state_class: "total"
         state: >
           {% set entities = expand(states.sensor)
              | selectattr('entity_id', 'search', 'node_\\d+_se$') | list %}
@@ -279,39 +279,26 @@ template:
           {% set forecast = states('sensor.solar_forecast_today') | float(0) %}
           {{ (actual / forecast * 100) | round(1) if forecast > 0 else 0 }}
 
-      # Energy Dashboard solar production sensor with forecast attribute.
-      # State tracks actual cumulative production; forecast attribute is built
-      # from the hourly REST data below.
+  # Energy Dashboard solar production sensor.
+  # Forecast data is provided by the lotse_forecast custom integration (energy.py).
+  - trigger:
+      - platform: state
+        entity_id: sensor.combined_mesh_se
+    sensor:
       - name: "Solar Production with Forecast"
         unique_id: "solar_production_forecast"
         device_class: "energy"
-        state_class: "total_increasing"
+        state_class: "total"
         unit_of_measurement: "kWh"
         state: >
           {{ states('sensor.combined_mesh_se') | float(0) | round(2) }}
-        attributes:
-          forecast: >
-            {% set raw = states('sensor.solar_forecast_hourly_raw') %}
-            {% set wh = raw | from_json if raw not in ('unknown', 'unavailable', 'none', '') else none %}
-            {% if wh %}
-              {% set tz = now().strftime('%z') %}
-              {% set tz_s = tz[:3] + ':' + tz[3:] if tz else '+00:00' %}
-              [
-              {% for ts, val in wh.items() %}
-                {"time": "{{ ts | replace(' ', 'T') }}{{ tz_s }}", "wh_hours": {{ val | int }}}
-                {% if not loop.last %},{% endif %}
-              {% endfor %}
-              ]
-            {% else %}
-              []
-            {% endif %}
 
 rest:
   # Hourly data (includes watt_hours_day + per-period watt_hours).
   # The `result` attribute holds the full API response for the forecast template above.
   - resource_template: >-
       https://api.forecast.solar/estimate/watthours/{{ state_attr('zone.home', 'latitude') | string | truncate(7, true, '') }}/{{ state_attr('zone.home', 'longitude') | string | truncate(7, true, '') }}/{{ states('sensor.combined_solar_panel_angle') | float(0) | int }}/{% set ha_az = states('sensor.combined_solar_panel_azimuth') | float(0) %}{{ (ha_az - 180) | int }}/{{ states('sensor.combined_mesh_solar_capacity') | float(0) }}
-    scan_interval: 3600
+    scan_interval: 600
     sensor:
       - name: "Solar Forecast Today"
         unique_id: "solar_forecast_today"
@@ -319,9 +306,13 @@ rest:
         device_class: "energy"
         state_class: "total"
         value_template: >
-          {% if value_json is defined and value_json.result is defined and value_json.result.watt_hours_day is defined %}
-            {% set wh = value_json.result.watt_hours_day.values() | first | default(0) %}
-            {{ (wh / 1000) | round(1) }}
+          {% if value_json is defined and value_json.result is defined %}
+            {% set today = now().strftime('%Y-%m-%d') %}
+            {% set ns = namespace(max=0) %}
+            {% for ts, val in value_json.result.items() if ts.startswith(today) %}
+              {% if val | int > ns.max %}{% set ns.max = val | int %}{% endif %}
+            {% endfor %}
+            {{ (ns.max / 1000) | round(1) }}
           {% else %}
             0
           {% endif %}
@@ -331,17 +322,23 @@ rest:
         device_class: "energy"
         state_class: "total"
         value_template: >
-          {% if value_json is defined and value_json.result is defined and value_json.result.watt_hours_day is defined %}
-            {% set vals = value_json.result.watt_hours_day.values() | list %}
-            {{ (vals[1] / 1000) | round(1) if vals | length > 1 else 0 }}
+          {% if value_json is defined and value_json.result is defined %}
+            {% set tomorrow = (now() + timedelta(days=1)).strftime('%Y-%m-%d') %}
+            {% set ns = namespace(max=0) %}
+            {% for ts, val in value_json.result.items() if ts.startswith(tomorrow) %}
+              {% if val | int > ns.max %}{% set ns.max = val | int %}{% endif %}
+            {% endfor %}
+            {{ (ns.max / 1000) | round(1) }}
           {% else %}
             0
           {% endif %}
       - name: "Solar Forecast Hourly Raw"
         unique_id: "solar_forecast_hourly_raw"
+        json_attributes:
+          - "result"
         value_template: >
-          {% if value_json is defined and value_json.result is defined and value_json.result.watt_hours is defined %}
-            {{ value_json.result.watt_hours | to_json }}
+          {% if value_json is defined and value_json.result is defined %}
+            {{ value_json.result.keys() | first | default('none') }}
           {% else %}
-            {}
+            none
           {% endif %}
