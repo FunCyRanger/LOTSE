@@ -3,9 +3,9 @@
 # Aggregates all neighbor data into single sensors for monitoring and the
 # Energy Dashboard. New neighbors are auto-included via regex patterns.
 #
-# Installation: see ha-setup.md Step 3, or add to HA configuration.yaml:
-#   template: !include mesh-combined-sensors.yaml
-# (the packages/ folder method also works if you have packages configured).
+# Installation: see ha-setup.md Step 3. Uses packages format — drop this file
+# into your HA packages/ folder (requires packages: !include_dir_named packages
+# in configuration.yaml).
 #
 # After install, search "Combined Mesh" in Settings → Devices & Services → Entities.
 # For a single-page view, import lotse-dashboard.yaml (see ha-setup.md Step 3).

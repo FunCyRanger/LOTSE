@@ -89,31 +89,20 @@ To add the solar forecast to the **Energy Dashboard**, install the `lotse_foreca
 
 **Installation:**
 
-*Option A — Add to `configuration.yaml` (recommended):*
+Drop [`mesh-combined-sensors.yaml`](mesh-combined-sensors.yaml) into your HA `packages/` folder and restart.
+
+Requires `packages: !include_dir_named packages` in your `configuration.yaml`. If you don't have this yet:
 
 1. Open your HA `configuration.yaml` (via Studio Code Server, Samba, or the File Editor add-on).
-2. Add this at the end of the file:
-
-   **If you don't have a `template:` block yet:**
+2. Add this line at the end:
    ```yaml
-   # At the end of configuration.yaml:
-   template: !include mesh-combined-sensors.yaml
+   packages: !include_dir_named packages
    ```
+3. Create a `packages/` folder next to `configuration.yaml` if it doesn't exist.
+4. Copy [`mesh-combined-sensors.yaml`](mesh-combined-sensors.yaml) into the `packages/` folder.
+5. Restart Home Assistant.
 
-   **If you already have a `template:` block** (e.g., from other template sensors), add the `!include` inside it:
-   ```yaml
-   template:
-     - sensor: ...
-     - sensor: ...
-     !include mesh-combined-sensors.yaml
-   ```
-3. Copy [`mesh-combined-sensors.yaml`](mesh-combined-sensors.yaml) into the **same folder** as `configuration.yaml` (e.g., `/config/`).
-4. Restart Home Assistant.
-5. The sensors appear in **Settings → Devices & Services → Entities** (search "Combined Mesh").
-
-*Option B — Packages folder:*
-
-If you already use `packages: !include_dir_named packages` in your `configuration.yaml`, drop the file into the `packages/` folder and restart.
+The sensors appear in **Settings → Devices & Services → Entities** (search "Combined Mesh").
 
 #### Step 3b — Install LOTSE Solar Forecast Integration (for Energy Dashboard)
 
