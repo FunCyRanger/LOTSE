@@ -78,14 +78,14 @@ This step creates aggregated sensors that sum up all neighbors into a single rea
 | Solar Forecast Today | Forecast.Solar API | Expected solar production today (kWh) | — |
 | Solar Forecast Tomorrow | Forecast.Solar API | Expected solar production tomorrow (kWh) | — |
 | Solar Forecast Utilization | `se`, forecast | % of today's forecast produced so far | — |
-| Solar Production with Forecast | `se` + forecast API | Actual production + `forecast` attribute for Energy Dashboard | ✅ |
+| Solar Production with Forecast | `se` + forecast API | Actual production + Energy Dashboard forecast via `lotse_forecast` integration | ✅ |
 | Combined Mesh Grid Import | `gEI` | Cumulative import energy | ✅ |
 | Combined Mesh Grid Export | `gEO` | Cumulative export energy | ✅ |
 | Combined Mesh Solar Energy | `sE` | Cumulative solar energy | ✅ |
 
 **Forecast.Solar** is queried every 10 minutes via the free public API (no API key needed, well within the rate limit). The combined panel angle and azimuth are weighted by each node's `sK` (kWp). The zone's lat/lon from `zone.home` is used automatically.
 
-To add the solar forecast to the **Energy Dashboard**, configure `Solar Production with Forecast` (`sensor.solar_production_forecast`) as the **Solar Production** sensor in **Settings → Energy**. Its `forecast` attribute is populated every 10 minutes from the Forecast.Solar API with the current combined panel specs — no manual updates needed when nodes change.
+To add the solar forecast to the **Energy Dashboard**, install the `lotse_forecast` custom integration (see Step 3b), then configure `Solar Production with Forecast` (`sensor.solar_production_forecast`) as the **Solar Production** sensor in **Settings → Energy** and select **LOTSE Solar Forecast** in the **Solar forecast** dropdown. Forecast data is computed from the REST sensor every 10 minutes using the current combined panel specs — no manual updates needed when nodes change.
 
 **Installation:**
 
@@ -103,6 +103,21 @@ To add the solar forecast to the **Energy Dashboard**, configure `Solar Producti
 *Option B — Packages folder:*
 
 If you already use `packages: !include_dir_named packages` in your `configuration.yaml`, drop the file into the `packages/` folder and restart.
+
+#### Step 3b — Install LOTSE Solar Forecast Integration (for Energy Dashboard)
+
+The `lotse_forecast` custom integration bridges the REST sensor's forecast data into the Home Assistant Energy Dashboard using the integration platform protocol (the only way Energy Dashboard reads forecast data).
+
+**Installation via HACS:**
+
+1. In HA: **HACS → Custom Repositories** → add `https://github.com/FunCyRanger/LOTSE` with category **Integration**
+2. **HACS → Integrations** → search "LOTSE Solar Forecast" → **Install**
+3. **Restart** Home Assistant
+4. **Settings → Devices & Services → Add Integration** → search "LOTSE Solar Forecast" → complete (one click, no configuration needed)
+5. **Settings → Energy** → edit your solar source → **Solar forecast** dropdown (now visible) → select **LOTSE Solar Forecast**
+6. **Refresh** the Energy Dashboard page
+
+The forecast line now shows expected solar production for the rest of today and tomorrow, using the combined panel specs from your mesh nodes and the free Forecast.Solar API.
 
 ---
 
