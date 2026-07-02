@@ -10,3 +10,22 @@
 
 template: !include mesh-combined-template.yaml
 rest: !include mesh-combined-rest.yaml
+
+sensor:
+  - platform: statistics
+    name: "Solar Power Std Dev"
+    unique_id: "solar_power_std_dev"
+    entity_id: sensor.combined_mesh_sp
+    state_characteristic: standard_deviation
+    max_age:
+      minutes: 15
+    sampling_size: 100
+
+  - platform: statistics
+    name: "Solar Power Mean"
+    unique_id: "solar_power_mean"
+    entity_id: sensor.combined_mesh_sp
+    state_characteristic: average_linear
+    max_age:
+      minutes: 15
+    sampling_size: 100

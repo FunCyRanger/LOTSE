@@ -16,7 +16,9 @@
           {% endfor %}
           {% set raw_kwh = ns.max / 1000 %}
           {% set correction = states('sensor.forecast_correction_factor') | float(1.5) %}
-          {{ (raw_kwh * correction) | round(1) }}
+          {% set roughness = states('sensor.solar_roughness_index') | float(0) %}
+          {% set penalty = [1 - roughness / 300, 0.4] | max %}
+          {{ (raw_kwh * correction * penalty) | round(1) }}
         {% else %}
           0
         {% endif %}
@@ -34,7 +36,9 @@
           {% endfor %}
           {% set raw_kwh = ns.max / 1000 %}
           {% set correction = states('sensor.forecast_correction_factor') | float(1.5) %}
-          {{ (raw_kwh * correction) | round(1) }}
+          {% set roughness = states('sensor.solar_roughness_index') | float(0) %}
+          {% set penalty = [1 - roughness / 300, 0.4] | max %}
+          {{ (raw_kwh * correction * penalty) | round(1) }}
         {% else %}
           0
         {% endif %}
