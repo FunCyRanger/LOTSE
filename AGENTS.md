@@ -1,8 +1,9 @@
 # AGENTS.md
 
-Two codebases:
+Three codebases:
 - **Root**: HA Jinja templates, YAML blueprints, Python tests
 - **`config-hub/`**: ESP-IDF project (C) — Tasmota SML → MQTT → transform → Meshtastic envelope
+- **`custom_components/lotse_forecast/`**: HA integration (`integration_type: service`) providing `async_get_solar_forecast` for Energy Dashboard
 
 ## Critical gotchas
 
@@ -25,7 +26,7 @@ Two codebases:
 ```bash
 pip install -r tests/requirements.txt    # pyyaml, jinja2, paho-mqtt
 
-python3 tests/test_mesh.py               # 39 template + roundtrip tests
+python3 tests/test_mesh.py               # 45 template + roundtrip tests
 python3 tests/test_schema.py             # 11 schema tests
 python3 tests/test_e2e_mqtt.py           # requires Docker, auto-skipped
 python3 tests/check_installation.py --ha-url <url> --token <token>
@@ -52,13 +53,18 @@ Two jobs:
 - **test** — Push/PR to `main`. Docker Mosquitto → C tests → Python tests → YAML validation.
 - **build** — Tag `v*` only. ESP-IDF v5.4, builds `esp32` + `esp32s3`, creates GitHub Release with `lotse_config_hub-*.bin`.
 
-## HA blueprint highlights
+## HA YAML files
 
 | File | Key details |
 |------|-------------|
 | `sender-blueprint.yaml` | Unit conversion: W→kW (*0.001), MW→kW (*1000), mV→V (*0.001), kV→V (*1000), Wh→kWh (*0.001), MWh→kWh (*1000). Clamping: power ±500, energy ≥0, bS/wS 0-100 int. Skips `unavailable`/`unknown`/`none`/`NaN`/`inf`/`-inf`. Config envelope on boot + daily via `lotse/config/{node}/<key>` direct topic (`retain: true`). Measurement topic: `msh/{region}/2/json/mqtt/{node}`. `mode: single`. |
 | `auto-discovery-automation.yaml` | Trigger: `msh/+/2/json/mqtt/+`. Extracts `from` (decimal from JSON), `sender` (hex from topic), `region`. Universal payload handler for dict/string. Config keys use `lotse/config/{from}/<key>` state_topic. `mode: queued`. |
-| `mesh-combined-sensors.yaml` | Drop into HA `config/packages/`. 16+ sensors via regex `node_\d+_gp$` etc. Includes weighted SOC, forecast.solar integration, derived sensors. |
+| `mesh-combined-template.yaml` | HA package template sensors (sums, averages); 16+ derived sensors via regex `node_\d+_gp$` etc. into `sensor.combined_mesh_*`. |
+| `mesh-combined-sensors.yaml` | Additional sensor definitions (weighted SOC, derived). Split into `mesh-combined-*.yaml` package. |
+| `mesh-combined-rest.yaml` | Rest sensor for `api.forecast.solar` (aggregate PV forecast per neighborhood). |
+| `lotse-dashboard.yaml` | HA dashboard YAML for the "LOTSE Neighborhood" view. |
+| `solarforecast-blueprint.yaml` | Template blueprint for per-household PV hourly forecast (uses weather entity, not forecast.solar). |
+| `mesh-combined-template.yaml` | Also defines EMA-smoothed forecast inputs (`*_forecast` sensors, α=0.1) to prevent jumps when nodes join/leave. Monotonic clean energy sensor `combined_mesh_se_clean`. Self-correcting `forecast_correction_factor` that computes actual/forecast ratio daily at midnight with 0.7 EMA decay. |
 
 ## config-hub ESP-IDF project
 
@@ -73,6 +79,7 @@ Key files:
 - `main/web_server.c` — HTTP server with embedded SPA (`webui/index.html` → `scripts/embed_webui.py` → `main/html.h`).
 - `main/config_store.c` — NVS JSON persistence.
 - `main/ota.{c,h}` — HTTP firmware OTA.
+- `main/wifi_manager.{c,h}` — WiFi station/AP management.
 
 Build targets (CI): `esp32`, `esp32s3`. `sdkconfig.esp32c3` also exists.
 
@@ -103,7 +110,11 @@ Firmware version: `git describe --tags --always --dirty --match "v*"` → `LOTSE
 - `archive/20260517 AI review/` — AI firmware reviews (may contain errors)
 - `.opencode/plans/` — agent session scratch, not docs
 - `.opencode/node_modules/` — auto-generated, gitignored
-- `ha-setup.md`, `mesh-setup.md` — human-readable setup guides
+
+## Human-readable setup guides
+
+- `ha-setup.md` — Full HA integration guide (importing blueprints, auto-discovery, sensors, Energy Dashboard)
+- `mesh-setup.md` — Heltec V3 flashing, Meshtastic MQTT/channel config
 
 ## Security
 

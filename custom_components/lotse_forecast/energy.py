@@ -38,7 +38,7 @@ async def async_get_solar_forecast(
         except (ValueError, TypeError):
             continue
         period_wh = wh - prev
-        if period_wh != 0:
+        if 0 < period_wh < 50000:
             result[dt.isoformat()] = period_wh
         prev = wh
 

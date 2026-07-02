@@ -279,3 +279,76 @@
       unit_of_measurement: "kWh"
       state: >
         {{ states('sensor.combined_mesh_se') | float(0) | round(2) }}
+
+    # --- Improved forecast inputs (EMA-smoothed to prevent jumps) ---
+
+    - name: "Combined Mesh Solar Energy Clean"
+      unique_id: "combined_mesh_se_clean"
+      unit_of_measurement: "kWh"
+      device_class: "energy"
+      state_class: "total"
+      state: >
+        {% set raw = states('sensor.combined_mesh_se') | float(0) %}
+        {% set prev = states('sensor.combined_mesh_se_clean') | float(0) %}
+        {{ raw if raw >= prev else prev }}
+
+    - name: "Combined Solar Capacity Forecast"
+      unique_id: "combined_solar_capacity_forecast"
+      unit_of_measurement: "kW"
+      device_class: "power"
+      state_class: "measurement"
+      state: >
+        {% set raw = states('sensor.combined_mesh_solar_capacity') | float(0) %}
+        {% set prev = states('sensor.combined_solar_capacity_forecast') | float(-1) %}
+        {% if prev < 0 %}{% set prev = raw %}{% endif %}
+        {{ (prev * 0.9 + raw * 0.1) | round(2) }}
+
+    - name: "Combined Solar Panel Angle Forecast"
+      unique_id: "combined_solar_panel_angle_forecast"
+      unit_of_measurement: "°"
+      state_class: "measurement"
+      state: >
+        {% set raw = states('sensor.combined_solar_panel_angle') | float(0) %}
+        {% set prev = states('sensor.combined_solar_panel_angle_forecast') | float(-1) %}
+        {% if prev < 0 %}{% set prev = raw %}{% endif %}
+        {{ (prev * 0.9 + raw * 0.1) | round(1) }}
+
+    - name: "Combined Solar Panel Azimuth Forecast"
+      unique_id: "combined_solar_panel_azimuth_forecast"
+      unit_of_measurement: "°"
+      state_class: "measurement"
+      state: >
+        {% set raw = states('sensor.combined_solar_panel_azimuth') | float(0) %}
+        {% set prev = states('sensor.combined_solar_panel_azimuth_forecast') | float(-1) %}
+        {% if prev < 0 %}{% set prev = raw %}{% endif %}
+        {{ (prev * 0.9 + raw * 0.1) | round(1) }}
+
+    # --- Historical error correction factor ---
+    # Computes EMA of (actual_energy / forecast) daily at 23:30.
+    # The correction factor sensor re-evaluates whenever combined_mesh_se_clean
+    # or solar_forecast_today changes.
+
+    - name: "Forecast Correction Factor"
+      unique_id: "forecast_correction_factor"
+      state: >
+        {% set prev = states('sensor.forecast_correction_factor') | float(1.5) %}
+        {% set prev_actual = state_attr('sensor.forecast_correction_factor', 'stored_actual') | float(0) %}
+        {% set prev_date = state_attr('sensor.forecast_correction_factor', 'update_date') | default('') %}
+        {% set prev_forecast = state_attr('sensor.forecast_correction_factor', 'stored_forecast') | float(1) %}
+        {% set today_actual = states('sensor.combined_mesh_se_clean') | float(0) %}
+        {% set today_forecast = states('sensor.solar_forecast_today') | float(1) %}
+        {% set today_str = now().strftime('%Y-%m-%d') %}
+        {% if today_str != prev_date and prev_actual > 0 and prev_forecast > 0 %}
+          {% set daily_ratio = (today_actual - prev_actual) / prev_forecast %}
+          {% if daily_ratio > 0 and daily_ratio < 3 %}
+            {{ (prev * 0.7 + daily_ratio * 0.3) | round(3) }}
+          {% else %}
+            {{ prev }}
+          {% endif %}
+        {% else %}
+          {{ prev }}
+        {% endif %}
+      attributes:
+        stored_actual: "{{ states('sensor.combined_mesh_se_clean') | float(0) }}"
+        stored_forecast: "{{ today_forecast }}"
+        update_date: "{{ now().strftime('%Y-%m-%d') }}"

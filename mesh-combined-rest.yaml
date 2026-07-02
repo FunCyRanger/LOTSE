@@ -1,5 +1,5 @@
 - resource_template: >-
-    https://api.forecast.solar/estimate/watthours/{{ state_attr('zone.home', 'latitude') | string | truncate(7, true, '') }}/{{ state_attr('zone.home', 'longitude') | string | truncate(7, true, '') }}/{{ states('sensor.combined_solar_panel_angle') | float(0) | int }}/{% set ha_az = states('sensor.combined_solar_panel_azimuth') | float(0) %}{{ (ha_az - 180) | int }}/{{ states('sensor.combined_mesh_solar_capacity') | float(0) }}
+    https://api.forecast.solar/estimate/watthours/{{ state_attr('zone.home', 'latitude') | string | truncate(7, true, '') }}/{{ state_attr('zone.home', 'longitude') | string | truncate(7, true, '') }}/{{ states('sensor.combined_solar_panel_angle_forecast') | float(0) | int }}/{% set ha_az = states('sensor.combined_solar_panel_azimuth_forecast') | float(0) %}{{ (ha_az - 180) | int }}/{{ states('sensor.combined_solar_capacity_forecast') | float(0) }}
   scan_interval: 600
   sensor:
     - name: "Solar Forecast Today"
@@ -14,7 +14,9 @@
           {% for ts, val in value_json.result.items() if ts.startswith(today) %}
             {% if val | int > ns.max %}{% set ns.max = val | int %}{% endif %}
           {% endfor %}
-          {{ (ns.max / 1000) | round(1) }}
+          {% set raw_kwh = ns.max / 1000 %}
+          {% set correction = states('sensor.forecast_correction_factor') | float(1.5) %}
+          {{ (raw_kwh * correction) | round(1) }}
         {% else %}
           0
         {% endif %}
@@ -30,7 +32,9 @@
           {% for ts, val in value_json.result.items() if ts.startswith(tomorrow) %}
             {% if val | int > ns.max %}{% set ns.max = val | int %}{% endif %}
           {% endfor %}
-          {{ (ns.max / 1000) | round(1) }}
+          {% set raw_kwh = ns.max / 1000 %}
+          {% set correction = states('sensor.forecast_correction_factor') | float(1.5) %}
+          {{ (raw_kwh * correction) | round(1) }}
         {% else %}
           0
         {% endif %}
