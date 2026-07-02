@@ -382,7 +382,7 @@
         {% set entities = expand(states.sensor)
            | selectattr('entity_id', 'search', 'node_\\d+_gv1$') | list %}
         {% set voltages = entities | map(attribute='state') | map('float', 0) | list %}
-        {{ (voltages | max) | round(1) }}
+        {{ (voltages | max) | round(1) if voltages | length > 0 else 0 }}
 
     - name: "Combined Mesh Export Ratio"
       unique_id: "combined_mesh_export_ratio"

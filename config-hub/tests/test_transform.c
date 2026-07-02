@@ -319,6 +319,71 @@ void test_apply_power_clamp_lower(void)
     TEST_ASSERT_FLOAT_WITHIN(0.001, -500.0, payload.values[0].value);
 }
 
+void test_apply_ga_clamp_low(void)
+{
+    clear_cfg();
+    cfg.mapping_count = 1;
+    strcpy(cfg.mappings[0].var_name, "Current_L1");
+    strcpy(cfg.mappings[0].unit, "A");
+    strcpy(cfg.mappings[0].lotse_key, "gA1");
+
+    int n = transform_apply_mapping(TASMOTA_JSON_GA_NEGATIVE, &cfg, &payload);
+    TEST_ASSERT_EQUAL_INT(1, n);
+    TEST_ASSERT_FLOAT_WITHIN(0.001, 0.0, payload.values[0].value);
+}
+
+void test_apply_gf_clamp_low(void)
+{
+    clear_cfg();
+    cfg.mapping_count = 1;
+    strcpy(cfg.mappings[0].var_name, "Frequency");
+    strcpy(cfg.mappings[0].unit, "Hz");
+    strcpy(cfg.mappings[0].lotse_key, "gF");
+
+    int n = transform_apply_mapping(TASMOTA_JSON_GF_LOW, &cfg, &payload);
+    TEST_ASSERT_EQUAL_INT(1, n);
+    TEST_ASSERT_FLOAT_WITHIN(0.001, 45.0, payload.values[0].value);
+}
+
+void test_apply_gf_clamp_high(void)
+{
+    clear_cfg();
+    cfg.mapping_count = 1;
+    strcpy(cfg.mappings[0].var_name, "Frequency");
+    strcpy(cfg.mappings[0].unit, "Hz");
+    strcpy(cfg.mappings[0].lotse_key, "gF");
+
+    int n = transform_apply_mapping(TASMOTA_JSON_GF_HIGH, &cfg, &payload);
+    TEST_ASSERT_EQUAL_INT(1, n);
+    TEST_ASSERT_FLOAT_WITHIN(0.001, 65.0, payload.values[0].value);
+}
+
+void test_apply_gpf_clamp_low(void)
+{
+    clear_cfg();
+    cfg.mapping_count = 1;
+    strcpy(cfg.mappings[0].var_name, "CosPhi");
+    strcpy(cfg.mappings[0].unit, "");
+    strcpy(cfg.mappings[0].lotse_key, "gPF");
+
+    int n = transform_apply_mapping(TASMOTA_JSON_GPF_LOW, &cfg, &payload);
+    TEST_ASSERT_EQUAL_INT(1, n);
+    TEST_ASSERT_FLOAT_WITHIN(0.001, 0.0, payload.values[0].value);
+}
+
+void test_apply_gpf_clamp_high(void)
+{
+    clear_cfg();
+    cfg.mapping_count = 1;
+    strcpy(cfg.mappings[0].var_name, "CosPhi");
+    strcpy(cfg.mappings[0].unit, "");
+    strcpy(cfg.mappings[0].lotse_key, "gPF");
+
+    int n = transform_apply_mapping(TASMOTA_JSON_GPF_HIGH, &cfg, &payload);
+    TEST_ASSERT_EQUAL_INT(1, n);
+    TEST_ASSERT_FLOAT_WITHIN(0.001, 1.0, payload.values[0].value);
+}
+
 void test_apply_no_nested_object(void)
 {
     clear_cfg();
@@ -739,6 +804,11 @@ int main(void)
     RUN_TEST(test_apply_energy_nonnegative);
     RUN_TEST(test_apply_power_clamp_upper);
     RUN_TEST(test_apply_power_clamp_lower);
+    RUN_TEST(test_apply_ga_clamp_low);
+    RUN_TEST(test_apply_gf_clamp_low);
+    RUN_TEST(test_apply_gf_clamp_high);
+    RUN_TEST(test_apply_gpf_clamp_low);
+    RUN_TEST(test_apply_gpf_clamp_high);
     RUN_TEST(test_apply_no_nested_object);
     RUN_TEST(test_apply_invalid_json);
 

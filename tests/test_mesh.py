@@ -682,6 +682,70 @@ def test_combined_beo_empty():
     assert float(r) == 0.0, f"Expected 0.0, got {r}"
 
 
+COMBINED_GV1_MAX = """\
+{% set entities = expand(states.sensor)\
+ | selectattr('entity_id', 'search', 'node_\\\\d+_gv1$') | list %}\
+{% set voltages = entities | map(attribute='state') | map('float', 0) | list %}\
+{{ (voltages | max) | round(1) if voltages | length > 0 else 0 }}"""
+
+
+def test_combined_gv1_max():
+    """gv1 max: 3 voltages → 245.0 V."""
+    ids = ["sensor.node_1_gv1", "sensor.node_2_gv1", "sensor.node_3_gv1"]
+    for eid, v in zip(ids, [230.0, 245.0, 238.5]):
+        MOCK_DATA[eid] = {"state": v, "unit_of_measurement": "V"}
+    r = render_combined(COMBINED_GV1_MAX, ids)
+    for eid in ids:
+        del MOCK_DATA[eid]
+    assert abs(float(r) - 245.0) < 0.1, f"Expected 245.0, got {r}"
+
+
+def test_combined_gv1_max_empty():
+    """gv1 max: no matching entities → 0."""
+    r = render_combined(COMBINED_GV1_MAX, [])
+    assert float(r) == 0.0, f"Expected 0.0, got {r}"
+
+
+def test_combined_export_ratio():
+    """export ratio: gep/sp → 0.14 (0.5/3.5)."""
+    MOCK_DATA["sensor.combined_mesh_sp"] = {"state": 3.5, "unit_of_measurement": "kW"}
+    MOCK_DATA["sensor.combined_mesh_gep"] = {"state": 0.5, "unit_of_measurement": "kW"}
+    env = ha_environment()
+    tpl = env.from_string("""\
+{% set sp = states('sensor.combined_mesh_sp') | float(0) %}\
+{% set gep = states('sensor.combined_mesh_gep') | float(0) %}\
+{% if sp > 0.1 %}\
+{% set raw = (gep / sp) | round(2) %}\
+{{ [raw, 0] | max }}\
+{% else %}\
+0\
+{% endif %}""")
+    r = tpl.render()
+    del MOCK_DATA["sensor.combined_mesh_sp"]
+    del MOCK_DATA["sensor.combined_mesh_gep"]
+    assert abs(float(r) - 0.14) < 0.01, f"Expected 0.14, got {r}"
+
+
+def test_combined_export_ratio_zero():
+    """export ratio: sp=0 → 0."""
+    MOCK_DATA["sensor.combined_mesh_sp"] = {"state": 0, "unit_of_measurement": "kW"}
+    MOCK_DATA["sensor.combined_mesh_gep"] = {"state": 0.5, "unit_of_measurement": "kW"}
+    env = ha_environment()
+    tpl = env.from_string("""\
+{% set sp = states('sensor.combined_mesh_sp') | float(0) %}\
+{% set gep = states('sensor.combined_mesh_gep') | float(0) %}\
+{% if sp > 0.1 %}\
+{% set raw = (gep / sp) | round(2) %}\
+{{ [raw, 0] | max }}\
+{% else %}\
+0\
+{% endif %}""")
+    r = tpl.render()
+    del MOCK_DATA["sensor.combined_mesh_sp"]
+    del MOCK_DATA["sensor.combined_mesh_gep"]
+    assert float(r) == 0.0, f"Expected 0.0, got {r}"
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # TESTS — AUTO‑DISCOVERY CONFIG JSON
 # ═══════════════════════════════════════════════════════════════════════════

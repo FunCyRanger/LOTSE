@@ -103,6 +103,21 @@ static const char *SMI_3_VOLTAGE =
     "1,1@1,Voltage L2,V,VL2,1\n"
     "1,1@1,Voltage L3,V,VL3,1\n";
 
+static const char *TASMOTA_JSON_GA_NEGATIVE =
+    "{\"SML1\":{\"Current_L1\":-5.0}}";
+
+static const char *TASMOTA_JSON_GF_LOW =
+    "{\"SML1\":{\"Frequency\":44.0}}";
+
+static const char *TASMOTA_JSON_GF_HIGH =
+    "{\"SML1\":{\"Frequency\":66.0}}";
+
+static const char *TASMOTA_JSON_GPF_LOW =
+    "{\"SML1\":{\"CosPhi\":-0.5}}";
+
+static const char *TASMOTA_JSON_GPF_HIGH =
+    "{\"SML1\":{\"CosPhi\":1.5}}";
+
 static const char *TASMOTA_JSON_DEDUP =
     "{\"SML1\":{"
     "\"Power\":1200,"

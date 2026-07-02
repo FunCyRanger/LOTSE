@@ -26,12 +26,12 @@ Three codebases:
 ```bash
 pip install -r tests/requirements.txt    # pyyaml, jinja2, paho-mqtt
 
-python3 tests/test_mesh.py               # 45 template + roundtrip tests
+python3 tests/test_mesh.py               # 49 template + roundtrip tests
 python3 tests/test_schema.py             # 11 schema tests
 python3 tests/test_e2e_mqtt.py           # requires Docker, auto-skipped
 python3 tests/check_installation.py --ha-url <url> --token <token>
 
-make -C config-hub/tests run             # 52 transform/parse/GPIO/envelope C tests
+make -C config-hub/tests run             # 57 transform/parse/GPIO/envelope C tests
 ```
 
 Test infra: `ha_environment()` — standard Jinja `Environment`, custom `to_json`/`from_json`/`float`/`int` filters, mock `states`/`state_attr`/`expand` globals. Both `test_mesh.py` and `test_schema.py` share the same mocks. C tests use vendored Unity (no cmock, just core assertions) and vendored cJSON.
@@ -59,12 +59,11 @@ Two jobs:
 |------|-------------|
 | `sender-blueprint.yaml` | Unit conversion: W→kW (*0.001), MW→kW (*1000), mV→V (*0.001), kV→V (*1000), Wh→kWh (*0.001), MWh→kWh (*1000). Clamping: power ±500, energy ≥0, bS/wS 0-100 int. Skips `unavailable`/`unknown`/`none`/`NaN`/`inf`/`-inf`. Config envelope on boot + daily via `lotse/config/{node}/<key>` direct topic (`retain: true`). Measurement topic: `msh/{region}/2/json/mqtt/{node}`. `mode: single`. |
 | `auto-discovery-automation.yaml` | Trigger: `msh/+/2/json/mqtt/+`. Extracts `from` (decimal from JSON), `sender` (hex from topic), `region`. Universal payload handler for dict/string. Config keys use `lotse/config/{from}/<key>` state_topic. `mode: queued`. |
-| `mesh-combined-template.yaml` | HA package template sensors (sums, averages); 16+ derived sensors via regex `node_\d+_gp$` etc. into `sensor.combined_mesh_*`. |
+| `mesh-combined-template.yaml` | HA package template sensors (sums, averages); 18+ derived sensors via regex `node_\d+_gp$` etc. into `sensor.combined_mesh_*`. Includes `combined_mesh_gv1_max` (max neighbor voltage), `combined_mesh_export_ratio` (gep/sp, clamped ≥0), `solar_roughness_index` (CV% of solar power, cross-validated r=-0.957), and `forecast_correction_factor` (actual/forecast ratio with 0.7 EMA decay). Also defines EMA-smoothed forecast inputs (`*_forecast` sensors, α=0.1) to prevent jumps when nodes join/leave. Monotonic clean energy sensor `combined_mesh_se_clean`. |
 | `mesh-combined-sensors.yaml` | Additional sensor definitions (weighted SOC, derived). Split into `mesh-combined-*.yaml` package. |
 | `mesh-combined-rest.yaml` | Rest sensor for `api.forecast.solar` (aggregate PV forecast per neighborhood). |
 | `lotse-dashboard.yaml` | HA dashboard YAML for the "LOTSE Neighborhood" view. |
 | `solarforecast-blueprint.yaml` | Template blueprint for per-household PV hourly forecast (uses weather entity, not forecast.solar). |
-| `mesh-combined-template.yaml` | Also defines EMA-smoothed forecast inputs (`*_forecast` sensors, α=0.1) to prevent jumps when nodes join/leave. Monotonic clean energy sensor `combined_mesh_se_clean`. Self-correcting `forecast_correction_factor` that computes actual/forecast ratio daily at midnight with 0.7 EMA decay. |
 
 ## config-hub ESP-IDF project
 
@@ -73,7 +72,7 @@ Custom MQTT 3.1.1 broker (select-based, QoS 0, max 8 clients) on raw LWIP socket
 Key files:
 - `main/main.c` — Init → NVS → WiFi → MQTT broker → HTTP server. Echo fix (parses own-node `payload` string → object). GPIO0=factory reset. `send_interval` minimum 60s. SNTP sync on boot.
 - `main/transform.c` — SMI script parser, Tasmota JSON→LOTSE transform, envelope/config-envelope builder.
-- `main/lotse_config.{c,h}` — 24-key enum (`LOTSE_KEY_GP`..`LOTSE_KEY_SZ`), 20 measurement + 4 config keys.
+- `main/lotse_config.{c,h}` — 29-key enum (`LOTSE_KEY_GP`..`LOTSE_KEY_SZ`), 20 measurement + 5 grid quality (`gA1`/`gA2`/`gA3` current, `gF` frequency, `gPF` power factor) + 4 config keys.
 - `main/mqtt_broker.c` — Minimal MQTT 3.1.1 broker.
 - `main/tasmota_client.c` — HTTP client for Tasmota `/cm`.
 - `main/web_server.c` — HTTP server with embedded SPA (`webui/index.html` → `scripts/embed_webui.py` → `main/html.h`).
@@ -101,7 +100,7 @@ Firmware version: `git describe --tags --always --dirty --match "v*"` → `LOTSE
 
 - `SetOption19=ON` (blocks telemetry, only responds to `/cm`)
 - GPIO parsing: `>D` section `GPIO<n>=<func>`, fallback `+<TX>,<RX>` format. Defaults: RX=3, TX=1.
-- Unit auto-mapping: W→gP, kWh→gEI, V→gV1, %→bS.
+- Unit auto-mapping: W→gP, kWh→gEI, V→gV1, A→gA1/gA2/gA3 (phase-aware L1/L2/L3), Hz→gF, %→bS, empty-unit+label containing "Power factor"→gPF.
 
 ## Known stale / non-code content
 
