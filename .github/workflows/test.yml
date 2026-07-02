@@ -36,6 +36,9 @@ jobs:
           yaml.FullLoader.add_constructor(
               '!input', lambda loader, node: node.value
           )
+          yaml.FullLoader.add_constructor(
+              '!include', lambda loader, node: node.value
+          )
           errors = 0
           for f in sorted(pathlib.Path().rglob('*.yaml')):
               try:
