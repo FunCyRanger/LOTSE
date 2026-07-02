@@ -51,17 +51,26 @@ void test_parse_suggests_bs_for_percent(void)
     TEST_ASSERT_EQUAL_STRING("bS", mappings[3].lotse_key);
 }
 
-void test_parse_amperage_has_empty_lotse_key(void)
+void test_parse_amperage_maps_to_ga(void)
 {
     int n = transform_parse_script(SMI_18_LINE, mappings, MAX_MAPPINGS);
     int found_a = 0;
     for (int i = 0; i < n; i++) {
-        if (strcmp(mappings[i].unit, "A") == 0) {
-            found_a = 1;
-            TEST_ASSERT_EQUAL_STRING("", mappings[i].lotse_key);
+        if (strcmp(mappings[i].unit, "A") == 0 &&
+            strncmp(mappings[i].lotse_key, "gA", 2) == 0) {
+            found_a++;
         }
     }
-    TEST_ASSERT(found_a);
+    TEST_ASSERT_EQUAL_INT(3, found_a);
+    // Verify specific slot assignments
+    for (int i = 0; i < n; i++) {
+        if (strcmp(mappings[i].var_name, "Strom_L1") == 0)
+            TEST_ASSERT_EQUAL_STRING("gA1", mappings[i].lotse_key);
+        else if (strcmp(mappings[i].var_name, "Strom_L2") == 0)
+            TEST_ASSERT_EQUAL_STRING("gA2", mappings[i].lotse_key);
+        else if (strcmp(mappings[i].var_name, "Strom_L3") == 0)
+            TEST_ASSERT_EQUAL_STRING("gA3", mappings[i].lotse_key);
+    }
 }
 
 void test_parse_long_script(void)
@@ -88,7 +97,7 @@ void test_parse_no_unit(void)
     TEST_ASSERT_EQUAL_INT(1, n);
     TEST_ASSERT_EQUAL_STRING("CosPhi", mappings[0].var_name);
     TEST_ASSERT_EQUAL_STRING("", mappings[0].unit);
-    TEST_ASSERT_EQUAL_STRING("", mappings[0].lotse_key);
+    TEST_ASSERT_EQUAL_STRING("gPF", mappings[0].lotse_key);
 }
 
 void test_parse_unknown_unit_leaves_empty_key(void)
@@ -99,7 +108,7 @@ void test_parse_unknown_unit_leaves_empty_key(void)
         if (strcmp(mappings[i].var_name, "Frequency") == 0) {
             found_hz = 1;
             TEST_ASSERT_EQUAL_STRING("Hz", mappings[i].unit);
-            TEST_ASSERT_EQUAL_STRING("", mappings[i].lotse_key);
+            TEST_ASSERT_EQUAL_STRING("gF", mappings[i].lotse_key);
             break;
         }
     }
@@ -709,7 +718,7 @@ int main(void)
     RUN_TEST(test_parse_real_hichi);
     RUN_TEST(test_parse_auto_mapping);
     RUN_TEST(test_parse_suggests_bs_for_percent);
-    RUN_TEST(test_parse_amperage_has_empty_lotse_key);
+    RUN_TEST(test_parse_amperage_maps_to_ga);
     RUN_TEST(test_parse_long_script);
     RUN_TEST(test_parse_empty_script);
     RUN_TEST(test_parse_malformed);

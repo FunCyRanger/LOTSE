@@ -370,3 +370,38 @@
         {% else %}
           0
         {% endif %}
+
+    # --- Transformer stress indicators ---
+
+    - name: "Combined Mesh Max Voltage"
+      unique_id: "combined_mesh_gv1_max"
+      unit_of_measurement: "V"
+      device_class: "voltage"
+      state_class: "measurement"
+      state: >
+        {% set entities = expand(states.sensor)
+           | selectattr('entity_id', 'search', 'node_\\d+_gv1$') | list %}
+        {% set voltages = entities | map(attribute='state') | map('float', 0) | list %}
+        {{ (voltages | max) | round(1) }}
+
+    - name: "Combined Mesh Export Ratio"
+      unique_id: "combined_mesh_export_ratio"
+      state_class: "measurement"
+      state: >
+        {% set sp = states('sensor.combined_mesh_sp') | float(0) %}
+        {% set gep = states('sensor.combined_mesh_gep') | float(0) %}
+        {% if sp > 0.1 %}
+          {% set raw = (gep / sp) | round(2) %}
+          {{ [raw, 0] | max }}
+        {% else %}
+          0
+        {% endif %}
+
+    - name: "Combined Mesh Export Ratio Forecast"
+      unique_id: "combined_mesh_export_ratio_forecast"
+      state_class: "measurement"
+      state: >
+        {% set raw = states('sensor.combined_mesh_export_ratio') | float(0) %}
+        {% set prev = states('sensor.combined_mesh_export_ratio_forecast') | float(-1) %}
+        {% if prev < 0 %}{% set prev = raw %}{% endif %}
+        {{ (prev * 0.9 + raw * 0.1) | round(2) }}

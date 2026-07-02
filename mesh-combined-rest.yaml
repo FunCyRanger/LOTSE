@@ -17,8 +17,15 @@
           {% set raw_kwh = ns.max / 1000 %}
           {% set correction = states('sensor.forecast_correction_factor') | float(1.5) %}
           {% set roughness = states('sensor.solar_roughness_index') | float(0) %}
-          {% set penalty = [1 - roughness / 300, 0.4] | max %}
-          {{ (raw_kwh * correction * penalty) | round(1) }}
+          {% set cloud_penalty = [1 - roughness / 300, 0.4] | max %}
+          {% set gv1_max = states('sensor.combined_mesh_gv1_max') | float(0) %}
+          {% set export_ratio = states('sensor.combined_mesh_export_ratio_forecast') | float(0) %}
+          {% if gv1_max > 248 and export_ratio > 0.5 %}
+            {% set voltage_penalty = [1 - (gv1_max - 248) / (253 - 248) * 0.2, 0.80] | max %}
+          {% else %}
+            {% set voltage_penalty = 1.0 %}
+          {% endif %}
+          {{ (raw_kwh * correction * cloud_penalty * voltage_penalty) | round(1) }}
         {% else %}
           0
         {% endif %}
@@ -37,8 +44,15 @@
           {% set raw_kwh = ns.max / 1000 %}
           {% set correction = states('sensor.forecast_correction_factor') | float(1.5) %}
           {% set roughness = states('sensor.solar_roughness_index') | float(0) %}
-          {% set penalty = [1 - roughness / 300, 0.4] | max %}
-          {{ (raw_kwh * correction * penalty) | round(1) }}
+          {% set cloud_penalty = [1 - roughness / 300, 0.4] | max %}
+          {% set gv1_max = states('sensor.combined_mesh_gv1_max') | float(0) %}
+          {% set export_ratio = states('sensor.combined_mesh_export_ratio_forecast') | float(0) %}
+          {% if gv1_max > 248 and export_ratio > 0.5 %}
+            {% set voltage_penalty = [1 - (gv1_max - 248) / (253 - 248) * 0.2, 0.80] | max %}
+          {% else %}
+            {% set voltage_penalty = 1.0 %}
+          {% endif %}
+          {{ (raw_kwh * correction * cloud_penalty * voltage_penalty) | round(1) }}
         {% else %}
           0
         {% endif %}

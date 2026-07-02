@@ -28,6 +28,7 @@ int transform_parse_script(const char *script, var_mapping_t *mappings, int max)
     static const char *power_slots[] = {"gP", "gP1", "gP2", "gP3", NULL};
     static const char *energy_slots[] = {"gEI", "gEO", NULL};
     static const char *voltage_slots[] = {"gV1", "gV2", "gV3", NULL};
+    static const char *current_slots[] = {"gA1", "gA2", "gA3", NULL};
 
     int count = 0;
     const char *p = script;
@@ -128,7 +129,16 @@ int transform_parse_script(const char *script, var_mapping_t *mappings, int max)
             } else if (strcmp(mappings[count].unit, "%") == 0) {
                 assigned = key_already_used(mappings, count, "bS") ? NULL : "bS";
             } else if (strcmp(mappings[count].unit, "A") == 0) {
-                assigned = ""; // no LOTSE key for current
+                const char *nm = mappings[count].label;
+                if (!nm[0]) nm = mappings[count].var_name;
+                if      (strstr(nm, "L1")) assigned = key_already_used(mappings, count, "gA1") ? NULL : "gA1";
+                else if (strstr(nm, "L2")) assigned = key_already_used(mappings, count, "gA2") ? NULL : "gA2";
+                else if (strstr(nm, "L3")) assigned = key_already_used(mappings, count, "gA3") ? NULL : "gA3";
+                else                       assigned = first_unused_slot(current_slots, mappings, count);
+            } else if (strcmp(mappings[count].unit, "Hz") == 0) {
+                assigned = key_already_used(mappings, count, "gF") ? NULL : "gF";
+            } else if (mappings[count].unit[0] == 0 && strcasestr(mappings[count].label, "Power factor")) {
+                assigned = key_already_used(mappings, count, "gPF") ? NULL : "gPF";
             }
 
             if (assigned) {
@@ -211,6 +221,14 @@ int transform_apply_mapping(const char *tasmota_json, const hub_config_t *cfg,
                    strcmp(key, "gP1") == 0 || strcmp(key, "gP2") == 0 || strcmp(key, "gP3") == 0) {
             if (converted > 500) converted = 500;
             if (converted < -500) converted = -500;
+        } else if (strcmp(key, "gA1") == 0 || strcmp(key, "gA2") == 0 || strcmp(key, "gA3") == 0) {
+            if (converted < 0) converted = 0;
+        } else if (strcmp(key, "gF") == 0) {
+            if (converted < 45) converted = 45;
+            if (converted > 65) converted = 65;
+        } else if (strcmp(key, "gPF") == 0) {
+            if (converted < 0) converted = 0;
+            if (converted > 1) converted = 1;
         }
 
         // Skip duplicate lotse_key — keep first occurrence

@@ -140,6 +140,97 @@ action:
              "unique_id": "mesh_{{ from }}_gv3",
              "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
 
+  # CURRENT (per-phase)
+
+  - if:
+      - condition: template
+        value_template: "{{ pp.gA1 is defined }}"
+    then:
+      - service: mqtt.publish
+        data:
+          qos: 0
+          retain: true
+          topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-ga1/config"
+          payload: >
+            {"name": "Node {{ from }} gA1",
+             "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{% set p = value_json.payload if value_json.payload is mapping else value_json.payload | from_json({}) %}{{ p.gA1 | float(0) }}{% endif %}{% endraw %}",
+             "unit_of_measurement": "A", "device_class": "current", "state_class": "measurement",
+             "unique_id": "mesh_{{ from }}_ga1",
+             "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
+
+  - if:
+      - condition: template
+        value_template: "{{ pp.gA2 is defined }}"
+    then:
+      - service: mqtt.publish
+        data:
+          qos: 0
+          retain: true
+          topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-ga2/config"
+          payload: >
+            {"name": "Node {{ from }} gA2",
+             "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{% set p = value_json.payload if value_json.payload is mapping else value_json.payload | from_json({}) %}{{ p.gA2 | float(0) }}{% endif %}{% endraw %}",
+             "unit_of_measurement": "A", "device_class": "current", "state_class": "measurement",
+             "unique_id": "mesh_{{ from }}_ga2",
+             "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
+
+  - if:
+      - condition: template
+        value_template: "{{ pp.gA3 is defined }}"
+    then:
+      - service: mqtt.publish
+        data:
+          qos: 0
+          retain: true
+          topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-ga3/config"
+          payload: >
+            {"name": "Node {{ from }} gA3",
+             "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{% set p = value_json.payload if value_json.payload is mapping else value_json.payload | from_json({}) %}{{ p.gA3 | float(0) }}{% endif %}{% endraw %}",
+             "unit_of_measurement": "A", "device_class": "current", "state_class": "measurement",
+             "unique_id": "mesh_{{ from }}_ga3",
+             "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
+
+  # FREQUENCY
+
+  - if:
+      - condition: template
+        value_template: "{{ pp.gF is defined }}"
+    then:
+      - service: mqtt.publish
+        data:
+          qos: 0
+          retain: true
+          topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-gf/config"
+          payload: >
+            {"name": "Node {{ from }} gF",
+             "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{% set p = value_json.payload if value_json.payload is mapping else value_json.payload | from_json({}) %}{{ p.gF | float(0) }}{% endif %}{% endraw %}",
+             "unit_of_measurement": "Hz", "device_class": "frequency", "state_class": "measurement",
+             "unique_id": "mesh_{{ from }}_gf",
+             "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
+
+  # POWER FACTOR
+
+  - if:
+      - condition: template
+        value_template: "{{ pp.gPF is defined }}"
+    then:
+      - service: mqtt.publish
+        data:
+          qos: 0
+          retain: true
+          topic: "homeassistant/sensor/mesh_neighbor/{{ from }}-gpf/config"
+          payload: >
+            {"name": "Node {{ from }} gPF",
+             "state_topic": "msh/{{ region }}/2/json/mqtt/{{ sender }}",
+             "value_template": "{% raw %}{% if value_json.from == {% endraw %}{{ from }}{% raw %} %}{% set p = value_json.payload if value_json.payload is mapping else value_json.payload | from_json({}) %}{{ p.gPF | float(0) }}{% endif %}{% endraw %}",
+             "state_class": "measurement",
+             "unique_id": "mesh_{{ from }}_gpf",
+             "device": {"identifiers": ["mesh_node_{{ from }}"], "name": "Node {{ from }}", "model": "Heltec V3", "manufacturer": "Meshtastic"}}
+
   - if:
       - condition: template
         value_template: "{{ pp.gIP is defined }}"
