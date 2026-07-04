@@ -6,6 +6,47 @@ import re
 import sys
 import traceback
 from pathlib import Path
+from unittest.mock import MagicMock
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+# ─── Mock HA modules before importing custom_components ─────────────────
+ha = MagicMock()
+ha.util = MagicMock()
+ha.util.dt = MagicMock()
+ha.components = MagicMock()
+ha.components.mqtt = MagicMock()
+ha.components.sensor = MagicMock()
+ha.config_entries = MagicMock()
+ha.const = MagicMock()
+ha.const.EVENT_HOMEASSISTANT_STARTED = "homeassistant_started"
+ha.core = MagicMock()
+ha.helpers = MagicMock()
+ha.helpers.entity_registry = MagicMock()
+
+for mod_name, obj in [
+    ("homeassistant", ha),
+    ("homeassistant.util", ha.util),
+    ("homeassistant.util.dt", ha.util.dt),
+    ("homeassistant.components", ha.components),
+    ("homeassistant.components.mqtt", ha.components.mqtt),
+    ("homeassistant.components.sensor", ha.components.sensor),
+    ("homeassistant.config_entries", ha.config_entries),
+    ("homeassistant.const", ha.const),
+    ("homeassistant.core", ha.core),
+    ("homeassistant.helpers", ha.helpers),
+    ("homeassistant.helpers.entity_registry", ha.helpers.entity_registry),
+    ("homeassistant.helpers.entity_platform", MagicMock()),
+]:
+    sys.modules[mod_name] = obj
+
+# Mock dashboard submodule before __init__.py tries to import it
+sys.modules["custom_components.lotse_forecast.dashboard"] = MagicMock()
+sys.modules["custom_components.lotse_forecast.dashboard"].async_create_lovelace_dashboard = MagicMock()
+
+# Now safe to import real modules
+from custom_components.lotse_forecast import MeshData
+from custom_components.lotse_forecast.const import COMBINED_KEY_META, NODE_KEY_META
 
 import yaml
 from jinja2 import (
@@ -59,8 +100,6 @@ class MockState:
 
 
 class MockStates:
-    """Mocks HA's callable+namespace `states` object."""
-
     def __init__(self, data):
         self._data = data
 
@@ -114,11 +153,6 @@ def ha_int(value, default=0):
 
 
 def ha_from_json(value, default=None):
-    """Parse a JSON string; return Undefined on failure.
-
-    Supports the HA pattern ``| from_json(default)`` where ``default``
-    is returned (or Undefined if omitted) when parsing fails.
-    """
     if isinstance(value, Undefined):
         return default if default is not None else Undefined()
     try:
@@ -130,7 +164,6 @@ def ha_from_json(value, default=None):
 # ─── Create HA-like Jinja environment ─────────────────────────────────────
 
 def ha_environment():
-    """Return a Jinja2 environment mimicking HA's template engine."""
     env = Environment(
         undefined=ChainableUndefined,
         extensions=[],
@@ -160,7 +193,6 @@ def load_sender_template():
     path = ROOT / "sender-blueprint.yaml"
     with open(path) as f:
         blueprint = yaml.load(f, Loader=yaml.FullLoader)
-    # Envelope template is inside action[2] (measurement if block)
     raw = blueprint["action"][2]["then"][0]["variables"]["envelope"]
     return raw
 
@@ -168,12 +200,6 @@ def load_sender_template():
 # ─── Render helpers ────────────────────────────────────────────────────────
 
 def render_sender(template_str, variables):
-    """Render the sender's envelope template with mocked HA globals.
-
-    The template produces a full Meshtastic envelope JSON via
-    ``{{ outer_env | to_json }}``.  Single ``json.loads`` unwraps the envelope;
-    a second one extracts the inner LOTSE payload.
-    """
     env = ha_environment()
     tpl = env.from_string(template_str)
     result = tpl.render(**variables)
@@ -182,7 +208,6 @@ def render_sender(template_str, variables):
 
 
 def make_sender_vars(**overrides):
-    """Build entity-id variables dict (all sensors populated by default)."""
     defaults = dict(
         node="2896876952",
         region="eu868",
@@ -224,11 +249,6 @@ RECEIVER_TEMPLATE = """\
 
 def render_receiver(mqtt_payload, neighbor_decimal, key, filter_="float(0)",
                     this_state="0"):
-    """Render a receiver value_template for a single sensor.
-
-    ``mqtt_payload`` should be a dict with ``payload`` as an inline JSON
-    object (matching what Meshtastic publishes on the receive side).
-    """
     env = ha_environment()
     tpl_str = RECEIVER_TEMPLATE.replace("KEY", key).replace("FILTER", filter_)
     tpl = env.from_string(tpl_str)
@@ -257,8 +277,6 @@ UNIVERSAL_TEMPLATE = """\
 
 def render_receiver_universal(mqtt_payload, neighbor_decimal, key,
                               filter_="float(0)", this_state="0"):
-    """Render the universal receiver template that handles both dict and string
-    payloads (matching the updated auto-discovery value_template)."""
     env = ha_environment()
     tpl_str = UNIVERSAL_TEMPLATE.replace("KEY", key).replace("FILTER", filter_)
     tpl = env.from_string(tpl_str)
@@ -272,25 +290,6 @@ def render_receiver_universal(mqtt_payload, neighbor_decimal, key,
         NEIGHBOR_DECIMAL=neighbor_decimal,
         this=ThisProxy(),
     )
-    return result.strip()
-
-
-# ─── Combined sensor helper ────────────────────────────────────────────────
-
-def render_combined(template_str, mock_entity_ids):
-    """Render a combined sensor template (sum/average)."""
-    env = ha_environment()
-    env.globals["expand"] = mock_expand
-
-    class MockNamespace:
-        @property
-        def sensor(self):
-            return [MockState(eid, MOCK_DATA.get(eid, {}).get("state", "unknown"))
-                    for eid in mock_entity_ids]
-
-    env.globals["states"] = MockNamespace()
-    tpl = env.from_string(template_str)
-    result = tpl.render()
     return result.strip()
 
 
@@ -371,9 +370,6 @@ def test_sender_unit_unknown_passthrough():
     assert out["gP"] == 42.0, f"Expected 42.0, got {out['gP']}"
 
 
-
-
-
 def test_sender_negative_preserved():
     """Negative gP preserved."""
     tpl = load_sender_template()
@@ -388,7 +384,6 @@ def test_sender_mixed_units():
         gP1="sensor.p1_power", gP2="sensor.p2_power", gP3="sensor.p3_power"))
     assert out["gP1"] == -0.4
     assert out["gP2"] == -0.5
-    # -0.3 W → -0.0003 kW → round(2) → -0.0
     assert out["gP3"] == -0.0 or out["gP3"] == 0.0
 
 
@@ -498,49 +493,49 @@ def test_receiver_voltage_rounding():
 # ═══════════════════════════════════════════════════════════════════════════
 
 def test_universal_receiver_dict_payload():
-    """"Universal template: dict payload → value extracted."""
+    """Universal template: dict payload → value extracted."""
     p = {"from": 2712679380, "payload": {"gP": -1.2, "bS": 85}}
     r = render_receiver_universal(p, 2712679380, "gP", "float(0)")
     assert float(r) == -1.2, f"Expected -1.2, got {r}"
 
 
 def test_universal_receiver_string_payload():
-    """"Universal template: string payload → parsed and value extracted."""
+    """Universal template: string payload → parsed and value extracted."""
     p = {"from": 2712679380, "payload": '{"gP": -1.2, "bS": 85}'}
     r = render_receiver_universal(p, 2712679380, "gP", "float(0)")
     assert float(r) == -1.2, f"Expected -1.2, got {r}"
 
 
 def test_universal_receiver_dict_mismatch():
-    """"Universal template: dict payload, from mismatch → fallback."""
+    """Universal template: dict payload, from mismatch → fallback."""
     p = {"from": 999, "payload": {"gP": -1.2}}
     r = render_receiver_universal(p, 2712679380, "gP", "float(0)", this_state="-5.0")
     assert r == "-5.0", f"Expected '-5.0', got {r}"
 
 
 def test_universal_receiver_string_mismatch():
-    """"Universal template: string payload, from mismatch → fallback."""
+    """Universal template: string payload, from mismatch → fallback."""
     p = {"from": 999, "payload": '{"gP": -1.2}'}
     r = render_receiver_universal(p, 2712679380, "gP", "float(0)", this_state="-5.0")
     assert r == "-5.0", f"Expected '-5.0', got {r}"
 
 
 def test_universal_receiver_missing_key():
-    """"Universal template: payload missing the key → default 0."""
+    """Universal template: payload missing the key → default 0."""
     p = {"from": 2712679380, "payload": {"gP": -1.2}}
     r = render_receiver_universal(p, 2712679380, "nonexistent", "float(0)")
     assert float(r) == 0.0, f"Expected 0.0, got {r}"
 
 
 def test_universal_receiver_int_filter_dict():
-    """"Universal template: bS via |int(0) with dict payload."""
+    """Universal template: bS via |int(0) with dict payload."""
     p = {"from": 2712679380, "payload": {"bS": 85}}
     r = render_receiver_universal(p, 2712679380, "bS", "int(0)")
     assert int(r) == 85, f"Expected 85, got {r}"
 
 
 def test_universal_receiver_int_filter_string():
-    """"Universal template: bS via |int(0) with string payload."""
+    """Universal template: bS via |int(0) with string payload."""
     p = {"from": 2712679380, "payload": '{"bS": 85}'}
     r = render_receiver_universal(p, 2712679380, "bS", "int(0)")
     assert int(r) == 85, f"Expected 85, got {r}"
@@ -566,226 +561,140 @@ def test_roundtrip():
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# TESTS — COMBINED SENSORS  (mesh_combined.yaml)
+# TESTS — COMBINED SENSORS  (Python sensor.py logic)
 # ═══════════════════════════════════════════════════════════════════════════
 
-COMBINED_GP = """\
-{% set entities = expand(states.sensor)\
- | selectattr('entity_id', 'search', 'node_\\\\d+_gp$') | list %}\
-{{ entities | map(attribute='state') | map('float', 0) | sum | round(2) }}"""
+class _MockMeshData:
+    """Minimal mock for MeshData.get_all_values used by combined sensors."""
+    def __init__(self):
+        self._data: dict[str, list[float]] = {}
 
-COMBINED_SOC = """\
-{% set entities = expand(states.sensor)\
- | selectattr('entity_id', 'search', 'node_\\\\d+_bs$') | list %}\
-{% set vals = entities | map(attribute='state') | map('int', 0) | list %}\
-{{ (vals | sum / vals | length) | round(0) if vals | length > 0 else 0 }}"""
+    def set_values(self, key: str, vals: list[float]) -> None:
+        self._data[key] = vals
 
-
-def test_combined_gp_sum():
-    """gp sum: 3 neighbors → -0.5 kW."""
-    ids = ["sensor.node_1_gp", "sensor.node_2_gp", "sensor.node_3_gp"]
-    for eid, v in zip(ids, [-1.2, -0.8, 2.5]):
-        MOCK_DATA[eid] = {"state": v, "unit_of_measurement": "kW"}
-    r = render_combined(COMBINED_GP, ids)
-    for eid in ids:
-        del MOCK_DATA[eid]
-    assert abs(float(r) - 0.5) < 0.01, f"Expected 0.5, got {r}"
+    def get_all_values(self, key: str) -> list[float]:
+        return list(self._data.get(key, []))
 
 
-def test_combined_gp_empty():
-    """gp sum: no matching entities → 0."""
-    r = render_combined(COMBINED_GP, [])
-    assert float(r) == 0.0, f"Expected 0.0, got {r}"
+def test_combined_sum():
+    """_sum helper: 3 values → correct total."""
+    from custom_components.lotse_forecast.sensor import _sum
+    m = _MockMeshData()
+    m.set_values("gp", [-1.2, -0.8, 2.5])
+    assert abs(_sum(m, "gp") - 0.5) < 0.01
 
 
-def test_combined_soc_avg():
-    """bs avg: 3 neighbors → 85%."""
-    ids = ["sensor.node_1_bs", "sensor.node_2_bs", "sensor.node_3_bs"]
-    for eid, v in zip(ids, [80, 90, 85]):
-        MOCK_DATA[eid] = {"state": v, "unit_of_measurement": "%"}
-    r = render_combined(COMBINED_SOC, ids)
-    for eid in ids:
-        del MOCK_DATA[eid]
-    assert float(r) == 85.0, f"Expected 85.0, got {r}"
+def test_combined_sum_empty():
+    """_sum helper: empty → 0."""
+    from custom_components.lotse_forecast.sensor import _sum
+    assert _sum(_MockMeshData(), "gp") == 0.0
 
 
-def test_combined_soc_empty():
-    """bs avg: no matching entities → 0."""
-    r = render_combined(COMBINED_SOC, [])
-    assert float(r) == 0.0, f"Expected 0.0, got {r}"
+def test_combined_avg():
+    """_avg helper: 3 values → correct average."""
+    from custom_components.lotse_forecast.sensor import _avg
+    m = _MockMeshData()
+    m.set_values("bs", [80, 90, 85])
+    assert _avg(m, "bs") == 85.0
 
 
-COMBINED_BP = """\
-{% set entities = expand(states.sensor)\
- | selectattr('entity_id', 'search', 'node_\\\\d+_bp$') | list %}\
-{{ entities | map(attribute='state') | map('float', 0) | sum | round(2) }}"""
-
-COMBINED_BEI = """\
-{% set entities = expand(states.sensor)\
- | selectattr('entity_id', 'search', 'node_\\\\d+_bei$') | list %}\
-{{ entities | map(attribute='state') | map('float', 0) | sum | round(2) }}"""
-
-COMBINED_BEO = """\
-{% set entities = expand(states.sensor)\
- | selectattr('entity_id', 'search', 'node_\\\\d+_beo$') | list %}\
-{{ entities | map(attribute='state') | map('float', 0) | sum | round(2) }}"""
+def test_combined_avg_empty():
+    """_avg helper: empty → 0."""
+    from custom_components.lotse_forecast.sensor import _avg
+    assert _avg(_MockMeshData(), "bs") == 0.0
 
 
-def test_combined_bp_sum():
-    """bp sum: 3 neighbors → 4.5 kW."""
-    ids = ["sensor.node_1_bp", "sensor.node_2_bp", "sensor.node_3_bp"]
-    for eid, v in zip(ids, [1.2, 2.3, 1.0]):
-        MOCK_DATA[eid] = {"state": v, "unit_of_measurement": "kW"}
-    r = render_combined(COMBINED_BP, ids)
-    for eid in ids:
-        del MOCK_DATA[eid]
-    assert abs(float(r) - 4.5) < 0.01, f"Expected 4.5, got {r}"
+def test_combined_max():
+    """_max helper: 3 values → correct max."""
+    from custom_components.lotse_forecast.sensor import _max
+    m = _MockMeshData()
+    m.set_values("gv1", [230.0, 245.0, 238.5])
+    assert abs(_max(m, "gv1") - 245.0) < 0.1
 
 
-def test_combined_bp_empty():
-    """bp sum: no matching entities → 0."""
-    r = render_combined(COMBINED_BP, [])
-    assert float(r) == 0.0, f"Expected 0.0, got {r}"
+def test_combined_max_empty():
+    """_max helper: empty → 0."""
+    from custom_components.lotse_forecast.sensor import _max
+    assert _max(_MockMeshData(), "gv1") == 0.0
 
 
-def test_combined_bei_sum():
-    """bei sum: 3 neighbors → 50.3 kWh."""
-    ids = ["sensor.node_1_bei", "sensor.node_2_bei", "sensor.node_3_bei"]
-    for eid, v in zip(ids, [20.1, 15.0, 15.2]):
-        MOCK_DATA[eid] = {"state": v, "unit_of_measurement": "kWh"}
-    r = render_combined(COMBINED_BEI, ids)
-    for eid in ids:
-        del MOCK_DATA[eid]
-    assert abs(float(r) - 50.3) < 0.01, f"Expected 50.3, got {r}"
+def test_combined_weighted_soc():
+    """_weighted_soc: (80*10 + 90*5) / (10+5) = 83.3%."""
+    from custom_components.lotse_forecast.sensor import _weighted_soc
+    m = _MockMeshData()
+    m.set_values("bs", [80, 90])
+    m.set_values("bc", [10, 5])
+    assert abs(_weighted_soc(m) - 83.3) < 0.1
 
 
-def test_combined_bei_empty():
-    """bei sum: no matching entities → 0."""
-    r = render_combined(COMBINED_BEI, [])
-    assert float(r) == 0.0, f"Expected 0.0, got {r}"
+def test_combined_weighted_soc_empty():
+    """_weighted_soc: no data → 0."""
+    from custom_components.lotse_forecast.sensor import _weighted_soc
+    assert _weighted_soc(_MockMeshData()) == 0.0
 
 
-def test_combined_beo_sum():
-    """beo sum: 3 neighbors → 10.5 kWh."""
-    ids = ["sensor.node_1_beo", "sensor.node_2_beo", "sensor.node_3_beo"]
-    for eid, v in zip(ids, [3.0, 4.5, 3.0]):
-        MOCK_DATA[eid] = {"state": v, "unit_of_measurement": "kWh"}
-    r = render_combined(COMBINED_BEO, ids)
-    for eid in ids:
-        del MOCK_DATA[eid]
-    assert abs(float(r) - 10.5) < 0.01, f"Expected 10.5, got {r}"
+def test_combined_utilization():
+    """solar_utilization: sp=3.5, sk=5.0 → 70%."""
+    from custom_components.lotse_forecast.sensor import COMBINED_FNS
+    m = _MockMeshData()
+    m.set_values("sp", [3.5])
+    m.set_values("sk", [5.0])
+    fn = COMBINED_FNS["combined_solar_utilization"]
+    assert abs(fn(m) - 70.0) < 0.1
 
 
-def test_combined_beo_empty():
-    """beo sum: no matching entities → 0."""
-    r = render_combined(COMBINED_BEO, [])
-    assert float(r) == 0.0, f"Expected 0.0, got {r}"
-
-
-COMBINED_GV1_MAX = """\
-{% set entities = expand(states.sensor)\
- | selectattr('entity_id', 'search', 'node_\\\\d+_gv1$') | list %}\
-{% set voltages = entities | map(attribute='state') | map('float', 0) | list %}\
-{{ (voltages | max) | round(1) if voltages | length > 0 else 0 }}"""
-
-
-def test_combined_gv1_max():
-    """gv1 max: 3 voltages → 245.0 V."""
-    ids = ["sensor.node_1_gv1", "sensor.node_2_gv1", "sensor.node_3_gv1"]
-    for eid, v in zip(ids, [230.0, 245.0, 238.5]):
-        MOCK_DATA[eid] = {"state": v, "unit_of_measurement": "V"}
-    r = render_combined(COMBINED_GV1_MAX, ids)
-    for eid in ids:
-        del MOCK_DATA[eid]
-    assert abs(float(r) - 245.0) < 0.1, f"Expected 245.0, got {r}"
-
-
-def test_combined_gv1_max_empty():
-    """gv1 max: no matching entities → 0."""
-    r = render_combined(COMBINED_GV1_MAX, [])
-    assert float(r) == 0.0, f"Expected 0.0, got {r}"
+def test_combined_utilization_no_capacity():
+    """solar_utilization: no sk → 0."""
+    from custom_components.lotse_forecast.sensor import COMBINED_FNS
+    assert COMBINED_FNS["combined_solar_utilization"](_MockMeshData()) == 0.0
 
 
 def test_combined_export_ratio():
-    """export ratio: gep/sp → 0.14 (0.5/3.5)."""
-    MOCK_DATA["sensor.combined_mesh_sp"] = {"state": 3.5, "unit_of_measurement": "kW"}
-    MOCK_DATA["sensor.combined_mesh_gep"] = {"state": 0.5, "unit_of_measurement": "kW"}
-    env = ha_environment()
-    tpl = env.from_string("""\
-{% set sp = states('sensor.combined_mesh_sp') | float(0) %}\
-{% set gep = states('sensor.combined_mesh_gep') | float(0) %}\
-{% if sp > 0.1 %}\
-{% set raw = (gep / sp) | round(2) %}\
-{{ [raw, 0] | max }}\
-{% else %}\
-0\
-{% endif %}""")
-    r = tpl.render()
-    del MOCK_DATA["sensor.combined_mesh_sp"]
-    del MOCK_DATA["sensor.combined_mesh_gep"]
-    assert abs(float(r) - 0.14) < 0.01, f"Expected 0.14, got {r}"
+    """export_ratio: gep=0.5, sp=3.5 → 0.14."""
+    from custom_components.lotse_forecast.sensor import COMBINED_FNS
+    m = _MockMeshData()
+    m.set_values("sp", [3.5])
+    m.set_values("gep", [0.5])
+    fn = COMBINED_FNS["combined_mesh_export_ratio"]
+    assert abs(fn(m) - 0.14) < 0.01
 
 
 def test_combined_export_ratio_zero():
-    """export ratio: sp=0 → 0."""
-    MOCK_DATA["sensor.combined_mesh_sp"] = {"state": 0, "unit_of_measurement": "kW"}
-    MOCK_DATA["sensor.combined_mesh_gep"] = {"state": 0.5, "unit_of_measurement": "kW"}
-    env = ha_environment()
-    tpl = env.from_string("""\
-{% set sp = states('sensor.combined_mesh_sp') | float(0) %}\
-{% set gep = states('sensor.combined_mesh_gep') | float(0) %}\
-{% if sp > 0.1 %}\
-{% set raw = (gep / sp) | round(2) %}\
-{{ [raw, 0] | max }}\
-{% else %}\
-0\
-{% endif %}""")
-    r = tpl.render()
-    del MOCK_DATA["sensor.combined_mesh_sp"]
-    del MOCK_DATA["sensor.combined_mesh_gep"]
-    assert float(r) == 0.0, f"Expected 0.0, got {r}"
+    """export_ratio: sp=0 → 0."""
+    from custom_components.lotse_forecast.sensor import COMBINED_FNS
+    m = _MockMeshData()
+    m.set_values("sp", [0])
+    m.set_values("gep", [0.5])
+    fn = COMBINED_FNS["combined_mesh_export_ratio"]
+    assert fn(m) == 0.0
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# TESTS — AUTO‑DISCOVERY CONFIG JSON
-# ═══════════════════════════════════════════════════════════════════════════
-
-def load_discovery_template():
-    """Load the first gP sensor's MQTT discovery config template from
-    auto-discovery-automation.yaml and return it as a Jinja template string."""
-    path = ROOT / "auto-discovery-automation.yaml"
-    with open(path) as f:
-        data = yaml.load(f, Loader=yaml.FullLoader)
-    return data["action"][0]["then"][0]["data"]["payload"]
+def test_combined_self_consumption():
+    """self_consumption_rate: sp=3.5, gep=0.5 → 85.7%."""
+    from custom_components.lotse_forecast.sensor import COMBINED_FNS
+    m = _MockMeshData()
+    m.set_values("sp", [3.5])
+    m.set_values("gep", [0.5])
+    fn = COMBINED_FNS["combined_mesh_self_consumption_rate"]
+    assert abs(fn(m) - 85.7) < 0.1
 
 
-def test_discovery_valid_json():
-    """Auto-discovery config renders to valid JSON."""
-    env = ha_environment()
-    tpl = env.from_string(load_discovery_template())
-    raw = tpl.render(**{"from": 2712679380, "region": "EU_868", "sender": "!a1b2c3d4"})
-    cfg = json.loads(raw)
-    assert cfg["name"] == "Node 2712679380 gP"
-    assert cfg["unit_of_measurement"] == "kW"
-    assert cfg["unique_id"] == "mesh_2712679380_gp"
-    assert isinstance(cfg["value_template"], str)
-    assert "value_json.from" in cfg["value_template"]
-    assert "gP" in cfg["value_template"]
+def test_combined_participants():
+    """participants: 2 nodes with gip > 0."""
+    from custom_components.lotse_forecast.sensor import COMBINED_FNS
+    m = _MockMeshData()
+    m.set_values("gip", [1.2, 0.0, 3.0])
+    fn = COMBINED_FNS["combined_mesh_participants"]
+    assert fn(m) == 2.0
 
 
-def test_discovery_nested_template():
-    """The value_template field in discovery config is itself valid Jinja."""
-    env = ha_environment()
-    tpl = env.from_string(load_discovery_template())
-    raw = tpl.render(**{"from": 2712679380, "region": "EU_868", "sender": "!a1b2c3d4"})
-    cfg = json.loads(raw)
-
-    nested = env.from_string(cfg["value_template"])
-    result = nested.render(value_json={
-        "from": 2712679380,
-        "payload": {"gP": -1.2},
-    })
-    assert float(result.strip()) == -1.2, f"Expected -1.2, got '{result.strip()}'"
+def test_combined_config_ready():
+    """config_ready: 2 nodes with bc."""
+    from custom_components.lotse_forecast.sensor import COMBINED_FNS
+    m = _MockMeshData()
+    m.set_values("bc", [10, 5])
+    fn = COMBINED_FNS["combined_mesh_config_ready"]
+    assert fn(m) == 2.0
 
 
 # ═══════════════════════════════════════════════════════════════════════════

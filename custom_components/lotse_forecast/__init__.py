@@ -13,6 +13,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 
 from .const import BAD_STATES, DOMAIN, MSH_TOPIC, NODE_KEY_META, PLATFORMS
+from .dashboard import async_create_lovelace_dashboard
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -198,6 +199,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry) -> bool:
     async def _start_later(_event=None) -> None:
         await mesh.start()
         await hass.config_entries.async_forward_entry_setups(config_entry, PLATFORMS)
+        await async_create_lovelace_dashboard(hass)
 
     if hass.is_running:
         await _start_later()

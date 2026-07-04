@@ -1,23 +1,12 @@
-# HA Setup — Per-Household LoRa Data Sharing
+# HA Setup — LOTSE Mesh Data Sharing
 
 Every household runs its own Home Assistant + MQTT broker. Each Heltec V3 has the `mqtt` channel with downlink enabled. Each HA publishes its own meter data into the LoRa mesh using its own node's decimal number — no single point of failure, no extra hardware beyond the node and Tasmota sensor.
 
-```mermaid
-flowchart LR
-    subgraph H1["Household 1"]
-        T1["Tasmota IR Sensor"] -->|"MQTT"| A1["HA Automation"]
-        A1 -->|"msh/{region}/2/json/mqtt/{node}"| V1["Heltec V3<br/>(mqtt ch + downlink)"]
-    end
-    subgraph H2["Household 2 (every other household)"]
-        T2["Tasmota IR Sensor"] -->|"MQTT"| A2["HA Automation"]
-        A2 -->|"msh/{region}/2/json/mqtt/{node}"| V2["Heltec V3<br/>(mqtt ch + downlink)"]
-    end
-    V1 <-->|"LoRa 868 MHz"| V2
+```
+Household A: Tasmota → HA → MQTT → Heltec V3 → LoRa → Heltec V3 → MQTT → HA :Household B
 ```
 
 **LoRa is the only inter-household link.** No shared MQTT broker, no shared WiFi between houses, no VPN, no bridge scripts.
-
----
 
 ## Prerequisites
 
@@ -25,149 +14,79 @@ flowchart LR
 - MQTT broker running in your Home Assistant instance (Mosquitto add-on or standalone)
 - Your node's decimal number and hex ID from the Meshtastic Web UI (**About** page)
 
----
-
-## Quick Start
+## Installation
 
 ### Step 1 — Install Sender Blueprint
 
-1. In HA: **Settings → Automations → Blueprints → Import Blueprint**
+This blueprint publishes your meter data into the LoRa mesh. Each household needs exactly one automation from this blueprint.
+
+1. **Settings → Automations → Blueprints → Import Blueprint**
 2. Paste this URL and click **Import**:
    `https://raw.githubusercontent.com/FunCyRanger/LOTSE/refs/heads/main/sender-blueprint.yaml`
 3. Click **Create Automation**, fill in the form:
-   - **Node Number** — from the Web UI (required)
-   - **LoRa Region** — pre-filled to `EU_868`, change for your country (required)
-   - **Grid Import Power (gIP)** — pick your sensor (required)
-   - **MQTT Channel** — pre-filled to 1 (required)
-   - **Battery Capacity / Solar Peak Power / Panel Angle / Panel Azimuth** — optional system specs for weighted SOC and solar utilization on neighbors' dashboards
-   - All other fields are optional — leave empty to exclude from the payload
-4. Save — your node publishes measurement data on the next interval, and config data (if any fields filled) on startup + daily at the configured hour.
+   - **Node Number** — from the Meshtastic Web UI (About page). Required.
+   - **LoRa Region** — `EU_868` by default. Change for your country.
+   - **Grid Import Power (gIP)** — pick your meter sensor. Required.
+   - **MQTT Channel** — `1` by default.
+   - **Battery Capacity / Solar Peak Power / Panel Angle / Panel Azimuth** — optional system specs. Fill these in so neighbors see your battery SOC weighted by capacity, your solar utilization, etc.
+   - All other fields are optional — leave empty to exclude from the payload.
+4. **Save**. Your node publishes measurement data every interval (default 5 min) and sends config data (if any system specs are filled) on HA startup + daily at 3AM.
 
-> **Tip:** After changing config values, restart HA to send the updated config immediately, or go to **Settings → Automations → click your automation → Save** to re-trigger it.
+### Step 2 — Install LOTSE Mesh Coordinator Integration
 
-### Step 2 — Install LOTSE Mesh Coordinator Integration (replaces auto-discovery + combined sensors)
+This integration does everything on the receiving side: it subscribes to the MQTT mesh topic, creates per-node sensors for every neighbor, builds combined aggregation sensors (totals, averages, min/max), computes a solar forecast from your weather entity, and adds an optional dashboard. No YAML files needed.
 
-The `lotse_forecast` integration (now called **LOTSE Mesh Coordinator**) handles everything: per-node sensor creation, combined aggregation sensors, and solar forecast for the Energy Dashboard. No YAML files needed.
-
-**Installation via HACS:**
-
-1. In HA: **HACS → Custom Repositories** → add `https://github.com/FunCyRanger/LOTSE` with category **Integration**
-2. **HACS → Integrations** → search "LOTSE Mesh Coordinator" → **Install**
+1. **HACS → Custom Repositories** → add `https://github.com/FunCyRanger/LOTSE` with category **Integration**
+2. **HACS → Integrations** → search **LOTSE Mesh Coordinator** → **Install**
 3. **Restart** Home Assistant
-4. **Settings → Devices & Services → Add Integration** → search "LOTSE Mesh Coordinator" → select your weather entity → **Submit**
-5. (Optional) **Configure** the integration to add manual panel installations via **Options** (three-dot menu)
-6. **Settings → Energy** → edit your solar source → **Solar forecast** dropdown → select **LOTSE Mesh Coordinator**
+4. **Settings → Devices & Services → Add Integration** → search **LOTSE Mesh Coordinator** → select your weather entity → **Submit**
+5. (Optional) **Configure** → **Options** → add manual solar panels if you have panels not associated with a mesh node
 
-Points of a single integration:
+### Step 3 — Configure Energy Dashboard
 
-- Subscribes to `msh/+/2/json/mqtt/+` and creates per-node sensors automatically (no `auto-discovery-automation.yaml` needed)
-- Creates all combined aggregation sensors in Python (no `mesh-combined-template.yaml` / `mesh-combined-sensors.yaml` needed)
-- Computes solar forecast from weather entity + PV simulation model
-- Auto-discovers mesh node panels (`sensor.node_*_sk/sa/sz`)
-- Manual panels configurable via integration options
-- Cleans up stale entities (`combined_solar_panel_angle`, `combined_solar_panel_azimuth`, etc.) on startup
+1. **Settings → Energy**
+2. Edit your **Solar production** source:
+   - **Solar Production** sensor → select `Solar Production with Forecast` (`sensor.solar_production_forecast`)
+   - **Solar forecast** dropdown → select **LOTSE Mesh Coordinator**
+3. Add **Grid consumption** → `Combined Mesh Grid Import` (`sensor.combined_mesh_gei`)
+4. Add **Return to grid** → `Combined Mesh Grid Export` (`sensor.combined_mesh_geo`)
+5. (Optional) **Configure** the integration → **Options** → add manual solar panels
 
-**What you need to clean up on upgrade from v2.x:**
+## What you get
 
-- Delete old `mesh-combined-rest.yaml`, `mesh-combined-sensors.yaml`, `mesh-combined-template.yaml` from your HA `packages/` directory
-- Delete the `Mesh: Auto-discover neighbors` automation (**Settings → Automations**)
-- The integration will auto-remove stale `combined_solar_panel_angle`, `combined_solar_panel_azimuth`, `forecast_correction_factor`, and `solar_roughness_index` sensors
-
-**What stays the same:**
-
-- Entity IDs are unchanged — all dashboards and Energy Dashboard keep working
-- The sender blueprint stays (must still be imported separately)
-- The `lotse-dashboard.yaml` dashboard import is optional and unchanged
-
----
-
-**Optional: Dashboard (see all 11 sensors on one page)**
-
-HA does not support grouping YAML-defined template sensors under a device, so the sensors appear as individual entities. To view them all at a glance, import the LOTSE dashboard:
-
-1. Copy [`lotse-dashboard.yaml`](lotse-dashboard.yaml) to your HA `config/` folder.
-2. In HA: **Settings → Dashboards → Import** → pick the file → **Import**.
-3. A new tab **"LOTSE Neighborhood"** appears in your sidebar with all sensors grouped by category (Grid Power, Solar, Grid Cumulative Energy, Neighborhood).
-
-> **Tip:** The cumulative-energy sensors are the ones to add to the Energy Dashboard (see section below). The config-derived sensors (Weighted SOC, Solar Capacity, etc.) populate as nodes install the config blueprint and send their registration data.
-
-> **Prerequisite:** At least one neighbor must have sent data so the individual `node_XXXX_*` sensors exist.
-
-### Step 4 — Verify
-
-After the first send interval (default 5 minutes, plus a random 0–60 s delay) elapses:
-- Neighbor sensors appear under **Settings → Devices & Services → Devices**
-- Combined sensors appear under **Settings → Devices & Services → Entities** (search "Combined Mesh")
-- If you imported the dashboard, a new **LOTSE Neighborhood** tab appears in your sidebar showing all combined sensors on one page
-- The **Energy** dashboard shows your first recorded data point
-
-New neighbors that join later are handled automatically — no additional setup needed.
-
----
-
-## Expected Message Flow
-
-### Send direction
-
+Per-node sensors appear automatically as neighbors send data:
 ```
-HA publishes to:        msh/EU_868/2/json/mqtt/2892010904
-Payload (JSON):
-  {"from": 2892010904, "type": "sendtext",
-   "payload": "{\"gP\":-1.2,\"gP1\":-0.4,\"gP2\":-0.4,\"gP3\":-0.4,\"bS\":85,\"sP\":3.5}",
-   "channel": 1}
-
-Your node receives MQTT:
-  ✅ "from" == 2892010904 (matches own number)
-  ✅ channel is "mqtt" with downlink
-  ✅ injects into LoRa mesh on mqtt channel
+sensor.node_2892010403_gp    sensor.node_2892010403_gip   sensor.node_2892010403_gep
+sensor.node_2892010403_sp    sensor.node_2892010403_se    sensor.node_2892010403_bs
+sensor.node_2892010403_bc    sensor.node_2892010403_sk    sensor.node_2892010403_sa
+... (27 keys, ~20 per node)
 ```
 
-### Receive direction
-
+Combined aggregation sensors (entity IDs unchanged from previous versions):
 ```
-LoRa message arrives at your node:
-  from: 2712679380 (neighbor's decimal)
-  payload: {"gP": -1.2, "gP1": -0.4, "gP2": -0.4, "gP3": -0.4, "bS": 85, "sP": 3.5}
-
-Your node publishes to MQTT:
-  Topic: msh/EU_868/2/json/mqtt/!your_node_hex
-  Payload: {"from": 2712679380, "type": "text",
-            "payload": {"gP": -1.2, "gP1": -0.4, "gP2": -0.4, "gP3": -0.4, "bS": 85, "sP": 3.5},
-            "channel": 1, ...}
-
-Your HA receives it, checks from == NEIGHBOR_DECIMAL,
-  value_json.payload.gP → sensor value
+sensor.combined_mesh_gp      — total neighborhood grid power
+sensor.combined_mesh_gei     — cumulative import energy (Energy Dashboard)
+sensor.combined_mesh_geo     — cumulative export energy (Energy Dashboard)
+sensor.combined_mesh_sp      — total solar power
+sensor.combined_mesh_se      — cumulative solar energy (Energy Dashboard)
+sensor.combined_mesh_bs      — average neighbor SOC
+sensor.combined_mesh_soc_weighted — capacity-weighted SOC
+sensor.combined_solar_utilization  — % of installed PV currently generated
+sensor.solar_production_forecast   — Energy Dashboard bridge sensor
+... (25 sensors total)
 ```
 
-```mermaid
-sequenceDiagram
-    participant Tasmota
-    participant HA as HA Automation
-    participant MQTT as MQTT Broker
-    participant V3 as Your Heltec V3
-    participant LoRa as LoRa Mesh
-    participant NeighborV3 as Neighbor's Heltec V3
-    participant NeighborHA as Neighbor's HA
+A **LOTSE Neighborhood** dashboard is auto-created in your HA sidebar showing all combined sensors on one page.
 
-    Tasmota->>HA: MQTT SENSOR (meter data)
-    Note over HA: interval + random 0-60s jitter
-    HA->>HA: Build sendtext envelope
-    HA->>MQTT: msh/EU_868/2/json/mqtt/2892010904
-    MQTT->>V3: {"from":2892010904,"type":"sendtext", "payload":"{...}","channel":1}
-    Note over V3: validates from==own number
-    V3->>LoRa: inject into mesh (mqtt channel)
-    LoRa->>NeighborV3: forward packet
-    NeighborV3->>NeighborHA: publish to msh/…/mqtt/!hex
-    Note over NeighborHA: auto-discovery creates sensors
-```
+## If you're upgrading from v2.x
 
----
+- Delete the old auto-discovery automation (**Settings → Automations** → `Mesh: Auto-discover neighbors`)
+- Delete old YAML package files from your HA `packages/` directory (`mesh-combined-rest.yaml`, `mesh-combined-sensors.yaml`, `mesh-combined-template.yaml`)
+- The integration auto-removes stale entities (`combined_solar_panel_angle`, `combined_solar_panel_azimuth`, `forecast_correction_factor`, `solar_roughness_index`) on first startup
 
 ## Data Format
 
 JSON payload with keys grouped by category. Sign convention: import/charge = positive, export/discharge = negative.
-
-### Grid
 
 | Key | Meaning | Unit | Priority |
 |-----|---------|------|----------|
@@ -175,156 +94,31 @@ JSON payload with keys grouped by category. Sign convention: import/charge = pos
 | gIP | Import power only (always ≥0) | kW | **required** |
 | gEP | Export power only (always ≥0) | kW | important |
 | gP1 | Phase 1 power | kW | important |
-| gP2 | Phase 2 power | kW | important |
-| gP3 | Phase 3 power | kW | important |
 | gV1 | Phase 1 voltage | V | optional |
-| gV2 | Phase 2 voltage | V | optional |
-| gV3 | Phase 3 voltage | V | optional |
 | gEI | Cumulative energy import | kWh | **important** |
 | gEO | Cumulative energy export | kWh | **important** |
-
-### Solar
-
-| Key | Meaning | Unit | Priority |
-|-----|---------|------|----------|
-| sP | Power | kW | important |
-| sE | Cumulative energy | kWh | important |
-
-### Battery
-
-| Key | Meaning | Unit | Priority |
-|-----|---------|------|----------|
-| bP | Power (+charge, -discharge) | kW | important |
-| bS | State of charge | % | optional |
-| bEI | Cumulative energy in | kWh | optional |
-| bEO | Cumulative energy out | kWh | optional |
-
-### Wallbox (EV charger)
-
-| Key | Meaning | Unit | Priority |
-|-----|---------|------|----------|
-| wP | Power | kW | optional |
-| wE | Cumulative energy | kWh | optional |
-| wS | State of charge | % | optional |
-
-**Minimal payload (grid-only, just the required field):**
-```
-{"gIP": 1.5}
-```
-
-**Example payload (all keys):**
-```
-{"gP":-1.2,"gIP":0.0,"gEP":1.2,"gP1":-0.4,"gP2":-0.4,"gP3":-0.4,"gV1":230.0,"gV2":229.0,"gV3":231.0,"gEI":12.5,"gEO":3.2,"sP":3.5,"sE":15.2,"bP":1.0,"bS":85,"bEI":8.5,"bEO":2.3,"wP":0.0,"wE":2.1,"wS":80}
-```
+| sP | Solar power | kW | important |
+| sE | Solar cumulative energy | kWh | important |
+| bS | Battery state of charge | % | optional |
+| bC | Battery capacity | kWh | optional |
+| sK | Solar peak power | kWp | config |
+| sA | Panel tilt angle | ° | config |
+| sZ | Panel azimuth | ° | config |
 
 **Size:** ~200 bytes with all keys, ~12 bytes with just `gIP` — both fit within Meshtastic's ~220-byte limit.
 
 **Edge cases:**
-- Sensors with state `unavailable`, `unknown`, `none`, `NaN`, `inf` are **omitted** from the payload (no key sent)
-- Power values are **clamped** to ±500 kW — guards against sensor glitches or unit mismatches (e.g., kWh sensor wired to a kW slot)
-- Energy values (`gEI`, `gEO`, `sE`, `bEI`, `bEO`, `wE`) are **clamped** at ≥ 0 — negative cumulative energy is rejected
-- Battery/Wallbox SOC is **clamped** to 0–100%
-- **Unit mismatch detection**: If a sensor's `unit_of_measurement` belongs to the wrong category (e.g., `kWh` in a power slot, `kW` in an energy slot), the key is omitted. If no unit is set, the value passes through as-is
-
----
-
-## Energy Dashboard
-
-The Energy Dashboard tracks cumulative import/export/solar per household.
-
-### Linking sensors — option A: combined sensors (recommended)
-
-If you installed the combined sensors (Quick Start Step 3), add these to the Energy Dashboard. New neighbors are included automatically — no manual updates needed.
-
-| Dashboard slot | Add sensor (entity) |
-|---|---|
-| Grid consumption | `Combined Mesh Grid Import` |
-| Return to grid | `Combined Mesh Grid Export` |
-| Solar production | `Solar Production with Forecast` |
-
-### Linking sensors — option B: per-neighbor (without combined sensors)
-
-Each neighbor's cumulative sensors appear automatically (e.g., `Node 2892019402 gEI`, `Node 2892019402 gEO`, `Node 2892019402 sE`). In **Settings → Energy**:
-
-| Dashboard slot | Add each neighbor's sensor |
-|---------------|---------------------------|
-| Grid consumption | `Node {NUMBER} gEI` (cumulative import energy) |
-| Return to grid | `Node {NUMBER} gEO` (cumulative export energy) |
-| Solar production | `Node {NUMBER} sE` (cumulative solar energy) |
-
-New neighbors must be added manually when they join — there is no auto-discovery for the Energy Dashboard.
-
-### Sign convention
-
-Import = positive, export = negative:
-- `gEI` and `gIP` are always ≥0
-- `gEO` and `gEP` are always ≥0
-- `sE` is always ≥0
-- No sign adjustment needed
-
-### Per-node metadata (auto-discovered)
-
-Config data (battery capacity `bC`, solar peak `sK`, panel angle `sA`, azimuth `sZ`) arrives automatically via the mesh registration messages sent on startup + daily. Auto-discovery creates individual sensors (`sensor.node_{NUMBER}_bc`, `sensor.node_{NUMBER}_sk`, etc.) and the combined sensors provide aggregate views like `Combined Solar Utilization`, `Combined Mesh Solar Capacity`, and `Weighted Average SOC` — no manual helpers or template sensors needed.
-
-**Solar forecast** is now integrated — see the **Solar Forecast** section in the sensor table above. The `lotse_forecast` integration computes forecasts locally using your weather entity's hourly data and a PV simulation model, aggregated across all mesh node panels and any manually configured panels.
-
----
-
-## Adding More Households
-
-| Step | What to do |
-|------|-----------|
-| New neighbor joins | Configure their Heltec V3 per [mesh-setup.md](mesh-setup.md) and install the sender blueprint |
-| Existing households see them | Auto-discovery creates sensors automatically from the first received message |
-| No changes needed on the mesh | The new node is already on the shared LoRa channel; all existing nodes will receive its messages automatically |
-
----
+- Sensors with state `unavailable`/`unknown`/`none`/`NaN` are omitted from the payload
+- Power values clamped to ±500 kW (guards against sensor glitches)
+- Energy values clamped to ≥0 (rejects negative cumulative energy)
+- SOC clamped to 0–100%
+- Unit mismatch detection: kWh sensor in a kW slot → key omitted
 
 ## Troubleshooting
 
 | Symptom | Likely cause | Fix |
 |---------|-------------|------|
-| Blueprint import fails with "invalid config" | Node number or sensor fields have wrong types | Ensure Node Number is a plain decimal (no quotes). Check sensor entities exist and are numeric. |
-| Sensors don't appear after first message | Auto-discovery not running | Verify `auto-discovery-automation.yaml` is saved and enabled in HA → Automations. Check MQTT topic `msh/{region}/2/json/mqtt/!{your_hex}` for incoming messages (Mosquitto add-on → Listen). |
-| Neighbor sensor not listed in Energy Dashboard | Dashboard requires `total` or `total_increasing` state class | Auto-discovery sets this automatically. If the sensor exists but is missing from the dropdown, check its state class in **Settings → Devices & Services → Devices**. |
-| Energy dashboard shows gaps | Send interval too long | In the sender blueprint, adjust "Send interval" (default 5 min) to 2 min. Note this increases LoRa channel usage. |
- | Neighbor values are stale | Node went offline or LoRa range issue | Check neighbor's node is still powered. Increase send interval. Verify both nodes are within LoRa range (~1-2 km urban, more rural). |
-
----
-
-## Firmware Updates (OTA)
-
-The config-hub firmware can be updated over-the-air via the web UI. Updates are distributed as GitHub Releases.
-
-### Prerequisites
-
-- The config-hub must be connected to WiFi and have internet access (can reach `https://api.github.com`)
-- A firmware release must be published on GitHub (tagged `v*`)
-
-### How it works
-
-- On boot, the config-hub checks GitHub for a newer release
-- It also checks every 24 hours automatically
-- A **Firmware** card on the web UI shows the current version and a **Check for updates** button
-- Status indicators: *Up to date*, *Update available*, *Downloading...*, *Ready to reboot* (flashing), *Error*
-
-### Update process
-
-1. Open the config-hub web UI in your browser (http://config-hub-ip/)
-2. The **Firmware** card shows your current version
-3. Click **Check for updates** — the config-hub queries GitHub Releases
-4. If a newer version is found, the button changes to **Update to vX.Y.Z** and auto-downloads the firmware
-5. Once downloaded (usually a few seconds), the button changes to **Restart to apply update** and starts flashing
-6. Click it — the device reboots into the new firmware
-
-### Rollback safety
-
-If the new firmware fails to boot (crashes, WiFi doesn't connect, etc.), the ESP32 bootloader automatically **rolls back** to the previous version after a watchdog reset. No action needed.
-
-### Manual power cycle
-
-If you need to force a rollback before the watchdog triggers, disconnect and reconnect power. The bootloader will attempt the new slot up to **3 times** before permanently rolling back.
-
-### Which devices support OTA?
-
-Any ESP32 with 2 MB+ flash running the config-hub firmware. The dual-OTA partition layout reserves 960 KB per slot — new firmware must fit within that limit.
+| No neighbor sensors appear | First message not yet sent | Wait one send interval (5 min + random delay). Check MQTT topic `msh/+/2/json/mqtt/+` for incoming messages (Mosquitto add-on → Listen). |
+| Forecast shows 0 kWh | Weather entity not configured or forecast unavailable | Check integration options have a weather entity selected. Verify the weather entity provides hourly forecasts. |
+| Energy Dashboard gap | Send interval too long | In the sender blueprint, reduce **Send Interval** to 2 min. |
+| Stale neighbor values | Node offline or LoRa range | Check neighbor's node is powered. Verify both nodes are within LoRa range (~1–2 km urban, more rural). |
