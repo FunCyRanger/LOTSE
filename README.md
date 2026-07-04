@@ -50,8 +50,7 @@ That's it. Each neighbor that does the same becomes visible automatically — no
 | [`mesh-setup.md`](mesh-setup.md) | Hardware, flashing, Heltec V3 config | **Setup guides** |
 | [`ha-setup.md`](ha-setup.md) | Full HA integration guide | **Setup guides** |
 | [`sender-blueprint.yaml`](sender-blueprint.yaml) | HA blueprint to send your data into the mesh | **Import into HA** |
-| [`auto-discovery-automation.yaml`](auto-discovery-automation.yaml) | Auto-creates sensors for each neighbor | **Import into HA** |
-| [`mesh-combined-sensors.yaml`](mesh-combined-sensors.yaml) | Dashboard-ready aggregate sensors | **Import into HA** |
+| [`custom_components/lotse_forecast/`](custom_components/lotse_forecast/) | Per-node sensors, combined aggregation, Energy Dashboard | **Integration** (replaces all YAML files) |
 | [`Requirements.md`](Requirements.md) | Requirements, household types | **Reference** |
 | [`AGENTS.md`](AGENTS.md) | Project invariants for AI agents | **Reference** |
 
@@ -61,10 +60,10 @@ That's it. Each neighbor that does the same becomes visible automatically — no
 
 | Directory | Contents |
 |-----------|----------|
-| `tests/` | Jinja template rendering tests, schema checks, MQTT roundtrip tests |
+| `tests/` | Jinja template + Python sensor tests, schema checks, forecast validation |
 | `sender-blueprint.yaml` | Sender automation blueprint (import into HA) |
-| `auto-discovery-automation.yaml` | Auto-discovery automation (paste into HA) |
-| `mesh-combined-sensors.yaml` | Combined neighborhood HA sensor package |
+| `custom_components/lotse_forecast/` | HA integration (MQTT sub, per-node + combined sensors, dashboard, forecast) |
+| `config-hub/` | ESP-IDF project (Tasmota SML → MQTT → Meshtastic envelope) |
 | `archive/` | Legacy design docs, superseded specs, AI firmware reviews |
 
 ---
