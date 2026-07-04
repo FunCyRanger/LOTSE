@@ -6,8 +6,8 @@ import re
 from collections.abc import Callable
 from typing import Any
 
-import homeassistant.util.dt as dt_util
 from homeassistant.components.mqtt import DOMAIN as MQTT_DOMAIN
+from homeassistant.components.mqtt import async_subscribe as mqtt_async_subscribe
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
@@ -124,8 +124,8 @@ class MeshData:
             _LOGGER.warning("MQTT not available — mesh data not subscribed")
             return
         try:
-            self._unsub_mqtt = await self._hass.components.mqtt.async_subscribe(
-                MSH_TOPIC, self._handle_mqtt_msg, qos=0
+            self._unsub_mqtt = await mqtt_async_subscribe(
+                self._hass, MSH_TOPIC, self._handle_mqtt_msg, qos=0
             )
             _LOGGER.info("Subscribed to %s", MSH_TOPIC)
         except Exception as exc:
