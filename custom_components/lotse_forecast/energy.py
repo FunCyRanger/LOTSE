@@ -73,7 +73,7 @@ def _get_panels(hass, entry):
         m = re.match(r"^sensor\.node_(\d+)_sk$", state.entity_id)
         if not m:
             continue
-        kwp = float(state.state)
+        kwp = _sensor_or_default(state, 0)
         if kwp <= 0:
             continue
         nid = m.group(1)

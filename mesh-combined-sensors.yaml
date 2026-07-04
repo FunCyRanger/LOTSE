@@ -1,5 +1,9 @@
 # LOTSE Mesh — Combined Neighborhood Sensors
 #
+# DEPRECATED since v3.0.0 — all combined sensors are now created automatically
+# by the LOTSE Mesh Coordinator integration. Remove this file from HA packages/
+# and install the integration via HACS instead.
+#
 # Aggregates all neighbor data into single sensors for monitoring and the
 # Energy Dashboard. New neighbors are auto-included via regex patterns.
 #

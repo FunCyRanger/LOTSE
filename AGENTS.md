@@ -3,7 +3,7 @@
 Three codebases:
 - **Root**: HA Jinja templates, YAML blueprints, Python tests
 - **`config-hub/`**: ESP-IDF project (C) — Tasmota SML → MQTT → transform → Meshtastic envelope
-- **`custom_components/lotse_forecast/`**: HA integration (`integration_type: service`) providing `async_get_solar_forecast` for Energy Dashboard. Computes forecast locally from weather entity (cloud cover, temperature, wind) + PV simulation model. Auto-discovers mesh node panels (`sensor.node_*_sk/sa/sz`) + supports manual panel config via options flow.
+- **`custom_components/lotse_forecast/`**: HA integration (`integration_type: hub`) providing everything: per-node sensor creation from MQTT mesh messages, combined aggregation sensors, and `async_get_solar_forecast` for the Energy Dashboard. Replaces `auto-discovery-automation.yaml`, `mesh-combined-template.yaml`, and `mesh-combined-sensors.yaml` — no YAML files needed.
 
 ## Critical gotchas
 

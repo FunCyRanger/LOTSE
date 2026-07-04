@@ -10,7 +10,7 @@ from . import DOMAIN
 
 
 class LotseForecastConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    VERSION = 1
+    VERSION = 2
 
     async def async_step_user(self, user_input=None) -> FlowResult:
         if self._async_current_entries():

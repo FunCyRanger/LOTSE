@@ -1,3 +1,6 @@
+# DEPRECATED since v3.0.0 — all combined sensors are now created automatically
+# by the LOTSE Mesh Coordinator integration. Remove this file from HA packages/
+# and install the integration via HACS instead.
 - sensor:
 
     # --- Grid Power ---

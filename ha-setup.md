@@ -45,90 +45,39 @@ flowchart LR
 
 > **Tip:** After changing config values, restart HA to send the updated config immediately, or go to **Settings → Automations → click your automation → Save** to re-trigger it.
 
-### Step 2 — Install Auto-Discovery
+### Step 2 — Install LOTSE Mesh Coordinator Integration (replaces auto-discovery + combined sensors)
 
-1. Copy or download [`auto-discovery-automation.yaml`](auto-discovery-automation.yaml)
-2. In HA: **Settings → Automations → Create Automation → Edit in YAML**, paste and save
-
-No edits needed — the automation extracts the region from the MQTT topic dynamically. Neighbor sensors appear automatically when the first message arrives.
-
-### Step 3 — Install Combined Sensors (optional)
-
-This step creates aggregated sensors that sum up all neighbors into a single reading. The cumulative-energy sensors can be added to the Energy Dashboard once and never need updating — new neighbors are included automatically.
-
-**What it creates** (21 sensors):
-
-| Sensor name | Source keys | What it shows | Energy Dashboard |
-|---|---|---|---|---|
-| Combined Mesh Grid Power | `gP` | Net neighborhood power (+import, −export) | — |
-| Combined Mesh Grid Import Power | `gIP` | Sum of import power | — |
-| Combined Mesh Grid Export Power | `gEP` | Sum of export power | — |
-| Combined Mesh Solar Power | `sP` | Total solar generation | — |
-| Combined Mesh Total Solar Generation | `sP` | Same, alias for clarity | — |
-| Average Neighbor SOC | `bS` | Average battery level across all neighbors | — |
-| Weighted Average SOC | `bS`, `bC` | Capacity-weighted SOC (weighted by battery kWh) | — |
-| Combined Self-Consumption Rate | `sP`, `gEP` | % of solar consumed locally (no grid export) | — |
-| Participating Neighbors | `gIP` | Number of neighbors currently reporting | — |
-| Combined Mesh Battery Capacity | `bC` | Total battery capacity in kWh across all nodes | — |
-| Combined Mesh Solar Capacity | `sK` | Total installed solar peak power in kWp | — |
-| Combined Solar Utilization | `sP`, `sK` | % of installed PV capacity currently generated | — |
-| Config-Ready Nodes | `bC` | Number of nodes that have reported config data | — |
-| Combined Solar Panel Angle | `sA` weighted by `sK` | Average panel tilt across all nodes | — |
-| Combined Solar Panel Azimuth | `sZ` weighted by `sK` | Average panel orientation across all nodes | — |
-| Solar Forecast Today | Forecast.Solar API | Expected solar production today (kWh) | — |
-| Solar Forecast Tomorrow | Forecast.Solar API | Expected solar production tomorrow (kWh) | — |
-| Solar Forecast Utilization | `se`, forecast | % of today's forecast produced so far | — |
-| Solar Production with Forecast | `se` + forecast API | Actual production + Energy Dashboard forecast via `lotse_forecast` integration | ✅ |
-| Combined Mesh Grid Import | `gEI` | Cumulative import energy | ✅ |
-| Combined Mesh Grid Export | `gEO` | Cumulative export energy | ✅ |
-| Combined Mesh Solar Energy | `sE` | Cumulative solar energy | ✅ |
-
-The `lotse_forecast` custom integration computes the solar forecast locally using your weather entity and a PV model (solar geometry, cloud cover, temperature, orientation). No external API needed.
-
-To add the solar forecast to the **Energy Dashboard**, install the `lotse_forecast` custom integration (see Step 3b), then configure `Solar Production with Forecast` (`sensor.solar_production_forecast`) as the **Solar Production** sensor in **Settings → Energy** and select **LOTSE Solar Forecast** in the **Solar forecast** dropdown. Forecast is computed on demand from weather data and your panel configurations — no manual updates needed when nodes change.
-
-**Installation:**
-
-Copy **both files** into your HA `packages/` folder and restart:
-- `mesh-combined-sensors.yaml`
-- `mesh-combined-template.yaml`
-
-Requires `packages: !include_dir_named packages` in your `configuration.yaml`. If you don't have this yet:
-
-1. Open your HA `configuration.yaml` (via Studio Code Server, Samba, or the File Editor add-on).
-2. Add this line at the end:
-   ```yaml
-   packages: !include_dir_named packages
-   ```
-3. Create a `packages/` folder next to `configuration.yaml` if it doesn't exist.
-4. Copy the two files above into the `packages/` folder.
-5. Restart Home Assistant.
-
-The sensors appear in **Settings → Devices & Services → Entities** (search "Combined Mesh").
-
-**Alternative** — If you prefer `configuration.yaml` includes instead of packages:
-
-```yaml
-template: !include mesh-combined-template.yaml
-```
-
-Copy `mesh-combined-template.yaml` into the same folder as `configuration.yaml` (the wrapper `mesh-combined-sensors.yaml` is not needed for this method).
-
-#### Step 3b — Install LOTSE Solar Forecast Integration (for Energy Dashboard)
-
-The `lotse_forecast` custom integration computes the solar forecast locally from your weather entity and panel data, bridging it into the Home Assistant Energy Dashboard.
+The `lotse_forecast` integration (now called **LOTSE Mesh Coordinator**) handles everything: per-node sensor creation, combined aggregation sensors, and solar forecast for the Energy Dashboard. No YAML files needed.
 
 **Installation via HACS:**
 
 1. In HA: **HACS → Custom Repositories** → add `https://github.com/FunCyRanger/LOTSE` with category **Integration**
-2. **HACS → Integrations** → search "LOTSE Solar Forecast" → **Install**
+2. **HACS → Integrations** → search "LOTSE Mesh Coordinator" → **Install**
 3. **Restart** Home Assistant
-4. **Settings → Devices & Services → Add Integration** → search "LOTSE Solar Forecast" → select your weather entity → **Submit**
+4. **Settings → Devices & Services → Add Integration** → search "LOTSE Mesh Coordinator" → select your weather entity → **Submit**
 5. (Optional) **Configure** the integration to add manual panel installations via **Options** (three-dot menu)
-6. **Settings → Energy** → edit your solar source → **Solar forecast** dropdown (now visible) → select **LOTSE Solar Forecast**
-7. **Refresh** the Energy Dashboard page
+6. **Settings → Energy** → edit your solar source → **Solar forecast** dropdown → select **LOTSE Mesh Coordinator**
 
-The forecast is computed per-panel using your weather entity's hourly forecast (cloud cover, temperature, wind) and a PV simulation model. Mesh node panels are auto-discovered from `sensor.node_*_sk` (solar capacity kWp). Manually configured panels can be added through integration options.
+Points of a single integration:
+
+- Subscribes to `msh/+/2/json/mqtt/+` and creates per-node sensors automatically (no `auto-discovery-automation.yaml` needed)
+- Creates all combined aggregation sensors in Python (no `mesh-combined-template.yaml` / `mesh-combined-sensors.yaml` needed)
+- Computes solar forecast from weather entity + PV simulation model
+- Auto-discovers mesh node panels (`sensor.node_*_sk/sa/sz`)
+- Manual panels configurable via integration options
+- Cleans up stale entities (`combined_solar_panel_angle`, `combined_solar_panel_azimuth`, etc.) on startup
+
+**What you need to clean up on upgrade from v2.x:**
+
+- Delete old `mesh-combined-rest.yaml`, `mesh-combined-sensors.yaml`, `mesh-combined-template.yaml` from your HA `packages/` directory
+- Delete the `Mesh: Auto-discover neighbors` automation (**Settings → Automations**)
+- The integration will auto-remove stale `combined_solar_panel_angle`, `combined_solar_panel_azimuth`, `forecast_correction_factor`, and `solar_roughness_index` sensors
+
+**What stays the same:**
+
+- Entity IDs are unchanged — all dashboards and Energy Dashboard keep working
+- The sender blueprint stays (must still be imported separately)
+- The `lotse-dashboard.yaml` dashboard import is optional and unchanged
 
 ---
 

@@ -1,5 +1,8 @@
-alias: "Mesh: Auto-discover neighbors"
-description: "Creates sensors via MQTT discovery for each new mesh node"
+alias: "Mesh: Auto-discover neighbors (DEPRECATED)"
+description: >
+  DEPRECATED since v3.0.0 — the LOTSE Mesh Coordinator integration now
+  handles per-node sensor creation automatically. Remove this automation
+  and install the integration via HACS instead.
 trigger:
   - platform: mqtt
     topic: "msh/+/2/json/mqtt/+"
