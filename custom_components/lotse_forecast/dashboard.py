@@ -72,7 +72,7 @@ async def async_create_lovelace_dashboard(hass: HomeAssistant) -> None:
     if LOVELACE_DOMAIN not in hass.data:
         _LOGGER.warning("Lovelace not available — skipping dashboard creation")
         return
-    dashboards = hass.data[LOVELACE_DOMAIN].get("dashboards")
+    dashboards = hass.data[LOVELACE_DOMAIN].dashboards
     if dashboards is None:
         return
     for d in dashboards.async_items():
