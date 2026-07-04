@@ -3,7 +3,7 @@
 Three codebases:
 - **Root**: HA Jinja templates, YAML blueprints, Python tests
 - **`config-hub/`**: ESP-IDF project (C) — Tasmota SML → MQTT → transform → Meshtastic envelope
-- **`custom_components/lotse_forecast/`**: HA integration (`integration_type: hub`) providing everything: per-node sensor creation from MQTT mesh messages, combined aggregation sensors, and `async_get_solar_forecast` for the Energy Dashboard. Replaces `auto-discovery-automation.yaml`, `mesh-combined-template.yaml`, and `mesh-combined-sensors.yaml` — no YAML files needed.
+- **`custom_components/lotse_forecast/`**: HA integration (`integration_type: hub`) providing everything: per-node sensor creation from MQTT mesh messages, combined aggregation sensors, `async_get_solar_forecast` for the Energy Dashboard, and auto-created LOTSE dashboard. Replaces `auto-discovery-automation.yaml`, `mesh-combined-template.yaml`, `mesh-combined-sensors.yaml`, and `lotse-dashboard.yaml` — no YAML files needed (v3.1+).
 
 ## Critical gotchas
 
