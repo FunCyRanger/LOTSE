@@ -219,6 +219,7 @@ blueprint:
         number:
           min: 0
           max: 90
+          mode: box
           unit_of_measurement: "°"
     panel_azimuth:
       name: Panel Azimuth (°)
@@ -228,11 +229,23 @@ blueprint:
         number:
           min: 0
           max: 360
+          mode: box
           unit_of_measurement: "°"
+    config_trigger:
+      name: Force Config Resend
+      description: >
+        Optional input_boolean helper. Toggle ON to immediately re-send
+        the config envelope (panel specs, battery capacity) to the mesh.
+        Leave empty if not needed.
+      default: ""
+      selector:
+        entity:
+          domain: input_boolean
 
 trigger_variables:
   interval: !input interval
   config_hour: !input config_hour
+  config_trigger: !input config_trigger
 trigger:
   - platform: homeassistant
     event: start
@@ -240,6 +253,9 @@ trigger:
   - platform: time_pattern
     minutes: "/1"
     id: tick
+  - platform: state
+    entity_id: !input config_trigger
+    id: config_requested
 
 action:
   - variables:
@@ -277,6 +293,7 @@ action:
       - condition: template
         value_template: >
           {{ trigger.id == 'boot'
+             or trigger.id == 'config_requested'
              or (now().minute % (interval | int) == 0
                  and now().hour == (config_hour | int)) }}
     then:

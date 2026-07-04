@@ -59,6 +59,15 @@ async def _get_weather_forecast(hass, weather_entity):
 def _get_panels(hass, entry):
     panels = []
 
+    def _sensor_or_default(sensor, default):
+        if sensor is None:
+            return default
+        raw = sensor.state
+        if raw in ("unknown", "unavailable", "none"):
+            return default
+        val = float(raw)
+        return val if val > 0 else default
+
     # Auto-discover mesh node panels
     for state in hass.states.async_all():
         m = re.match(r"^sensor\.node_(\d+)_sk$", state.entity_id)
@@ -70,11 +79,12 @@ def _get_panels(hass, entry):
         nid = m.group(1)
         sa = hass.states.get(f"sensor.node_{nid}_sa")
         sz = hass.states.get(f"sensor.node_{nid}_sz")
+
         panels.append({
             "name": f"Node {nid}",
             "kwp": kwp,
-            "angle": float(sa.state) if sa and sa.state not in ("unknown", "unavailable", "none") else 35,
-            "azimuth": float(sz.state) if sz and sz.state not in ("unknown", "unavailable", "none") else 180,
+            "angle": _sensor_or_default(sa, 35),
+            "azimuth": _sensor_or_default(sz, 180),
         })
 
     # Manual panels from config options

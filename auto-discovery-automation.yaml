@@ -551,4 +551,5 @@ action:
           retain: true
           topic: "lotse/config/{{ from }}/sz"
           payload: "{{ pp.sZ }}"
+max: 100
 mode: queued
