@@ -75,15 +75,23 @@ async def async_create_lovelace_dashboard(hass: HomeAssistant) -> None:
     dashboards = hass.data[LOVELACE_DOMAIN].dashboards
     if dashboards is None:
         return
-    for d in dashboards.async_items():
-        data = d.get("data", {})
+    if isinstance(dashboards, dict):
+        items = dashboards.values()
+    else:
+        items = dashboards.async_items()
+    for d in items:
+        conf = d if isinstance(d, dict) else {}
+        data = conf.get("data", {})
         if isinstance(data, dict) and data.get("title") == "LOTSE Neighborhood":
             return
-    try:
-        await dashboards.async_create_item({
-            "id": "lotse_neighborhood",
-            "data": DASHBOARD_CONFIG,
-        })
-        _LOGGER.info("Created LOTSE Neighborhood dashboard")
-    except Exception as exc:
-        _LOGGER.warning("Could not create LOTSE dashboard: %s", exc)
+    if isinstance(dashboards, dict):
+        dashboards["lotse_neighborhood"] = {"data": DASHBOARD_CONFIG}
+    else:
+        try:
+            await dashboards.async_create_item({
+                "id": "lotse_neighborhood",
+                "data": DASHBOARD_CONFIG,
+            })
+        except Exception as exc:
+            _LOGGER.warning("Could not create LOTSE dashboard: %s", exc)
+    _LOGGER.info("Created LOTSE Neighborhood dashboard")
