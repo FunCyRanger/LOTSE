@@ -27,6 +27,7 @@ Three codebases:
 pip install -r tests/requirements.txt    # pyyaml, jinja2, paho-mqtt
 
 python3 tests/test_mesh.py               # 49 template + roundtrip tests
+python3 tests/test_forecast_validation.py # 7 validation tests (formula + historical CSV)
 python3 tests/test_schema.py             # 11 schema tests
 python3 tests/test_e2e_mqtt.py           # requires Docker, auto-skipped
 python3 tests/check_installation.py --ha-url <url> --token <token>
