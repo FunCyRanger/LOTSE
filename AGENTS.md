@@ -3,7 +3,7 @@
 Three codebases:
 - **Root**: HA Jinja templates, YAML blueprints, Python tests
 - **`config-hub/`**: ESP-IDF project (C) — Tasmota SML → MQTT → transform → Meshtastic envelope
-- **`custom_components/lotse_forecast/`**: HA integration (`integration_type: service`) providing `async_get_solar_forecast` for Energy Dashboard
+- **`custom_components/lotse_forecast/`**: HA integration (`integration_type: service`) providing `async_get_solar_forecast` for Energy Dashboard. Computes forecast locally from weather entity (cloud cover, temperature, wind) + PV simulation model. Auto-discovers mesh node panels (`sensor.node_*_sk/sa/sz`) + supports manual panel config via options flow.
 
 ## Critical gotchas
 
@@ -59,11 +59,10 @@ Two jobs:
 |------|-------------|
 | `sender-blueprint.yaml` | Unit conversion: W→kW (*0.001), MW→kW (*1000), mV→V (*0.001), kV→V (*1000), Wh→kWh (*0.001), MWh→kWh (*1000). Clamping: power ±500, energy ≥0, bS/wS 0-100 int. Skips `unavailable`/`unknown`/`none`/`NaN`/`inf`/`-inf`. Config envelope on boot + daily via `lotse/config/{node}/<key>` direct topic (`retain: true`). Measurement topic: `msh/{region}/2/json/mqtt/{node}`. `mode: single`. |
 | `auto-discovery-automation.yaml` | Trigger: `msh/+/2/json/mqtt/+`. Extracts `from` (decimal from JSON), `sender` (hex from topic), `region`. Universal payload handler for dict/string. Config keys use `lotse/config/{from}/<key>` state_topic. `mode: queued`. |
-| `mesh-combined-template.yaml` | HA package template sensors (sums, averages); 18+ derived sensors via regex `node_\d+_gp$` etc. into `sensor.combined_mesh_*`. Includes `combined_mesh_gv1_max` (max neighbor voltage), `combined_mesh_export_ratio` (gep/sp, clamped ≥0), `solar_roughness_index` (CV% of solar power, cross-validated r=-0.957), and `forecast_correction_factor` (actual/forecast ratio with 0.7 EMA decay). Also defines EMA-smoothed forecast inputs (`*_forecast` sensors, α=0.1) to prevent jumps when nodes join/leave. Monotonic clean energy sensor `combined_mesh_se_clean`. |
-| `mesh-combined-sensors.yaml` | Additional sensor definitions (weighted SOC, derived). Split into `mesh-combined-*.yaml` package. |
-| `mesh-combined-rest.yaml` | Rest sensor for `api.forecast.solar` (aggregate PV forecast per neighborhood). |
+| `mesh-combined-template.yaml` | HA package template sensors (sums, averages); 14 measurement sensors via regex `node_\d+_gp$` etc. into `sensor.combined_mesh_*`. Includes `combined_mesh_gv1_max` (max neighbor voltage), `combined_mesh_export_ratio` (gep/sp, clamped ≥0), and monotonic clean energy `combined_mesh_se_clean`. |
+| `mesh-combined-sensors.yaml` | Additional sensor definitions (weighted SOC, derived, statistics helpers). Split into `mesh-combined-*.yaml` package. |
 | `lotse-dashboard.yaml` | HA dashboard YAML for the "LOTSE Neighborhood" view. |
-| `solarforecast-blueprint.yaml` | Template blueprint for per-household PV hourly forecast (uses weather entity, not forecast.solar). |
+| `solarforecast-blueprint.yaml` | Template blueprint for per-household PV hourly forecast (uses weather entity). |
 
 ## config-hub ESP-IDF project
 

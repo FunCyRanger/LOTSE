@@ -9,7 +9,6 @@
 # For a single-page view, import lotse-dashboard.yaml (see ha-setup.md Step 3).
 
 template: !include mesh-combined-template.yaml
-rest: !include mesh-combined-rest.yaml
 
 sensor:
   - platform: statistics

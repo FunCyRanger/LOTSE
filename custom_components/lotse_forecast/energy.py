@@ -1,10 +1,11 @@
+import math
+import re
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from homeassistant.core import HomeAssistant
 
 DOMAIN = "lotse_forecast"
-SENSOR_ENTITY = "sensor.solar_forecast_hourly_raw"
 
 
 async def async_get_solar_forecast(
@@ -14,32 +15,165 @@ async def async_get_solar_forecast(
     if entry is None or entry.domain != DOMAIN:
         return None
 
-    state = hass.states.get(SENSOR_ENTITY)
-    if state is None:
+    weather_entity = entry.data.get("weather_entity")
+    if not weather_entity:
         return None
 
-    wh_dict = state.attributes.get("result")
-    if not wh_dict or not isinstance(wh_dict, dict):
+    forecast = await _get_weather_forecast(hass, weather_entity)
+    if not forecast:
         return None
 
+    panels = _get_panels(hass, entry)
+    if not panels:
+        return None
+
+    lat = hass.config.latitude
     tz = ZoneInfo(hass.config.time_zone)
-    result: dict[str, float | int] = {}
-    prev = 0
 
-    for ts_str in sorted(wh_dict.keys()):
-        val = wh_dict[ts_str]
-        if not isinstance(val, (int, float)):
+    return {"wh_hours": _compute_forecast(forecast, panels, lat, tz)}
+
+
+async def _get_weather_forecast(hass, weather_entity):
+    try:
+        result = await hass.services.async_call(
+            "weather",
+            "get_forecasts",
+            {"entity_id": weather_entity, "type": "hourly"},
+            blocking=True,
+            return_response=True,
+        )
+    except Exception:
+        return None
+
+    if not result or weather_entity not in result:
+        return None
+
+    raw = result[weather_entity]
+    if isinstance(raw, dict):
+        return raw.get("forecast") or raw.get("Forecast")
+    if hasattr(raw, "forecast"):
+        return raw.forecast
+    return None
+
+
+def _get_panels(hass, entry):
+    panels = []
+
+    # Auto-discover mesh node panels
+    for state in hass.states.async_all():
+        m = re.match(r"^sensor\.node_(\d+)_sk$", state.entity_id)
+        if not m:
             continue
-        wh = int(val)
-        if wh < prev:
-            prev = 0
+        kwp = float(state.state)
+        if kwp <= 0:
+            continue
+        nid = m.group(1)
+        sa = hass.states.get(f"sensor.node_{nid}_sa")
+        sz = hass.states.get(f"sensor.node_{nid}_sz")
+        panels.append({
+            "name": f"Node {nid}",
+            "kwp": kwp,
+            "angle": float(sa.state) if sa and sa.state not in ("unknown", "unavailable", "none") else 35,
+            "azimuth": float(sz.state) if sz and sz.state not in ("unknown", "unavailable", "none") else 180,
+        })
+
+    # Manual panels from config options
+    manual = entry.options.get("panels", [])
+    for p in manual:
+        kwp = float(p.get("kwp", 0))
+        if kwp <= 0:
+            continue
+        panels.append({
+            "name": p.get("name", "Manual"),
+            "kwp": kwp,
+            "angle": int(p.get("angle", 35)),
+            "azimuth": int(p.get("azimuth", 180)),
+        })
+
+    return panels
+
+
+def _compute_forecast(forecast, panels, lat, tz):
+    wh_hours = {}
+
+    for entry in forecast:
+        dt_raw = entry.get("datetime") or entry.get("DateTime")
+        if not dt_raw:
+            continue
+
         try:
-            dt = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=tz)
+            if isinstance(dt_raw, str):
+                dt = datetime.fromisoformat(dt_raw).replace(tzinfo=tz)
+            elif isinstance(dt_raw, datetime):
+                dt = dt_raw.replace(tzinfo=tz) if dt_raw.tzinfo is None else dt_raw
+            else:
+                continue
         except (ValueError, TypeError):
             continue
-        period_wh = wh - prev
-        if 0 < period_wh < 50000:
-            result[dt.isoformat()] = period_wh
-        prev = wh
 
-    return {"wh_hours": result}
+        cloud = _float_or(entry.get("cloud_cover") or entry.get("CloudCover"), 50)
+        temp = _float_or(entry.get("temperature") or entry.get("Temperature"), 20)
+        wind = _float_or(entry.get("wind_speed") or entry.get("WindSpeed"), 5)
+
+        dayofyear = dt.timetuple().tm_yday
+        hour = dt.hour
+        altitude = _solar_altitude(lat, dayofyear, hour)
+        ghi = _clear_sky_ghi(altitude)
+
+        total_wh = 0
+        for panel in panels:
+            kw = _panel_output(
+                panel["kwp"], ghi, cloud,
+                panel["azimuth"], panel["angle"],
+                temp, wind,
+            )
+            total_wh += kw * 1000
+
+        if total_wh > 0:
+            wh_hours[dt.isoformat()] = int(round(total_wh))
+
+    return wh_hours
+
+
+def _solar_altitude(lat, dayofyear, hour):
+    hour_angle = (hour - 12) * 15
+    decl = math.radians(23.45 * math.sin(math.radians(360 / 365 * (dayofyear - 81))))
+    lat_r = math.radians(lat)
+    ha_r = math.radians(hour_angle)
+
+    cos_zenith = (
+        math.sin(lat_r) * math.sin(decl)
+        + math.cos(lat_r) * math.cos(decl) * math.cos(ha_r)
+    )
+    cos_zenith = max(-1, min(1, cos_zenith))
+    zenith = math.acos(cos_zenith)
+    return max(0, 90 - math.degrees(zenith))
+
+
+def _clear_sky_ghi(altitude):
+    return max(0, 1000 * math.sin(math.radians(altitude)))
+
+
+def _panel_output(kwp, ghi, cloud_cover, azimuth, tilt, temp, wind):
+    efficiency = 0.86
+    temp_coeff = -0.004
+
+    cloud_factor = max(0.05, 1 - 0.75 * cloud_cover / 100)
+    orientation = max(
+        0.25,
+        min(1.1, (math.cos(math.radians(azimuth - 180)) * 0.65 + 0.35)
+            * (math.cos(math.radians(tilt)) ** 0.75)),
+    )
+    wind_factor = 1.0 if wind < 10 else 0.95
+    temp_factor = max(0.7, 1 + temp_coeff * (temp - 25))
+
+    return kwp * ghi / 1000 * cloud_factor * orientation * wind_factor * efficiency * temp_factor
+
+
+def _float_or(val, default):
+    if val is None:
+        return default
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return default

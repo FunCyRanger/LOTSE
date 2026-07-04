@@ -219,53 +219,6 @@
            | selectattr('entity_id', 'search', 'node_\\d+_bc$') | list %}
         {{ entities | length }}
 
-    # --- Forecast.Solar: weighted combined plane ---
-
-    - name: "Combined Solar Panel Angle"
-      unique_id: "combined_solar_panel_angle"
-      unit_of_measurement: "°"
-      state_class: "measurement"
-      state: >
-        {% set ns = namespace(total_kwp=0, weighted=0) %}
-        {% for s in expand(states.sensor) | selectattr('entity_id', 'search', 'node_\\d+_sk$') %}
-          {% set kwp = s.state | float(0) %}
-          {% if kwp > 0 %}
-            {% set nid = s.entity_id
-               | regex_replace(find='^sensor\\.node_(\\d+)_sk$', replace='\\1', ignorecase=False) %}
-            {% set ang = states('sensor.node_' ~ nid ~ '_sa') | float(0) %}
-            {% set ns.weighted = ns.weighted + kwp * ang %}
-            {% set ns.total_kwp = ns.total_kwp + kwp %}
-          {% endif %}
-        {% endfor %}
-        {{ (ns.weighted / ns.total_kwp) | round(1) if ns.total_kwp > 0 else 0 }}
-
-    - name: "Combined Solar Panel Azimuth"
-      unique_id: "combined_solar_panel_azimuth"
-      unit_of_measurement: "°"
-      state_class: "measurement"
-      state: >
-        {% set ns = namespace(total_kwp=0, weighted=0) %}
-        {% for s in expand(states.sensor) | selectattr('entity_id', 'search', 'node_\\d+_sk$') %}
-          {% set kwp = s.state | float(0) %}
-          {% if kwp > 0 %}
-            {% set nid = s.entity_id
-               | regex_replace(find='^sensor\\.node_(\\d+)_sk$', replace='\\1', ignorecase=False) %}
-            {% set az = states('sensor.node_' ~ nid ~ '_sz') | float(0) %}
-            {% set ns.weighted = ns.weighted + kwp * az %}
-            {% set ns.total_kwp = ns.total_kwp + kwp %}
-          {% endif %}
-        {% endfor %}
-        {{ (ns.weighted / ns.total_kwp) | round(1) if ns.total_kwp > 0 else 0 }}
-
-    - name: "Solar Forecast Utilization"
-      unique_id: "solar_forecast_utilization"
-      unit_of_measurement: "%"
-      state_class: "measurement"
-      state: >
-        {% set actual = states('sensor.combined_mesh_se') | float(0) %}
-        {% set forecast = states('sensor.solar_forecast_today') | float(0) %}
-        {{ (actual / forecast * 100) | round(1) if forecast > 0 else 0 }}
-
 # Energy Dashboard solar production sensor.
 # Forecast data is provided by the lotse_forecast custom integration (energy.py).
 - trigger:
@@ -280,8 +233,6 @@
       state: >
         {{ states('sensor.combined_mesh_se') | float(0) | round(2) }}
 
-    # --- Improved forecast inputs (EMA-smoothed to prevent jumps) ---
-
     - name: "Combined Mesh Solar Energy Clean"
       unique_id: "combined_mesh_se_clean"
       unit_of_measurement: "kWh"
@@ -291,85 +242,6 @@
         {% set raw = states('sensor.combined_mesh_se') | float(0) %}
         {% set prev = states('sensor.combined_mesh_se_clean') | float(0) %}
         {{ raw if raw >= prev else prev }}
-
-    - name: "Combined Solar Capacity Forecast"
-      unique_id: "combined_solar_capacity_forecast"
-      unit_of_measurement: "kW"
-      device_class: "power"
-      state_class: "measurement"
-      state: >
-        {% set raw = states('sensor.combined_mesh_solar_capacity') | float(0) %}
-        {% set prev = states('sensor.combined_solar_capacity_forecast') | float(-1) %}
-        {% if prev < 0 %}{% set prev = raw %}{% endif %}
-        {{ (prev * 0.9 + raw * 0.1) | round(2) }}
-
-    - name: "Combined Solar Panel Angle Forecast"
-      unique_id: "combined_solar_panel_angle_forecast"
-      unit_of_measurement: "°"
-      state_class: "measurement"
-      state: >
-        {% set raw = states('sensor.combined_solar_panel_angle') | float(0) %}
-        {% set prev = states('sensor.combined_solar_panel_angle_forecast') | float(-1) %}
-        {% if prev < 0 %}{% set prev = raw %}{% endif %}
-        {{ (prev * 0.9 + raw * 0.1) | round(1) }}
-
-    - name: "Combined Solar Panel Azimuth Forecast"
-      unique_id: "combined_solar_panel_azimuth_forecast"
-      unit_of_measurement: "°"
-      state_class: "measurement"
-      state: >
-        {% set raw = states('sensor.combined_solar_panel_azimuth') | float(0) %}
-        {% set prev = states('sensor.combined_solar_panel_azimuth_forecast') | float(-1) %}
-        {% if prev < 0 %}{% set prev = raw %}{% endif %}
-        {{ (prev * 0.9 + raw * 0.1) | round(1) }}
-
-    # --- Historical error correction factor ---
-    # Computes EMA of (actual_energy / forecast) daily at 23:30.
-    # The correction factor sensor re-evaluates whenever combined_mesh_se_clean
-    # or solar_forecast_today changes.
-
-    - name: "Forecast Correction Factor"
-      unique_id: "forecast_correction_factor"
-      state: >
-        {% set prev = states('sensor.forecast_correction_factor') | float(1.5) %}
-        {% set prev_actual = state_attr('sensor.forecast_correction_factor', 'stored_actual') | float(0) %}
-        {% set prev_date = state_attr('sensor.forecast_correction_factor', 'update_date') | default('') %}
-        {% set prev_forecast = state_attr('sensor.forecast_correction_factor', 'stored_forecast') | float(1) %}
-        {% set today_actual = states('sensor.combined_mesh_se_clean') | float(0) %}
-        {% set today_forecast = states('sensor.solar_forecast_today') | float(1) %}
-        {% set today_str = now().strftime('%Y-%m-%d') %}
-        {% if today_str != prev_date and prev_actual > 0 and prev_forecast > 0 %}
-          {% set daily_ratio = (today_actual - prev_actual) / prev_forecast %}
-          {% if daily_ratio > 0 and daily_ratio < 3 %}
-            {{ (prev * 0.7 + daily_ratio * 0.3) | round(3) }}
-          {% else %}
-            {{ prev }}
-          {% endif %}
-        {% else %}
-          {{ prev }}
-        {% endif %}
-      attributes:
-        stored_actual: "{{ states('sensor.combined_mesh_se_clean') | float(0) }}"
-        stored_forecast: "{{ today_forecast }}"
-        update_date: "{{ now().strftime('%Y-%m-%d') }}"
-
-    # --- Solar roughness index (CV of power over rolling 15-min window) ---
-    # High value = broken clouds / choppy power; low value = clear / steady.
-    # Cross-validated against solarhistory.csv: Pearson r = -0.957 with yield.
-
-    - name: "Solar Roughness Index"
-      unique_id: "solar_roughness_index"
-      unit_of_measurement: "%"
-      state_class: "measurement"
-      state: >
-        {% set stddev = states('sensor.solar_power_std_dev') | float(0) %}
-        {% set mean = states('sensor.solar_power_mean') | float(0) %}
-        {% set cap = states('sensor.combined_solar_capacity_forecast') | float(9.3) %}
-        {% if mean > 0.05 * cap %}
-          {{ ((stddev / mean) * 100) | round(1) }}
-        {% else %}
-          0
-        {% endif %}
 
     # --- Transformer stress indicators ---
 
