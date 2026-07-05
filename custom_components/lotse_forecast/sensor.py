@@ -35,6 +35,10 @@ def _min(mesh: MeshData, key: str) -> float:
 
 
 COMBINED_FNS: dict[str, Callable[[MeshData], float]] = {
+    # Power sums (useful for situational awareness despite async timing)
+    "combined_mesh_gp": lambda m: _sum(m, "gp"),
+    "combined_mesh_sp": lambda m: _sum(m, "sp"),
+    "combined_mesh_bp": lambda m: _sum(m, "bp"),
     # Cumulative energy (valid — monotonically increasing)
     "combined_mesh_gei": lambda m: _sum(m, "gei"),
     "combined_mesh_geo": lambda m: _sum(m, "geo"),

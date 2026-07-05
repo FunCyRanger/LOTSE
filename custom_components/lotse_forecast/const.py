@@ -51,6 +51,10 @@ NODE_KEY_META: dict[str, dict] = {
 }
 
 COMBINED_KEY_META: dict[str, dict] = {
+    # Power sums (useful for situational awareness despite async timing)
+    "combined_mesh_gp": {"unit": "kW",  "device_class": "power",     "state_class": "measurement",       "name": "Combined Mesh Grid Power"},
+    "combined_mesh_sp": {"unit": "kW",  "device_class": "power",     "state_class": "measurement",       "name": "Combined Mesh Solar Power"},
+    "combined_mesh_bp": {"unit": "kW",  "device_class": "power",     "state_class": "measurement",       "name": "Combined Mesh Battery Power"},
     # Cumulative energy (valid — monotonically increasing)
     "combined_mesh_gei": {"unit": "kWh", "device_class": "energy",    "state_class": "total_increasing",  "name": "Combined Mesh Grid Import"},
     "combined_mesh_geo": {"unit": "kWh", "device_class": "energy",    "state_class": "total_increasing",  "name": "Combined Mesh Grid Export"},

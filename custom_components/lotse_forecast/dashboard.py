@@ -17,6 +17,15 @@ DASHBOARD_CONFIG = {
             "cards": [
                 {
                     "type": "entities",
+                    "title": "Power Snapshot",
+                    "entities": [
+                        "sensor.combined_mesh_gp",
+                        "sensor.combined_mesh_sp",
+                        "sensor.combined_mesh_bp",
+                    ],
+                },
+                {
+                    "type": "entities",
                     "title": "Frequency",
                     "entities": [
                         "sensor.combined_mesh_gf_avg",
