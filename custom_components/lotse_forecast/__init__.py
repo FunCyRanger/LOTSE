@@ -196,6 +196,7 @@ def _safe_float(v: Any) -> float | None:
 
 
 async def async_setup_entry(hass: HomeAssistant, config_entry) -> bool:
+    hass.config.top_level_components.add(DOMAIN)
     hass.data.setdefault(DOMAIN, {})
     mesh = MeshData(hass)
     hass.data[DOMAIN][config_entry.entry_id] = mesh

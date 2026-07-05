@@ -14,19 +14,32 @@ _LOGGER = logging.getLogger(__name__)
 async def async_get_solar_forecast(
     hass: HomeAssistant, config_entry_id: str
 ) -> dict[str, dict[str, float | int]] | None:
+    _LOGGER.debug("Forecast: called for entry %s", config_entry_id)
+
     entry = hass.config_entries.async_get_entry(config_entry_id)
-    if entry is None or entry.domain != DOMAIN:
-        _LOGGER.debug("Forecast: entry %s not found or wrong domain", config_entry_id)
+    if entry is None:
+        _LOGGER.debug("Forecast: entry %s not found in registry", config_entry_id)
+        return None
+    if entry.domain != DOMAIN:
+        _LOGGER.debug(
+            "Forecast: entry %s domain is %s, not %s",
+            config_entry_id, entry.domain, DOMAIN,
+        )
         return None
 
     weather_entity = entry.options.get("weather_entity") or entry.data.get("weather_entity")
     if not weather_entity:
-        _LOGGER.debug("Forecast: no weather_entity configured for entry %s", config_entry_id)
+        _LOGGER.debug(
+            "Forecast: no weather_entity in options=%s or data=%s for entry %s",
+            entry.options.get("weather_entity"),
+            entry.data.get("weather_entity"),
+            config_entry_id,
+        )
         return None
 
     forecast = await _get_weather_forecast(hass, weather_entity)
     if not forecast:
-        _LOGGER.debug("Forecast: no forecast data from %s", weather_entity)
+        _LOGGER.debug("Forecast: no forecast data from weather_entity %s", weather_entity)
         return None
 
     panels = _get_panels(hass, entry)
@@ -37,7 +50,12 @@ async def async_get_solar_forecast(
     lat = hass.config.latitude
     tz = ZoneInfo(hass.config.time_zone)
 
-    return {"wh_hours": _compute_forecast(forecast, panels, lat, tz)}
+    wh_hours = _compute_forecast(forecast, panels, lat, tz)
+    _LOGGER.debug(
+        "Forecast: returning %d wh_hours for entry %s (%d panels, weather=%s)",
+        len(wh_hours), config_entry_id, len(panels), weather_entity,
+    )
+    return {"wh_hours": wh_hours}
 
 
 async def _get_weather_forecast(hass, weather_entity):
@@ -49,7 +67,8 @@ async def _get_weather_forecast(hass, weather_entity):
             blocking=True,
             return_response=True,
         )
-    except Exception:
+    except Exception as exc:
+        _LOGGER.debug("Forecast: weather service call failed: %s", exc)
         return None
 
     if not result or weather_entity not in result:
@@ -127,6 +146,8 @@ def _get_panels(hass, entry):
             "azimuth": int(p.get("azimuth", 180)),
         })
 
+    _LOGGER.debug("Forecast: _get_panels found %d panels (%d auto, %d manual)",
+                   len(panels), len(seen_nodes), len(manual))
     return panels
 
 
