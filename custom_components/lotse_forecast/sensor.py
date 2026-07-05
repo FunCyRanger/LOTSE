@@ -29,45 +29,47 @@ def _max(mesh: MeshData, key: str) -> float:
     return round(max(vals), 1) if vals else 0.0
 
 
+def _min(mesh: MeshData, key: str) -> float:
+    vals = mesh.get_all_values(key)
+    return round(min(vals), 1) if vals else 0.0
+
+
 COMBINED_FNS: dict[str, Callable[[MeshData], float]] = {
-    "combined_mesh_gp": lambda m: _sum(m, "gp"),
-    "combined_mesh_gip": lambda m: _sum(m, "gip"),
-    "combined_mesh_gep": lambda m: _sum(m, "gep"),
-    "combined_mesh_gp1": lambda m: _sum(m, "gp1"),
-    "combined_mesh_gp2": lambda m: _sum(m, "gp2"),
-    "combined_mesh_gp3": lambda m: _sum(m, "gp3"),
-    "combined_mesh_gv1": lambda m: _sum(m, "gv1"),
+    # Cumulative energy (valid — monotonically increasing)
     "combined_mesh_gei": lambda m: _sum(m, "gei"),
     "combined_mesh_geo": lambda m: _sum(m, "geo"),
-    "combined_mesh_sp": lambda m: _sum(m, "sp"),
     "combined_mesh_se": lambda m: _sum(m, "se"),
-    "combined_mesh_bp": lambda m: _sum(m, "bp"),
-    "combined_mesh_bs": lambda m: _avg(m, "bs"),
-    "combined_mesh_battery_capacity": lambda m: _sum(m, "bc"),
-    "combined_mesh_solar_capacity": lambda m: _sum(m, "sk"),
-    "combined_mesh_participants": lambda m: float(sum(1 for v in m.get_all_values("gip") if v)),
-    "combined_mesh_config_ready": lambda m: float(len(m.get_all_values("bc"))),
-    "combined_mesh_total_solar_generation": lambda m: _sum(m, "sp"),
-    "combined_solar_utilization": lambda m: (
-        round(sp / sk * 100, 1)
-        if (sk := sum(m.get_all_values("sk"))) > 0 and (sp := sum(m.get_all_values("sp"))) is not None
-        else 0.0
-    ),
-    "combined_mesh_self_consumption_rate": lambda m: (
-        round((1 - gep / sp) * 100, 1)
-        if (sp := sum(m.get_all_values("sp"))) > 0.1 and (gep := sum(m.get_all_values("gep"))) is not None
-        else 0.0
-    ),
+    "combined_mesh_se_clean": lambda m: _se_clean(m),
     "combined_mesh_bei": lambda m: _sum(m, "bei"),
     "combined_mesh_beo": lambda m: _sum(m, "beo"),
+    # Static config (valid — doesn't change between reports)
+    "combined_mesh_battery_capacity": lambda m: _sum(m, "bc"),
+    "combined_mesh_solar_capacity": lambda m: _sum(m, "sk"),
+    # Slow-changing averages (valid — SOC changes slowly)
+    "combined_mesh_bs": lambda m: _avg(m, "bs"),
     "combined_mesh_soc_weighted": lambda m: _weighted_soc(m),
+    # Counters (timeless)
+    "combined_mesh_participants": lambda m: float(sum(1 for v in m.get_all_values("gip") if v)),
+    "combined_mesh_config_ready": lambda m: float(len(m.get_all_values("bc"))),
+    # Grid-coherent stats (valid — same physical grid, averages filter noise)
     "combined_mesh_gv1_max": lambda m: _max(m, "gv1"),
-    "combined_mesh_export_ratio": lambda m: (
-        round(max(gep / sp, 0), 2)
-        if (sp := sum(m.get_all_values("sp"))) > 0.1 and (gep := sum(m.get_all_values("gep"))) is not None
-        else 0.0
-    ),
-    "combined_mesh_se_clean": lambda m: _se_clean(m),
+    "combined_mesh_gv1_min": lambda m: _min(m, "gv1"),
+    "combined_mesh_gv2_max": lambda m: _max(m, "gv2"),
+    "combined_mesh_gv2_min": lambda m: _min(m, "gv2"),
+    "combined_mesh_gv3_max": lambda m: _max(m, "gv3"),
+    "combined_mesh_gv3_min": lambda m: _min(m, "gv3"),
+    "combined_mesh_gf_avg": lambda m: _avg(m, "gf"),
+    "combined_mesh_gf_min": lambda m: _min(m, "gf"),
+    "combined_mesh_gf_max": lambda m: _max(m, "gf"),
+    "combined_mesh_gpf_avg": lambda m: _avg(m, "gpf"),
+    # Phase current sums (approximate snapshot — useful for phase balance)
+    "combined_mesh_ga1_sum": lambda m: _sum(m, "ga1"),
+    "combined_mesh_ga2_sum": lambda m: _sum(m, "ga2"),
+    "combined_mesh_ga3_sum": lambda m: _sum(m, "ga3"),
+    # Reactive and apparent power (new protocol keys)
+    "combined_mesh_gq_sum": lambda m: _sum(m, "gq"),
+    "combined_mesh_gs_sum": lambda m: _sum(m, "gs"),
+    # Forecast
     "solar_production_forecast": lambda m: _sum(m, "se"),
 }
 

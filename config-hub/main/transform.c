@@ -29,6 +29,8 @@ int transform_parse_script(const char *script, var_mapping_t *mappings, int max)
     static const char *energy_slots[] = {"gEI", "gEO", NULL};
     static const char *voltage_slots[] = {"gV1", "gV2", "gV3", NULL};
     static const char *current_slots[] = {"gA1", "gA2", "gA3", NULL};
+    static const char *reactive_slots[] = {"gQ", "gQ1", "gQ2", "gQ3", NULL};
+    static const char *apparent_slots[] = {"gS", "gS1", "gS2", "gS3", NULL};
 
     int count = 0;
     const char *p = script;
@@ -119,6 +121,20 @@ int transform_parse_script(const char *script, var_mapping_t *mappings, int max)
                 else                       assigned = first_unused_slot(power_slots, mappings, count);
             } else if (strcasestr(mappings[count].unit, "Wh")) {
                 assigned = first_unused_slot(energy_slots, mappings, count);
+            } else if (strcmp(mappings[count].unit, "VAr") == 0) {
+                const char *nm = mappings[count].label;
+                if (!nm[0]) nm = mappings[count].var_name;
+                if      (strstr(nm, "L1")) assigned = key_already_used(mappings, count, "gQ1") ? NULL : "gQ1";
+                else if (strstr(nm, "L2")) assigned = key_already_used(mappings, count, "gQ2") ? NULL : "gQ2";
+                else if (strstr(nm, "L3")) assigned = key_already_used(mappings, count, "gQ3") ? NULL : "gQ3";
+                else                       assigned = first_unused_slot(reactive_slots, mappings, count);
+            } else if (strcmp(mappings[count].unit, "VA") == 0) {
+                const char *nm = mappings[count].label;
+                if (!nm[0]) nm = mappings[count].var_name;
+                if      (strstr(nm, "L1")) assigned = key_already_used(mappings, count, "gS1") ? NULL : "gS1";
+                else if (strstr(nm, "L2")) assigned = key_already_used(mappings, count, "gS2") ? NULL : "gS2";
+                else if (strstr(nm, "L3")) assigned = key_already_used(mappings, count, "gS3") ? NULL : "gS3";
+                else                       assigned = first_unused_slot(apparent_slots, mappings, count);
             } else if (strcasestr(mappings[count].unit, "V") && strlen(mappings[count].unit) <= 2) {
                 const char *nm = mappings[count].label;
                 if (!nm[0]) nm = mappings[count].var_name;

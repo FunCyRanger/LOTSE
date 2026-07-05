@@ -11,35 +11,86 @@ DASHBOARD_CONFIG = {
     "title": "LOTSE Neighborhood",
     "views": [
         {
-            "title": "Combined Mesh",
-            "path": "combined-mesh",
+            "title": "Grid Stability",
+            "path": "grid-stability",
             "badges": [],
             "cards": [
                 {
                     "type": "entities",
-                    "title": "Grid Power",
+                    "title": "Frequency",
                     "entities": [
-                        "sensor.combined_mesh_gp",
-                        "sensor.combined_mesh_gip",
-                        "sensor.combined_mesh_gep",
+                        "sensor.combined_mesh_gf_avg",
+                        "sensor.combined_mesh_gf_min",
+                        "sensor.combined_mesh_gf_max",
+                    ],
+                },
+                {
+                    "type": "entities",
+                    "title": "Voltage L1",
+                    "entities": [
+                        "sensor.combined_mesh_gv1_max",
+                        "sensor.combined_mesh_gv1_min",
+                    ],
+                },
+                {
+                    "type": "entities",
+                    "title": "Voltage L2 / L3",
+                    "entities": [
+                        "sensor.combined_mesh_gv2_max",
+                        "sensor.combined_mesh_gv2_min",
+                        "sensor.combined_mesh_gv3_max",
+                        "sensor.combined_mesh_gv3_min",
+                    ],
+                },
+                {
+                    "type": "entities",
+                    "title": "Phase Currents & Power Factor",
+                    "entities": [
+                        "sensor.combined_mesh_ga1_sum",
+                        "sensor.combined_mesh_ga2_sum",
+                        "sensor.combined_mesh_ga3_sum",
+                        "sensor.combined_mesh_gpf_avg",
+                    ],
+                },
+                {
+                    "type": "entities",
+                    "title": "Reactive & Apparent Power",
+                    "entities": [
+                        "sensor.combined_mesh_gq_sum",
+                        "sensor.combined_mesh_gs_sum",
+                    ],
+                },
+            ],
+        },
+        {
+            "title": "Cumulative Energy",
+            "path": "cumulative-energy",
+            "badges": [],
+            "cards": [
+                {
+                    "type": "entities",
+                    "title": "Grid (add to Energy Dashboard)",
+                    "entities": [
+                        "sensor.combined_mesh_gei",
+                        "sensor.combined_mesh_geo",
                     ],
                 },
                 {
                     "type": "entities",
                     "title": "Solar",
                     "entities": [
-                        "sensor.combined_mesh_sp",
+                        "sensor.combined_mesh_se",
+                        "sensor.combined_mesh_se_clean",
                         "sensor.combined_mesh_solar_capacity",
-                        "sensor.combined_solar_utilization",
                     ],
                 },
                 {
                     "type": "entities",
-                    "title": "Cumulative Energy (add to Energy Dashboard)",
+                    "title": "Battery",
                     "entities": [
-                        "sensor.combined_mesh_gei",
-                        "sensor.combined_mesh_geo",
-                        "sensor.combined_mesh_se",
+                        "sensor.combined_mesh_bei",
+                        "sensor.combined_mesh_beo",
+                        "sensor.combined_mesh_battery_capacity",
                     ],
                 },
                 {
@@ -48,8 +99,6 @@ DASHBOARD_CONFIG = {
                     "entities": [
                         "sensor.combined_mesh_bs",
                         "sensor.combined_mesh_soc_weighted",
-                        "sensor.combined_mesh_battery_capacity",
-                        "sensor.combined_mesh_self_consumption_rate",
                         "sensor.combined_mesh_participants",
                         "sensor.combined_mesh_config_ready",
                     ],

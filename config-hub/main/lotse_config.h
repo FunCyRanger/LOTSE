@@ -10,7 +10,7 @@
 #define MAX_CLIENT_ID_LEN   64
 #define MAX_TOPIC_LEN       128
 #define MAX_METERS          5
-#define MAX_MAPPINGS        29
+#define MAX_MAPPINGS        37
 #define MAX_MQTT_CLIENTS    8
 #define MQTT_BROKER_PORT    1883
 #define WEB_SERVER_PORT     80
@@ -66,6 +66,10 @@ typedef enum {
     // Grid electrical quality keys (current, frequency, power factor)
     LOTSE_KEY_GA1, LOTSE_KEY_GA2, LOTSE_KEY_GA3,
     LOTSE_KEY_GF, LOTSE_KEY_GPF,
+    // Reactive power (VAr) — total and per-phase
+    LOTSE_KEY_GQ, LOTSE_KEY_GQ1, LOTSE_KEY_GQ2, LOTSE_KEY_GQ3,
+    // Apparent power (VA) — total and per-phase
+    LOTSE_KEY_GS, LOTSE_KEY_GS1, LOTSE_KEY_GS2, LOTSE_KEY_GS3,
     // Config keys (static metadata, not measurement data)
     LOTSE_KEY_BC, LOTSE_KEY_SK, LOTSE_KEY_SA, LOTSE_KEY_SZ,
     LOTSE_KEY_COUNT

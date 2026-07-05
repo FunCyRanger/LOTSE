@@ -633,50 +633,81 @@ def test_combined_weighted_soc_empty():
     assert _weighted_soc(_MockMeshData()) == 0.0
 
 
-def test_combined_utilization():
-    """solar_utilization: sp=3.5, sk=5.0 → 70%."""
+def test_combined_min():
+    """_min helper: 3 values → correct min."""
+    from custom_components.lotse_forecast.sensor import _min
+    m = _MockMeshData()
+    m.set_values("gv1", [230.0, 245.0, 238.5])
+    assert abs(_min(m, "gv1") - 230.0) < 0.1
+
+
+def test_combined_min_empty():
+    """_min helper: empty → 0."""
+    from custom_components.lotse_forecast.sensor import _min
+    assert _min(_MockMeshData(), "gv1") == 0.0
+
+
+def test_combined_gf_avg():
+    """gf_avg: 3 values → correct average."""
     from custom_components.lotse_forecast.sensor import COMBINED_FNS
     m = _MockMeshData()
-    m.set_values("sp", [3.5])
-    m.set_values("sk", [5.0])
-    fn = COMBINED_FNS["combined_solar_utilization"]
-    assert abs(fn(m) - 70.0) < 0.1
+    m.set_values("gf", [50.0, 50.02, 49.98])
+    fn = COMBINED_FNS["combined_mesh_gf_avg"]
+    assert abs(fn(m) - 50.0) < 0.1
 
 
-def test_combined_utilization_no_capacity():
-    """solar_utilization: no sk → 0."""
-    from custom_components.lotse_forecast.sensor import COMBINED_FNS
-    assert COMBINED_FNS["combined_solar_utilization"](_MockMeshData()) == 0.0
-
-
-def test_combined_export_ratio():
-    """export_ratio: gep=0.5, sp=3.5 → 0.14."""
+def test_combined_gf_min_max():
+    """gf_min/gf_max: correct bounds."""
     from custom_components.lotse_forecast.sensor import COMBINED_FNS
     m = _MockMeshData()
-    m.set_values("sp", [3.5])
-    m.set_values("gep", [0.5])
-    fn = COMBINED_FNS["combined_mesh_export_ratio"]
-    assert abs(fn(m) - 0.14) < 0.01
+    m.set_values("gf", [50.0, 50.1, 49.9])
+    assert abs(COMBINED_FNS["combined_mesh_gf_min"](m) - 49.9) < 0.1
+    assert abs(COMBINED_FNS["combined_mesh_gf_max"](m) - 50.1) < 0.1
 
 
-def test_combined_export_ratio_zero():
-    """export_ratio: sp=0 → 0."""
+def test_combined_gpf_avg():
+    """gpf_avg: 3 values → correct average."""
     from custom_components.lotse_forecast.sensor import COMBINED_FNS
     m = _MockMeshData()
-    m.set_values("sp", [0])
-    m.set_values("gep", [0.5])
-    fn = COMBINED_FNS["combined_mesh_export_ratio"]
-    assert fn(m) == 0.0
+    m.set_values("gpf", [95.0, 97.0, 96.0])
+    assert abs(COMBINED_FNS["combined_mesh_gpf_avg"](m) - 96.0) < 0.1
 
 
-def test_combined_self_consumption():
-    """self_consumption_rate: sp=3.5, gep=0.5 → 85.7%."""
+def test_combined_voltage_min_max():
+    """gv1/gv2/gv3 min and max: correct bounds."""
     from custom_components.lotse_forecast.sensor import COMBINED_FNS
     m = _MockMeshData()
-    m.set_values("sp", [3.5])
-    m.set_values("gep", [0.5])
-    fn = COMBINED_FNS["combined_mesh_self_consumption_rate"]
-    assert abs(fn(m) - 85.7) < 0.1
+    m.set_values("gv1", [230.0, 245.0, 238.5])
+    m.set_values("gv2", [229.0, 231.0])
+    m.set_values("gv3", [228.0, 232.0, 230.0])
+    assert abs(COMBINED_FNS["combined_mesh_gv1_min"](m) - 230.0) < 0.1
+    assert abs(COMBINED_FNS["combined_mesh_gv1_max"](m) - 245.0) < 0.1
+    assert abs(COMBINED_FNS["combined_mesh_gv2_min"](m) - 229.0) < 0.1
+    assert abs(COMBINED_FNS["combined_mesh_gv2_max"](m) - 231.0) < 0.1
+    assert abs(COMBINED_FNS["combined_mesh_gv3_min"](m) - 228.0) < 0.1
+    assert abs(COMBINED_FNS["combined_mesh_gv3_max"](m) - 232.0) < 0.1
+
+
+def test_combined_phase_currents():
+    """ga1/ga2/ga3 sum: correct totals."""
+    from custom_components.lotse_forecast.sensor import COMBINED_FNS
+    m = _MockMeshData()
+    m.set_values("ga1", [10.0, 12.0])
+    m.set_values("ga2", [9.5, 11.5])
+    m.set_values("ga3", [10.5, 11.0])
+    assert abs(COMBINED_FNS["combined_mesh_ga1_sum"](m) - 22.0) < 0.1
+    assert abs(COMBINED_FNS["combined_mesh_ga2_sum"](m) - 21.0) < 0.1
+    assert abs(COMBINED_FNS["combined_mesh_ga3_sum"](m) - 21.5) < 0.1
+
+
+def test_combined_reactive_apparent():
+    """gq_sum / gs_sum: correct totals."""
+    from custom_components.lotse_forecast.sensor import COMBINED_FNS
+    m = _MockMeshData()
+    m.set_values("gq", [100.0, 150.0])
+    m.set_values("gs", [300.0, 400.0])
+    assert abs(COMBINED_FNS["combined_mesh_gq_sum"](m) - 250.0) < 0.1
+    assert abs(COMBINED_FNS["combined_mesh_gs_sum"](m) - 700.0) < 0.1
 
 
 def test_combined_participants():

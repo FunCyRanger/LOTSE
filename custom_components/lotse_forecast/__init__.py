@@ -18,6 +18,7 @@ from .dashboard import async_create_lovelace_dashboard
 _LOGGER = logging.getLogger(__name__)
 
 STALE_UNIQUE_IDS = {
+    # Removed in v2 (solar forecast model refactor)
     "combined_solar_panel_angle",
     "combined_solar_panel_azimuth",
     "combined_solar_panel_angle_forecast",
@@ -28,6 +29,19 @@ STALE_UNIQUE_IDS = {
     "solar_forecast_today",
     "solar_forecast_tomorrow",
     "solar_forecast_hourly_raw",
+    # Removed in v3.2 (async power sums are misleading)
+    "combined_mesh_gp",
+    "combined_mesh_gip",
+    "combined_mesh_gep",
+    "combined_mesh_gp1",
+    "combined_mesh_gp2",
+    "combined_mesh_gp3",
+    "combined_mesh_sp",
+    "combined_mesh_bp",
+    "combined_mesh_total_solar_generation",
+    "combined_solar_utilization",
+    "combined_mesh_self_consumption_rate",
+    "combined_mesh_export_ratio",
     "combined_mesh_export_ratio_forecast",
 }
 
