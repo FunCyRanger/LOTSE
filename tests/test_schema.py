@@ -34,6 +34,19 @@ MOCK_DATA = {
     "sensor.wallbox_power":      {"state": 7.2,   "unit_of_measurement": "kW"},
     "sensor.wallbox_energy":     {"state": 200.0, "unit_of_measurement": "kWh"},
     "sensor.wallbox_soc":        {"state": 60,    "unit_of_measurement": "%"},
+    "sensor.phase1_current":    {"state": 15.0,  "unit_of_measurement": "A"},
+    "sensor.phase2_current":    {"state": 14.5,  "unit_of_measurement": "A"},
+    "sensor.phase3_current":    {"state": 15.5,  "unit_of_measurement": "A"},
+    "sensor.grid_frequency":    {"state": 50.02, "unit_of_measurement": "Hz"},
+    "sensor.grid_power_factor": {"state": 96,    "unit_of_measurement": "%"},
+    "sensor.reactive_power":     {"state": 200,   "unit_of_measurement": "VAr"},
+    "sensor.reactive_power_l1":  {"state": 70,    "unit_of_measurement": "VAr"},
+    "sensor.reactive_power_l2":  {"state": 65,    "unit_of_measurement": "VAr"},
+    "sensor.reactive_power_l3":  {"state": 65,    "unit_of_measurement": "VAr"},
+    "sensor.apparent_power":     {"state": 350,   "unit_of_measurement": "VA"},
+    "sensor.apparent_power_l1":  {"state": 120,   "unit_of_measurement": "VA"},
+    "sensor.apparent_power_l2":  {"state": 115,   "unit_of_measurement": "VA"},
+    "sensor.apparent_power_l3":  {"state": 115,   "unit_of_measurement": "VA"},
 }
 
 
@@ -159,6 +172,10 @@ def make_sender_vars(**overrides):
         wP="sensor.wallbox_power",
         wE="sensor.wallbox_energy",
         wS="sensor.wallbox_soc",
+        gA1=None, gA2=None, gA3=None,
+        gF=None, gPF=None,
+        gQ=None, gQ1=None, gQ2=None, gQ3=None,
+        gS=None, gS1=None, gS2=None, gS3=None,
     )
     defaults.update(overrides)
     return defaults
@@ -177,6 +194,24 @@ def render_sender(template_str, variables):
 MESHTASTIC_PAYLOAD_MAX_BYTES = 220
 
 
+def make_sender_vars_with_grid(**overrides):
+    """Make vars with all 33 sensors populated (measurement + grid quality)."""
+    defaults = make_sender_vars(
+        gA1="sensor.phase1_current", gA2="sensor.phase2_current",
+        gA3="sensor.phase3_current",
+        gF="sensor.grid_frequency",
+        gPF="sensor.grid_power_factor",
+        gQ="sensor.reactive_power",
+        gQ1="sensor.reactive_power_l1", gQ2="sensor.reactive_power_l2",
+        gQ3="sensor.reactive_power_l3",
+        gS="sensor.apparent_power",
+        gS1="sensor.apparent_power_l1", gS2="sensor.apparent_power_l2",
+        gS3="sensor.apparent_power_l3",
+    )
+    defaults.update(overrides)
+    return defaults
+
+
 def test_payload_within_220_bytes():
     """Full 20-sensor payload fits Meshtastic 220-byte limit."""
     tpl = load_sender_template()
@@ -186,6 +221,43 @@ def test_payload_within_220_bytes():
     assert size <= MESHTASTIC_PAYLOAD_MAX_BYTES, (
         f"Inner payload {size} B exceeds {MESHTASTIC_PAYLOAD_MAX_BYTES} limit"
     )
+
+
+def test_payload_exceeds_220_with_all_33():
+    """All 33 sensors (20 meas + 13 grid) exceeds 220-byte limit (intentional)."""
+    tpl = load_sender_template()
+    out = render_sender(tpl, make_sender_vars_with_grid())
+    inner_json = json.dumps(out, separators=(",", ":"))
+    size = len(inner_json.encode("utf-8"))
+    # This is expected to exceed 220 — users must choose a subset
+    assert size > MESHTASTIC_PAYLOAD_MAX_BYTES, (
+        f"33-key payload {size} B should exceed {MESHTASTIC_PAYLOAD_MAX_BYTES} limit"
+    )
+    assert len(out) == 33, f"Expected 33 keys, got {len(out)}"
+
+
+def test_payload_20_plus_one_grid_fits():
+    """20 measurement + gF (21 keys) just barely fits 220 bytes."""
+    tpl = load_sender_template()
+    out = render_sender(tpl, make_sender_vars(gF="sensor.grid_frequency"))
+    inner_json = json.dumps(out, separators=(",", ":"))
+    size = len(inner_json.encode("utf-8"))
+    assert size <= MESHTASTIC_PAYLOAD_MAX_BYTES, (
+        f"21-key payload {size} B exceeds {MESHTASTIC_PAYLOAD_MAX_BYTES} limit"
+    )
+
+
+def test_payload_20_plus_two_grid_exceeds():
+    """20 measurement + gF+gPF (22 keys) exceeds 220 bytes (informational)."""
+    tpl = load_sender_template()
+    out = render_sender(tpl, make_sender_vars(
+        gF="sensor.grid_frequency", gPF="sensor.grid_power_factor"))
+    inner_json = json.dumps(out, separators=(",", ":"))
+    size = len(inner_json.encode("utf-8"))
+    assert size > MESHTASTIC_PAYLOAD_MAX_BYTES, (
+        f"22-key payload {size} B should exceed {MESHTASTIC_PAYLOAD_MAX_BYTES} limit"
+    )
+    assert len(out) == 22, f"Expected 22 keys, got {len(out)}"
 
 
 def test_payload_typical_small():
@@ -338,6 +410,87 @@ def test_envelope_inner_size():
     envelope = json.loads(result)
     size = len(json.dumps(envelope, separators=(",", ":")).encode("utf-8"))
     assert size < 4096, f"Envelope too large: {size} bytes"
+
+
+def test_envelope_inner_size_with_grid():
+    """33-key envelope stays under 4096 bytes (envelope limit not inner)."""
+    tpl = load_sender_template()
+    result = ha_environment().from_string(tpl).render(**make_sender_vars_with_grid())
+    envelope = json.loads(result)
+    size = len(json.dumps(envelope, separators=(",", ":")).encode("utf-8"))
+    assert size < 4096, f"Envelope too large: {size} bytes"
+
+
+# ─── Config blueprint schema tests ──────────────────────────────────────────
+
+def load_config_template():
+    path = ROOT / "sender-config-blueprint.yaml"
+    with open(path) as f:
+        blueprint = yaml.load(f, Loader=yaml.FullLoader)
+    return blueprint["action"][2]["then"][0]["variables"]["config_payload"]
+
+
+def make_config_vars(**overrides):
+    defaults = dict(
+        node="2896876952",
+        region="eu868",
+        channel_input=1,
+        cap=10.0,
+        pv=5.0,
+        ang=30,
+        az=180,
+    )
+    defaults.update(overrides)
+    return defaults
+
+
+def render_config(template_str, variables):
+    env = ha_environment()
+    tpl = env.from_string(template_str)
+    result = tpl.render(**variables)
+    if result.strip() == "":
+        return {}
+    envelope = json.loads(result)
+    return json.loads(envelope["payload"])
+
+
+def test_config_payload_within_220_bytes():
+    """Full 4-key config payload fits 220-byte limit."""
+    tpl = load_config_template()
+    out = render_config(tpl, make_config_vars())
+    inner_json = json.dumps(out, separators=(",", ":"))
+    size = len(inner_json.encode("utf-8"))
+    assert size <= 220, f"Config payload {size} B exceeds 220 limit"
+
+
+def test_config_envelope_inner_size():
+    """Config envelope stays under 4096 bytes."""
+    path = ROOT / "sender-config-blueprint.yaml"
+    with open(path) as f:
+        blueprint = yaml.load(f, Loader=yaml.FullLoader)
+    raw = blueprint["action"][2]["then"][0]["variables"]["config_payload"]
+    env = ha_environment()
+    result = env.from_string(raw).render(**make_config_vars())
+    envelope = json.loads(result)
+    size = len(json.dumps(envelope, separators=(",", ":")).encode("utf-8"))
+    assert size < 4096, f"Config envelope too large: {size} bytes"
+
+
+def test_config_topic():
+    """Config blueprint publishes to msh/{region}/2/json/mqtt/{node}."""
+    path = ROOT / "sender-config-blueprint.yaml"
+    with open(path) as f:
+        blueprint = yaml.load(f, Loader=yaml.FullLoader)
+    publish = None
+    for block in [blueprint["action"][2]]:
+        for step in block.get("then", []):
+            svc = step.get("service", "") if isinstance(step, dict) else ""
+            if svc == "mqtt.publish":
+                publish = step
+                break
+    assert publish is not None, "mqtt.publish action not found in config blueprint"
+    topic_tpl = publish["data"]["topic"]
+    assert topic_tpl == "msh/{{ region }}/2/json/mqtt/{{ node }}"
 
 
 # ─── Runner ─────────────────────────────────────────────────────────────────

@@ -16,7 +16,7 @@ Household A: Tasmota → HA → MQTT → Heltec V3 → LoRa → Heltec V3 → MQ
 
 ## Installation
 
-### Step 1 — Install Sender Blueprint
+ ### Step 1 — Install Sender Blueprint
 
 This blueprint publishes your meter data into the LoRa mesh. Each household needs exactly one automation from this blueprint.
 
@@ -26,11 +26,23 @@ This blueprint publishes your meter data into the LoRa mesh. Each household need
 3. Click **Create Automation**, fill in the form:
    - **Node Number** — from the Meshtastic Web UI (About page). Required.
    - **LoRa Region** — `EU_868` by default. Change for your country.
-   - **Grid Import Power (gIP)** — pick your meter sensor. Required.
+   - **Grid Import Energy (gEI)** — pick your cumulative import energy sensor. **Required** (needed for Energy Dashboard).
    - **MQTT Channel** — `1` by default.
-   - **Battery Capacity / Solar Peak Power / Panel Angle / Panel Azimuth** — optional system specs. Fill these in so neighbors see your battery SOC weighted by capacity, your solar utilization, etc.
    - All other fields are optional — leave empty to exclude from the payload.
-4. **Save**. Your node publishes measurement data every interval (default 5 min) and sends config data (if any system specs are filled) on HA startup + daily at 3AM.
+   - **Grid quality sensors** (gA1-3, gF, gPF, gQ1-3, gS1-3) appear if you have a 3-phase meter that reports them.
+4. **Save**. Your node publishes measurement data every interval (default 5 min).
+
+### Step 1b — Install Sender Config Blueprint (recommended)
+
+This publishes your node's system configuration (battery capacity, solar specs) so neighbors see capacity-weighted SOC and solar utilization. Runs on HA startup, daily, and when triggered.
+
+1. **Settings → Automations → Blueprints → Import Blueprint**
+2. Paste this URL:
+   `https://raw.githubusercontent.com/FunCyRanger/LOTSE/refs/heads/main/sender-config-blueprint.yaml`
+3. Click **Create Automation**, fill in:
+   - **Node Number** (same as sender blueprint)
+   - **Battery Capacity / Solar Peak Power / Panel Angle / Panel Azimuth** — optional system specs
+4. **Save**.
 
 ### Step 2 — Install LOTSE Mesh Coordinator Integration
 
@@ -88,24 +100,44 @@ A **LOTSE Neighborhood** dashboard is auto-created in your HA sidebar showing al
 
 JSON payload with keys grouped by category. Sign convention: import/charge = positive, export/discharge = negative.
 
+### Measurement keys (sender blueprint)
+
 | Key | Meaning | Unit | Priority |
 |-----|---------|------|----------|
 | gP | Net power (+import, -export) | kW | important |
-| gIP | Import power only (always ≥0) | kW | **required** |
+| gIP | Import power only (always ≥0) | kW | recommended |
 | gEP | Export power only (always ≥0) | kW | important |
-| gP1 | Phase 1 power | kW | important |
-| gV1 | Phase 1 voltage | V | optional |
-| gEI | Cumulative energy import | kWh | **important** |
-| gEO | Cumulative energy export | kWh | **important** |
+| gP1–3 | Phase 1–3 power | kW | important |
+| gV1–3 | Phase 1–3 voltage | V | optional |
+| gEI | Cumulative energy import | kWh | **mandatory** |
+| gEO | Cumulative energy export | kWh | important |
+| gA1–3 | Phase 1–3 current | A | optional |
+| gF | Grid frequency | Hz | optional |
+| gPF | Power factor | % | optional |
+| gQ | Total reactive power | VAr | optional |
+| gQ1–3 | Phase 1–3 reactive power | VAr | optional |
+| gS | Total apparent power | VA | optional |
+| gS1–3 | Phase 1–3 apparent power | VA | optional |
 | sP | Solar power | kW | important |
 | sE | Solar cumulative energy | kWh | important |
 | bS | Battery state of charge | % | optional |
-| bC | Battery capacity | kWh | optional |
-| sK | Solar peak power | kWp | config |
-| sA | Panel tilt angle | ° | config |
-| sZ | Panel azimuth | ° | config |
+| bP | Battery power | kW | optional |
+| bEI | Battery energy in | kWh | optional |
+| bEO | Battery energy out | kWh | optional |
+| wP | Wallbox power | kW | optional |
+| wE | Wallbox energy | kWh | optional |
+| wS | Wallbox SOC | % | optional |
 
-**Size:** ~200 bytes with all keys, ~12 bytes with just `gIP` — both fit within Meshtastic's ~220-byte limit.
+### Config keys (sender-config blueprint)
+
+| Key | Meaning | Unit |
+|-----|---------|------|
+| bC | Battery capacity | kWh |
+| sK | Solar peak power | kWp |
+| sA | Panel tilt angle | ° |
+| sZ | Panel azimuth | ° |
+
+**Size:** ~208 bytes with all 20 measurement keys (fits). Adding 1 grid-quality key still fits (~219 B); adding more grid keys exceeds 220 B — choose the few that matter most for your neighborhood.
 
 **Edge cases:**
 - Sensors with state `unavailable`/`unknown`/`none`/`NaN` are omitted from the payload

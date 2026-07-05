@@ -87,6 +87,20 @@ MOCK_DATA = {
     "sensor.negative_kwh":        {"state": -50, "unit_of_measurement": "kWh"},
     "sensor.bs_over_100":         {"state": 150, "unit_of_measurement": "%"},
     "sensor.kwh_in_power_slot":   {"state": 12345, "unit_of_measurement": "kWh"},
+    # Grid quality sensors
+    "sensor.phase1_current":    {"state": 15.0,  "unit_of_measurement": "A"},
+    "sensor.phase2_current":    {"state": 14.5,  "unit_of_measurement": "A"},
+    "sensor.phase3_current":    {"state": 15.5,  "unit_of_measurement": "A"},
+    "sensor.grid_frequency":    {"state": 50.02, "unit_of_measurement": "Hz"},
+    "sensor.grid_power_factor": {"state": 96,    "unit_of_measurement": "%"},
+    "sensor.reactive_power":     {"state": 200,   "unit_of_measurement": "VAr"},
+    "sensor.reactive_power_l1":  {"state": 70,    "unit_of_measurement": "VAr"},
+    "sensor.reactive_power_l2":  {"state": 65,    "unit_of_measurement": "VAr"},
+    "sensor.reactive_power_l3":  {"state": 65,    "unit_of_measurement": "VAr"},
+    "sensor.apparent_power":     {"state": 350,   "unit_of_measurement": "VA"},
+    "sensor.apparent_power_l1":  {"state": 120,   "unit_of_measurement": "VA"},
+    "sensor.apparent_power_l2":  {"state": 115,   "unit_of_measurement": "VA"},
+    "sensor.apparent_power_l3":  {"state": 115,   "unit_of_measurement": "VA"},
 }
 
 
@@ -197,6 +211,27 @@ def load_sender_template():
     return raw
 
 
+# ─── Load config template ──────────────────────────────────────────────────
+
+def load_config_template():
+    path = ROOT / "sender-config-blueprint.yaml"
+    with open(path) as f:
+        blueprint = yaml.load(f, Loader=yaml.FullLoader)
+    # config_payload is in action[2]["then"][0]["variables"]["config_payload"]
+    raw = blueprint["action"][2]["then"][0]["variables"]["config_payload"]
+    return raw
+
+
+def render_config(template_str, variables):
+    env = ha_environment()
+    tpl = env.from_string(template_str)
+    result = tpl.render(**variables)
+    if result.strip() == "":
+        return {}
+    envelope = json.loads(result)
+    return json.loads(envelope["payload"])
+
+
 # ─── Render helpers ────────────────────────────────────────────────────────
 
 def render_sender(template_str, variables):
@@ -232,6 +267,11 @@ def make_sender_vars(**overrides):
         wP="sensor.wallbox_power",
         wE="sensor.wallbox_energy",
         wS="sensor.wallbox_soc",
+        # Grid quality (optional — None means not selected)
+        gA1=None, gA2=None, gA3=None,
+        gF=None, gPF=None,
+        gQ=None, gQ1=None, gQ2=None, gQ3=None,
+        gS=None, gS1=None, gS2=None, gS3=None,
     )
     defaults.update(overrides)
     return defaults
@@ -447,6 +487,111 @@ def test_sender_all_unavailable():
     vars_ = make_sender_vars(**{k: "sensor.unavailable_sensor" for k in make_sender_vars()})
     out = render_sender(tpl, vars_)
     assert out == {}, f"Expected empty dict, got {out}"
+
+
+def test_sender_grid_quality():
+    """All 13 grid-quality sensors populated → correct keys and rounding."""
+    tpl = load_sender_template()
+    vars_ = make_sender_vars(
+        gA1="sensor.phase1_current", gA2="sensor.phase2_current",
+        gA3="sensor.phase3_current",
+        gF="sensor.grid_frequency",
+        gPF="sensor.grid_power_factor",
+        gQ="sensor.reactive_power",
+        gQ1="sensor.reactive_power_l1", gQ2="sensor.reactive_power_l2",
+        gQ3="sensor.reactive_power_l3",
+        gS="sensor.apparent_power",
+        gS1="sensor.apparent_power_l1", gS2="sensor.apparent_power_l2",
+        gS3="sensor.apparent_power_l3",
+    )
+    out = render_sender(tpl, vars_)
+    keys = sorted(k for k in out if k.startswith(("gA", "gF", "gPF", "gQ", "gS")))
+    assert len(keys) == 13, f"Expected 13 grid keys, got {len(keys)}: {keys}"
+    assert out["gA1"] == 15.0
+    assert out["gA2"] == 14.5
+    assert out["gA3"] == 15.5
+    assert abs(out["gF"] - 50.02) < 0.01
+    assert out["gPF"] == 96.0
+    assert out["gQ"] == 200.0
+    assert out["gQ1"] == 70.0
+    assert out["gS"] == 350.0
+    assert out["gS1"] == 120.0
+
+
+def test_sender_all_33_sensors():
+    """All 20 measurement + 13 grid-quality sensors → 33 keys."""
+    tpl = load_sender_template()
+    vars_ = make_sender_vars(
+        gA1="sensor.phase1_current", gA2="sensor.phase2_current",
+        gA3="sensor.phase3_current",
+        gF="sensor.grid_frequency",
+        gPF="sensor.grid_power_factor",
+        gQ="sensor.reactive_power",
+        gQ1="sensor.reactive_power_l1", gQ2="sensor.reactive_power_l2",
+        gQ3="sensor.reactive_power_l3",
+        gS="sensor.apparent_power",
+        gS1="sensor.apparent_power_l1", gS2="sensor.apparent_power_l2",
+        gS3="sensor.apparent_power_l3",
+    )
+    out = render_sender(tpl, vars_)
+    assert len(out) == 33, f"Expected 33 keys, got {len(out)}: {list(out.keys())}"
+    assert "gP" in out
+    assert "gA1" in out
+    assert "gQ" in out
+    assert "gS" in out
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# TESTS — CONFIG BLUEPRINT
+# ═══════════════════════════════════════════════════════════════════════════
+
+def make_config_vars(**overrides):
+    defaults = dict(
+        node="2896876952",
+        region="eu868",
+        channel_input=1,
+        cap=10.0,
+        pv=5.0,
+        ang=30,
+        az=180,
+    )
+    defaults.update(overrides)
+    return defaults
+
+
+def test_config_all_fields():
+    """All config fields populated → correct config payload."""
+    tpl = load_config_template()
+    out = render_config(tpl, make_config_vars())
+    assert len(out) == 4, f"Expected 4 keys, got {len(out)}: {out}"
+    assert out["bC"] == 10.0
+    assert out["sK"] == 5.0
+    assert out["sA"] == 30
+    assert out["sZ"] == 180
+
+
+def test_config_partial():
+    """Only cap and pv → 2 keys."""
+    tpl = load_config_template()
+    out = render_config(tpl, make_config_vars(cap=10.0, pv=5.0, ang="", az=""))
+    assert len(out) == 2, f"Expected 2 keys, got {len(out)}: {out}"
+    assert out["bC"] == 10.0
+    assert out["sK"] == 5.0
+
+
+def test_config_all_empty():
+    """No config fields filled → empty payload dict."""
+    tpl = load_config_template()
+    out = render_config(tpl, make_config_vars(cap="", pv="", ang="", az=""))
+    assert out == {}, f"Expected empty dict, got {out}"
+
+
+def test_config_float_angle():
+    """Float angle → int coercion."""
+    tpl = load_config_template()
+    out = render_config(tpl, make_config_vars(ang=30.7, az=180.3))
+    assert out["sA"] == 30
+    assert out["sZ"] == 180
 
 
 # ═══════════════════════════════════════════════════════════════════════════

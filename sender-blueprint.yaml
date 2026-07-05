@@ -2,10 +2,13 @@ blueprint:
   name: LOTSE Mesh — Send Meter Data to LoRa
   description: >
     Periodically publish your household's meter readings into the LoRa mesh
-    via MQTT downlink to a Heltec V3 node. Only sensors you select will be
-    included in the payload — delete unused entity selectors or leave them empty.
-    Also publishes node registration (battery capacity, solar specs) on startup
-    and once daily as a separate message.
+    via MQTT downlink to a Heltec V3 node.
+
+    **Mandatory:** Grid Energy Import (gEI). All other fields are optional —
+    leave empty to exclude from the payload.
+
+    **Payload limit:** Meshtastic limits inner payload to 220 bytes. With all
+    fields filled the payload is ~310 bytes — select only the sensors you need.
   domain: automation
   source_url: >
     https://github.com/FunCyRanger/LOTSE/blob/main/sender-blueprint.yaml
@@ -50,6 +53,7 @@ blueprint:
     gIP_entity:
       name: Grid Import Power (gIP)
       description: Import power in kW (always ≥0)
+      default: ""
       selector:
         entity:
           domain: sensor
@@ -103,15 +107,108 @@ blueprint:
         entity:
           domain: sensor
     gEI_entity:
-      name: Grid Energy Import (gEI)
-      description: Cumulative energy import in kWh
-      default: ""
+      name: "Grid Energy Import (gEI) [mandatory]"
+      description: Cumulative energy import in kWh — required for Energy Dashboard
       selector:
         entity:
           domain: sensor
     gEO_entity:
       name: Grid Energy Export (gEO)
       description: Cumulative energy export in kWh
+      default: ""
+      selector:
+        entity:
+          domain: sensor
+    # --- Grid Quality ---
+    gA1_entity:
+      name: Phase 1 Current (gA1)
+      description: Phase 1 current in A
+      default: ""
+      selector:
+        entity:
+          domain: sensor
+    gA2_entity:
+      name: Phase 2 Current (gA2)
+      description: Phase 2 current in A
+      default: ""
+      selector:
+        entity:
+          domain: sensor
+    gA3_entity:
+      name: Phase 3 Current (gA3)
+      description: Phase 3 current in A
+      default: ""
+      selector:
+        entity:
+          domain: sensor
+    gF_entity:
+      name: Grid Frequency (gF)
+      description: Grid frequency in Hz
+      default: ""
+      selector:
+        entity:
+          domain: sensor
+    gPF_entity:
+      name: Power Factor (gPF)
+      description: Power factor in %
+      default: ""
+      selector:
+        entity:
+          domain: sensor
+    # --- Reactive Power ---
+    gQ_entity:
+      name: Reactive Power (gQ)
+      description: Total reactive power in VAr
+      default: ""
+      selector:
+        entity:
+          domain: sensor
+    gQ1_entity:
+      name: Phase 1 Reactive Power (gQ1)
+      description: Phase 1 reactive power in VAr
+      default: ""
+      selector:
+        entity:
+          domain: sensor
+    gQ2_entity:
+      name: Phase 2 Reactive Power (gQ2)
+      description: Phase 2 reactive power in VAr
+      default: ""
+      selector:
+        entity:
+          domain: sensor
+    gQ3_entity:
+      name: Phase 3 Reactive Power (gQ3)
+      description: Phase 3 reactive power in VAr
+      default: ""
+      selector:
+        entity:
+          domain: sensor
+    # --- Apparent Power ---
+    gS_entity:
+      name: Apparent Power (gS)
+      description: Total apparent power in VA
+      default: ""
+      selector:
+        entity:
+          domain: sensor
+    gS1_entity:
+      name: Phase 1 Apparent Power (gS1)
+      description: Phase 1 apparent power in VA
+      default: ""
+      selector:
+        entity:
+          domain: sensor
+    gS2_entity:
+      name: Phase 2 Apparent Power (gS2)
+      description: Phase 2 apparent power in VA
+      default: ""
+      selector:
+        entity:
+          domain: sensor
+    gS3_entity:
+      name: Phase 3 Apparent Power (gS3)
+      description: Phase 3 apparent power in VA
       default: ""
       selector:
         entity:
@@ -182,70 +279,9 @@ blueprint:
       selector:
         entity:
           domain: sensor
-    # --- Node Registration (optional) ---
-    config_hour:
-      name: Daily Re-registration Hour
-      description: Hour of day (0-23) to re-send node registration
-      default: 3
-      selector:
-        number:
-          min: 0
-          max: 23
-    battery_capacity:
-      name: Battery Capacity (kWh)
-      description: Total battery capacity in kWh (e.g. 10.0)
-      default: ""
-      selector:
-        number:
-          min: 0
-          max: 1000
-          mode: box
-          unit_of_measurement: kWh
-    solar_peak:
-      name: Solar Peak Power (kWp)
-      description: Total installed solar peak power in kWp (e.g. 5.0)
-      default: ""
-      selector:
-        number:
-          min: 0
-          max: 100
-          mode: box
-          unit_of_measurement: kWp
-    panel_angle:
-      name: Panel Angle (°)
-      description: Solar panel tilt angle from horizontal (0-90)
-      default: ""
-      selector:
-        number:
-          min: 0
-          max: 90
-          mode: box
-          unit_of_measurement: "°"
-    panel_azimuth:
-      name: Panel Azimuth (°)
-      description: Solar panel orientation from north (0-360)
-      default: ""
-      selector:
-        number:
-          min: 0
-          max: 360
-          mode: box
-          unit_of_measurement: "°"
-    config_trigger:
-      name: Force Config Resend
-      description: >
-        Optional input_boolean helper. Toggle ON to immediately re-send
-        the config envelope (panel specs, battery capacity) to the mesh.
-        Leave empty if not needed.
-      default: ""
-      selector:
-        entity:
-          domain: input_boolean
 
 trigger_variables:
   interval: !input interval
-  config_hour: !input config_hour
-  config_trigger: !input config_trigger
 trigger:
   - platform: homeassistant
     event: start
@@ -253,16 +289,12 @@ trigger:
   - platform: time_pattern
     minutes: "/1"
     id: tick
-  - platform: state
-    entity_id: !input config_trigger
-    id: config_requested
 
 action:
   - variables:
       node: !input node_decimal
       region: !input region
       channel_input: !input channel
-      # Measurement vars
       gP: !input gP_entity
       gIP: !input gIP_entity
       gEP: !input gEP_entity
@@ -274,6 +306,19 @@ action:
       gV3: !input gV3_entity
       gEI: !input gEI_entity
       gEO: !input gEO_entity
+      gA1: !input gA1_entity
+      gA2: !input gA2_entity
+      gA3: !input gA3_entity
+      gF: !input gF_entity
+      gPF: !input gPF_entity
+      gQ: !input gQ_entity
+      gQ1: !input gQ1_entity
+      gQ2: !input gQ2_entity
+      gQ3: !input gQ3_entity
+      gS: !input gS_entity
+      gS1: !input gS1_entity
+      gS2: !input gS2_entity
+      gS3: !input gS3_entity
       sP: !input sP_entity
       sE: !input sE_entity
       bP: !input bP_entity
@@ -283,96 +328,22 @@ action:
       wP: !input wP_entity
       wE: !input wE_entity
       wS: !input wS_entity
-      # Config vars
-      cap: !input battery_capacity
-      pv: !input solar_peak
-      ang: !input panel_angle
-      az: !input panel_azimuth
-  # --- Config section: on first run and daily at config_hour ---
+  # --- Notification on first boot ---
   - if:
       - condition: template
-        value_template: >
-          {{ trigger.id == 'boot'
-             or trigger.id == 'config_requested'
-             or (now().minute % (interval | int) == 0
-                 and now().hour == (config_hour | int)) }}
+        value_template: "{{ trigger.id == 'boot' }}"
     then:
-      - variables:
-          config_payload: >
-            {% set items = [] %}
-            {% if cap | string != '' %}
-              {% set items = items + [("bC", cap | float)] %}
-            {% endif %}
-            {% if pv | string != '' %}
-              {% set items = items + [("sK", pv | float)] %}
-            {% endif %}
-            {% if ang | string != '' %}
-              {% set items = items + [("sA", ang | int)] %}
-            {% endif %}
-            {% if az | string != '' %}
-              {% set items = items + [("sZ", az | int)] %}
-            {% endif %}
-            {% set inner = dict(items) | to_json %}
-            {% if items | length > 0 %}
-              {% set outer_env = {"from": node|int(0), "type": "sendtext", "payload": inner, "channel": channel_input|int(0)} %}
-              {{ outer_env | to_json }}
-            {% endif %}
-      - condition: template
-        value_template: "{{ config_payload | string != '' }}"
-      - delay: "{{ range(0, 60) | random }}"
-      - service: mqtt.publish
+      - service: persistent_notification.create
         data:
-          qos: 0
-          retain: true
-          evaluate_payload: false
-          topic: "msh/{{ region }}/2/json/mqtt/{{ node }}"
-          payload: "{{ config_payload }}"
-      # --- Direct config value publishes (retained, for receiver persistence) ---
-      - if:
-          - condition: template
-            value_template: "{{ cap | string != '' }}"
-        then:
-          - service: mqtt.publish
-            data:
-              qos: 0
-              retain: true
-              evaluate_payload: false
-              topic: "lotse/config/{{ node }}/bc"
-              payload: "{{ cap | float | round(2) }}"
-      - if:
-          - condition: template
-            value_template: "{{ pv | string != '' }}"
-        then:
-          - service: mqtt.publish
-            data:
-              qos: 0
-              retain: true
-              evaluate_payload: false
-              topic: "lotse/config/{{ node }}/sk"
-              payload: "{{ pv | float | round(2) }}"
-      - if:
-          - condition: template
-            value_template: "{{ ang | string != '' }}"
-        then:
-          - service: mqtt.publish
-            data:
-              qos: 0
-              retain: true
-              evaluate_payload: false
-              topic: "lotse/config/{{ node }}/sa"
-              payload: "{{ ang | int }}"
-      - if:
-          - condition: template
-            value_template: "{{ az | string != '' }}"
-        then:
-          - service: mqtt.publish
-            data:
-              qos: 0
-              retain: true
-              evaluate_payload: false
-              topic: "lotse/config/{{ node }}/sz"
-              payload: "{{ az | int }}"
-  # --- Measurement section: every interval (existing behavior) ---
+          title: "LOTSE Mesh — Sender Active"
+          message: >
+            Your LOTSE meter data sender for node **{{ node }}** is active.
+            Edit this automation to add grid quality sensors (frequency,
+            phase currents, reactive/apparent power), or install the
+            **Config Sender** blueprint to publish your battery capacity
+            and solar panel specs.
+          notification_id: "lotse_sender_ready_{{ node }}"
+  # --- Measurement section: every interval ---
   - if:
       - condition: template
         value_template: "{{ now().minute % (interval | int) == 0 }}"
@@ -396,6 +367,19 @@ action:
             {% if gV3 %}{% set uo=(state_attr(gV3,'unit_of_measurement') or '').lower() %}{% if states(gV3)not in bad %}{% set items=items+[("gV3",(states(gV3)|float(0)*V_dict.get(uo,1))|round(1))] %}{% endif %}{% endif %}
             {% if gEI %}{% set uo=(state_attr(gEI,'unit_of_measurement') or '').lower() %}{% if states(gEI)not in bad and uo not in ('w','kw','mw') %}{% set v=(states(gEI)|float(0)*kWh.get(uo,1))|round(2) %}{% set items=items+[("gEI",[v,0]|max)] %}{% endif %}{% endif %}
             {% if gEO %}{% set uo=(state_attr(gEO,'unit_of_measurement') or '').lower() %}{% if states(gEO)not in bad and uo not in ('w','kw','mw') %}{% set v=(states(gEO)|float(0)*kWh.get(uo,1))|round(2) %}{% set items=items+[("gEO",[v,0]|max)] %}{% endif %}{% endif %}
+            {% if gA1 %}{% if states(gA1)not in bad %}{% set items=items+[("gA1",(states(gA1)|float(0))|round(1))] %}{% endif %}{% endif %}
+            {% if gA2 %}{% if states(gA2)not in bad %}{% set items=items+[("gA2",(states(gA2)|float(0))|round(1))] %}{% endif %}{% endif %}
+            {% if gA3 %}{% if states(gA3)not in bad %}{% set items=items+[("gA3",(states(gA3)|float(0))|round(1))] %}{% endif %}{% endif %}
+            {% if gF %}{% if states(gF)not in bad %}{% set items=items+[("gF",(states(gF)|float(0))|round(2))] %}{% endif %}{% endif %}
+            {% if gPF %}{% if states(gPF)not in bad %}{% set items=items+[("gPF",(states(gPF)|float(0))|round(1))] %}{% endif %}{% endif %}
+            {% if gQ %}{% if states(gQ)not in bad %}{% set items=items+[("gQ",(states(gQ)|float(0))|round(1))] %}{% endif %}{% endif %}
+            {% if gQ1 %}{% if states(gQ1)not in bad %}{% set items=items+[("gQ1",(states(gQ1)|float(0))|round(1))] %}{% endif %}{% endif %}
+            {% if gQ2 %}{% if states(gQ2)not in bad %}{% set items=items+[("gQ2",(states(gQ2)|float(0))|round(1))] %}{% endif %}{% endif %}
+            {% if gQ3 %}{% if states(gQ3)not in bad %}{% set items=items+[("gQ3",(states(gQ3)|float(0))|round(1))] %}{% endif %}{% endif %}
+            {% if gS %}{% if states(gS)not in bad %}{% set items=items+[("gS",(states(gS)|float(0))|round(1))] %}{% endif %}{% endif %}
+            {% if gS1 %}{% if states(gS1)not in bad %}{% set items=items+[("gS1",(states(gS1)|float(0))|round(1))] %}{% endif %}{% endif %}
+            {% if gS2 %}{% if states(gS2)not in bad %}{% set items=items+[("gS2",(states(gS2)|float(0))|round(1))] %}{% endif %}{% endif %}
+            {% if gS3 %}{% if states(gS3)not in bad %}{% set items=items+[("gS3",(states(gS3)|float(0))|round(1))] %}{% endif %}{% endif %}
             {% if sP %}{% set uo=(state_attr(sP,'unit_of_measurement') or '').lower() %}{% if states(sP)not in bad and uo not in energy_units %}{% set v=(states(sP)|float(0)*kW.get(uo,1))|round(2) %}{% set items=items+[("sP",[[v,500]|min,-500]|max)] %}{% endif %}{% endif %}
             {% if sE %}{% set uo=(state_attr(sE,'unit_of_measurement') or '').lower() %}{% if states(sE)not in bad and uo not in ('w','kw','mw') %}{% set v=(states(sE)|float(0)*kWh.get(uo,1))|round(2) %}{% set items=items+[("sE",[v,0]|max)] %}{% endif %}{% endif %}
             {% if bP %}{% set uo=(state_attr(bP,'unit_of_measurement') or '').lower() %}{% if states(bP)not in bad and uo not in energy_units %}{% set v=(states(bP)|float(0)*kW.get(uo,1))|round(2) %}{% set items=items+[("bP",[[v,500]|min,-500]|max)] %}{% endif %}{% endif %}
