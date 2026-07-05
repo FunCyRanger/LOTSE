@@ -187,6 +187,10 @@ class LOTSECombinedSensor(SensorEntity):
         self.async_write_ha_state()
 
     @property
+    def available(self) -> bool:
+        return bool(self._mesh.known_nodes())
+
+    @property
     def native_value(self) -> float:
         return self._compute_fn(self._mesh)
 

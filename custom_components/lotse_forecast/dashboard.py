@@ -133,23 +133,34 @@ async def async_create_lovelace_dashboard(hass: HomeAssistant) -> None:
     dashboards = hass.data[LOVELACE_DOMAIN].dashboards
     if dashboards is None:
         return
-    if isinstance(dashboards, dict):
-        items = dashboards.values()
-    else:
-        items = dashboards.async_items()
+    try:
+        if hasattr(dashboards, "async_items"):
+            items = dashboards.async_items()
+        elif isinstance(dashboards, dict):
+            items = list(dashboards.values())
+        else:
+            return
+    except Exception:
+        return
+
     for d in items:
-        conf = d if isinstance(d, dict) else {}
-        data = conf.get("data", {})
+        if isinstance(d, dict):
+            data = d.get("data", {})
+        else:
+            data = getattr(d, "config", {})
         if isinstance(data, dict) and data.get("title") == "LOTSE Neighborhood":
             return
-    if isinstance(dashboards, dict):
-        dashboards["lotse_neighborhood"] = {"data": DASHBOARD_CONFIG}
-    else:
-        try:
-            await dashboards.async_create_item({
-                "id": "lotse_neighborhood",
-                "data": DASHBOARD_CONFIG,
-            })
-        except Exception as exc:
-            _LOGGER.warning("Could not create LOTSE dashboard: %s", exc)
-    _LOGGER.info("Created LOTSE Neighborhood dashboard")
+
+    config = {
+        "id": "lotse_neighborhood",
+        "data": DASHBOARD_CONFIG,
+    }
+    try:
+        await dashboards.async_create_item(config)
+        _LOGGER.info("Created LOTSE Neighborhood dashboard")
+    except AttributeError:
+        if isinstance(dashboards, dict):
+            dashboards["lotse_neighborhood"] = config
+            _LOGGER.info("Created LOTSE Neighborhood dashboard")
+    except Exception as exc:
+        _LOGGER.warning("Could not create LOTSE dashboard: %s", exc)
