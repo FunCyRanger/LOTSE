@@ -61,6 +61,9 @@ class LotseForecastOptionsFlow(config_entries.OptionsFlow):
                 )
                 return await self.async_step_add_panel()
 
+            self.hass.config_entries.async_update_entry(
+                self.config_entry, data=new_data, options=new_options,
+            )
             return self.async_create_entry(title="", data=new_options)
 
         weather_entity = self.config_entry.data.get("weather_entity", "")
