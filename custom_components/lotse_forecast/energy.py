@@ -68,7 +68,8 @@ def _get_panels(hass, entry):
         val = float(raw)
         return val if val > 0 else default
 
-    # Auto-discover mesh node panels
+    # Auto-discover mesh node panels — prefer sensor entities, fallback to MeshData
+    seen_nodes = set()
     for state in hass.states.async_all():
         m = re.match(r"^sensor\.node_(\d+)_sk$", state.entity_id)
         if not m:
@@ -77,6 +78,7 @@ def _get_panels(hass, entry):
         if kwp <= 0:
             continue
         nid = m.group(1)
+        seen_nodes.add(nid)
         sa = hass.states.get(f"sensor.node_{nid}_sa")
         sz = hass.states.get(f"sensor.node_{nid}_sz")
 
@@ -86,6 +88,24 @@ def _get_panels(hass, entry):
             "angle": _sensor_or_default(sa, 35),
             "azimuth": _sensor_or_default(sz, 180),
         })
+
+    # Fallback: read from MeshData for nodes without sensor entities yet
+    mesh = hass.data.get(DOMAIN, {}).get(entry.entry_id)
+    if mesh:
+        for node_id in mesh.known_nodes():
+            if node_id in seen_nodes:
+                continue
+            sk = mesh.get_value(node_id, "sk")
+            if sk is None or sk <= 0:
+                continue
+            sa = mesh.get_value(node_id, "sa") or 35
+            sz = mesh.get_value(node_id, "sz") or 180
+            panels.append({
+                "name": f"Node {node_id}",
+                "kwp": float(sk),
+                "angle": int(sa),
+                "azimuth": int(sz),
+            })
 
     # Manual panels from config options
     manual = entry.options.get("panels", [])

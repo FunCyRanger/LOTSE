@@ -49,26 +49,19 @@ class LotseForecastOptionsFlow(config_entries.OptionsFlow):
                 indices = {int(i) for i in removed}
                 panels = [p for i, p in enumerate(panels) if i not in indices]
 
-            if user_input.get("add_panel"):
-                new_options = {**self.config_entry.options, "panels": panels}
-                new_data = {
-                    **self.config_entry.data,
-                    "weather_entity": user_input["weather_entity"],
-                }
-                self.hass.config_entries.async_update_entry(
-                    self.config_entry, data=new_data, options=new_options,
-                )
-                return await self.async_step_add_panel()
-
             new_options = {"panels": panels}
             new_data = {
                 **self.config_entry.data,
                 "weather_entity": user_input["weather_entity"],
             }
-            self.hass.config_entries.async_update_entry(
-                self.config_entry, data=new_data, options=new_options,
-            )
-            return self.async_create_entry(title="", data={})
+
+            if user_input.get("add_panel"):
+                self.hass.config_entries.async_update_entry(
+                    self.config_entry, data=new_data, options=new_options,
+                )
+                return await self.async_step_add_panel()
+
+            return self.async_create_entry(title="", data=new_options)
 
         weather_entity = self.config_entry.data.get("weather_entity", "")
         schema = {
@@ -106,11 +99,7 @@ class LotseForecastOptionsFlow(config_entries.OptionsFlow):
                 "angle": user_input["angle"],
                 "azimuth": user_input["azimuth"],
             })
-            self.hass.config_entries.async_update_entry(
-                self.config_entry,
-                options={**self.config_entry.options, "panels": panels},
-            )
-            return self.async_create_entry(title="", data={})
+            return self.async_create_entry(title="", data={"panels": panels})
 
         return self.async_show_form(
             step_id="add_panel",

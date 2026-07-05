@@ -13,6 +13,7 @@ from homeassistant.helpers import entity_registry as er
 
 from .const import BAD_STATES, DOMAIN, MSH_TOPIC, NODE_KEY_META, PLATFORMS
 from .dashboard import async_create_lovelace_dashboard
+from .energy import async_get_solar_forecast
 
 _LOGGER = logging.getLogger(__name__)
 
