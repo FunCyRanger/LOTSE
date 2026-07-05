@@ -3,8 +3,7 @@ blueprint:
   description: >
     Publish your node's system configuration (battery capacity, solar
     peak power, panel orientation) into the LoRa mesh. This runs
-    automatically on HA startup, once daily, and when the trigger
-    input_boolean is toggled.
+    automatically on HA startup and once daily at the configured hour.
 
     **Required for neighbor combined sensors:** without registration,
     your neighbors can't compute weighted SOC or solar utilization.
@@ -80,20 +79,8 @@ blueprint:
           max: 360
           mode: box
           unit_of_measurement: "°"
-    config_trigger:
-      name: Force Config Resend
-      description: >
-        Optional input_boolean helper. Toggle ON to immediately re-send
-        the config envelope (panel specs, battery capacity) to the mesh.
-        Leave empty if not needed.
-      default: ""
-      selector:
-        entity:
-          domain: input_boolean
-
 trigger_variables:
   config_hour: !input config_hour
-  config_trigger: !input config_trigger
 trigger:
   - platform: homeassistant
     event: start
@@ -101,9 +88,6 @@ trigger:
   - platform: time_pattern
     hours: "/1"
     id: hourly
-  - platform: state
-    entity_id: !input config_trigger
-    id: config_requested
 
 action:
   - variables:
@@ -127,12 +111,11 @@ action:
             Edit this automation to set your battery capacity, solar peak power,
             and panel orientation so neighbors can see your system specs.
           notification_id: "lotse_config_ready_{{ node }}"
-  # --- Config section: on boot, config_requested, or daily at config_hour ---
+  # --- Config section: on boot or daily at config_hour ---
   - if:
       - condition: template
         value_template: >
           {{ trigger.id == 'boot'
-             or trigger.id == 'config_requested'
              or (now().hour == (config_hour | int)
                  and now().minute == 0) }}
     then:
