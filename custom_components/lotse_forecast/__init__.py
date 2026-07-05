@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from collections.abc import Callable
 from typing import Any
 
@@ -54,9 +53,10 @@ class MeshData:
         self._node_data: dict[str, dict[str, Any]] = {}
         self._node_callbacks: dict[str, set[Callable]] = {}
         self._combined_callbacks: set[Callable] = set()
-        self._node_sensor_callbacks: Callable[[str], None] | None = None
+        self._node_sensor_callback: Callable[[str, list[str]], None] | None = None
         self._unsub_mqtt: Callable | None = None
         self._seen_config_nodes: set[str] = set()
+        self._node_known_keys: dict[str, set[str]] = {}
 
     def register_per_node_sensor(self, node_id: str, callback: Callable) -> None:
         self._node_callbacks.setdefault(node_id, set()).add(callback)
@@ -70,8 +70,8 @@ class MeshData:
     def unregister_combined_sensor(self, callback: Callable) -> None:
         self._combined_callbacks.discard(callback)
 
-    def set_node_sensor_callback(self, cb: Callable[[str], None]) -> None:
-        self._node_sensor_callbacks = cb
+    def set_node_sensor_callback(self, cb: Callable[[str, list[str]], None]) -> None:
+        self._node_sensor_callback = cb
 
     def known_nodes(self) -> list[str]:
         return list(self._node_data.keys())
@@ -88,7 +88,6 @@ class MeshData:
         return vals
 
     async def start(self) -> None:
-        self._init_from_existing()
         await self._clean_stale_entities()
         await self._disable_old_automation()
         await self._subscribe_mqtt()
@@ -97,16 +96,6 @@ class MeshData:
         if self._unsub_mqtt:
             self._unsub_mqtt()
             self._unsub_mqtt = None
-
-    def _init_from_existing(self) -> None:
-        for state in self._hass.states.async_all():
-            m = re.match(r"^sensor\.node_(\d+)_([a-z0-9]+)$", state.entity_id)
-            if m:
-                nid, key = m.group(1), m.group(2)
-                if key in NODE_KEY_META:
-                    v = _safe_float(state.state)
-                    if v is not None:
-                        self._node_data.setdefault(nid, {})[key] = v
 
     async def _clean_stale_entities(self) -> None:
         reg = er.async_get(self._hass)
@@ -176,10 +165,13 @@ class MeshData:
         if not parsed:
             return
 
-        is_config = bool({"bc", "sk", "sa", "sz"} & parsed.keys())
-        was_new = node_id not in self._node_data
+        prev_keys = self._node_known_keys.get(node_id, set())
+        new_keys = set(parsed.keys()) - prev_keys
 
         self._node_data.setdefault(node_id, {}).update(parsed)
+        self._node_known_keys.setdefault(node_id, set()).update(parsed.keys())
+
+        is_config = bool({"bc", "sk", "sa", "sz"} & parsed.keys())
 
         for cb in self._node_callbacks.get(node_id, set()):
             cb()
@@ -189,8 +181,8 @@ class MeshData:
         if is_config and node_id not in self._seen_config_nodes:
             self._seen_config_nodes.add(node_id)
 
-        if was_new and self._node_sensor_callbacks:
-            self._node_sensor_callbacks(node_id)
+        if new_keys and self._node_sensor_callback:
+            self._node_sensor_callback(node_id, list(new_keys))
 
 
 def _safe_float(v: Any) -> float | None:

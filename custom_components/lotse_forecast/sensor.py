@@ -110,6 +110,16 @@ class LOTSEPerNodeSensor(SensorEntity):
         if meta.get("state_class"):
             self._attr_state_class = meta["state_class"]
 
+    @property
+    def device_info(self) -> dict | None:
+        return {
+            "identifiers": {(DOMAIN, f"node_{self._node_id}")},
+            "name": f"LOTSE Node {self._node_id}",
+            "manufacturer": "LOTSE",
+            "model": "Meshtastic Node",
+            "via_device": (DOMAIN, "coordinator"),
+        }
+
     async def async_added_to_hass(self) -> None:
         self._mesh.register_per_node_sensor(self._node_id, self._on_data)
         self.async_on_remove(lambda: self._mesh.unregister_per_node_sensor(self._node_id, self._on_data))
@@ -142,6 +152,23 @@ class LOTSECombinedSensor(SensorEntity):
         if meta.get("state_class"):
             self._attr_state_class = meta["state_class"]
 
+    @property
+    def device_info(self) -> dict | None:
+        if self._uid == "solar_production_forecast":
+            return {
+                "identifiers": {(DOMAIN, "forecast")},
+                "name": "LOTSE Solar Forecast",
+                "manufacturer": "LOTSE",
+                "model": "Solar Forecast",
+                "via_device": (DOMAIN, "coordinator"),
+            }
+        return {
+            "identifiers": {(DOMAIN, "coordinator")},
+            "name": "LOTSE Mesh Coordinator",
+            "manufacturer": "LOTSE",
+            "model": "Neighborhood Hub",
+        }
+
     async def async_added_to_hass(self) -> None:
         self._mesh.register_combined_sensor(self._on_data)
         self.async_on_remove(lambda: self._mesh.unregister_combined_sensor(self._on_data))
@@ -166,14 +193,13 @@ async def async_setup_entry(
     ]
     async_add_entities(combined)
 
-    def _create_node_sensors(node_id: str) -> None:
+    def _create_node_sensors(node_id: str, keys: list[str]) -> None:
         entities = [
-            LOTSEPerNodeSensor(node_id, key, meta, mesh)
-            for key, meta in NODE_KEY_META.items()
+            LOTSEPerNodeSensor(node_id, key, NODE_KEY_META[key], mesh)
+            for key in keys
+            if key in NODE_KEY_META
         ]
-        async_add_entities(entities)
+        if entities:
+            async_add_entities(entities)
 
     mesh.set_node_sensor_callback(_create_node_sensors)
-
-    for node_id in mesh.known_nodes():
-        _create_node_sensors(node_id)

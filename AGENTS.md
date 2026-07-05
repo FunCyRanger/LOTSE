@@ -26,9 +26,9 @@ Three codebases:
 ```bash
 pip install -r tests/requirements.txt    # pyyaml, jinja2, paho-mqtt
 
-python3 tests/test_mesh.py               # 49 template + roundtrip tests
+python3 tests/test_mesh.py               # 57 template + roundtrip tests (incl. grid quality + config)
 python3 tests/test_forecast_validation.py # 7 validation tests (formula + historical CSV)
-python3 tests/test_schema.py             # 11 schema tests
+python3 tests/test_schema.py             # 18 schema tests (incl. config blueprint + payload size + grid)
 python3 tests/test_e2e_mqtt.py           # requires Docker, auto-skipped
 python3 tests/check_installation.py --ha-url <url> --token <token>
 
@@ -58,7 +58,8 @@ Two jobs:
 
 | File | Key details |
 |------|-------------|
-| `sender-blueprint.yaml` | **Only remaining YAML file** (cannot be integrated — user-configurable automation). Unit conversion: W→kW (*0.001), MW→kW (*1000), mV→V (*0.001), kV→V (*1000), Wh→kWh (*0.001), MWh→kWh (*1000). Clamping: power ±500, energy ≥0, bS/wS 0-100 int. Skips `unavailable`/`unknown`/`none`/`NaN`/`inf`/`-inf`. Config envelope on boot + daily via `lotse/config/{node}/<key>` direct topic (`retain: true`). Measurement topic: `msh/{region}/2/json/mqtt/{node}`. `mode: single`. |
+| `sender-blueprint.yaml` | **Only remaining measurement YAML** (cannot be integrated — user-configurable automation). 33 inputs (20 measurement + 13 grid quality). Unit conversion: W→kW, MW→kW, mV→V, kV→V, Wh→kWh, MWh→kWh. Clamping: power ±500, energy ≥0, bS/wS 0-100 int, grid quality raw pass-through. Skips `unavailable`/`unknown`/`none`/`NaN`/`inf`/`-inf`. gEI mandatory. Boot notification. Measurement topic: `msh/{region}/2/json/mqtt/{node}`. `mode: single`. |
+| `sender-config-blueprint.yaml` | Config-only blueprint publishes bC/sK/sA/sZ on boot + daily + trigger. Direct topics `lotse/config/{node}/<key>` (`retain: true`). Boot notification. `mode: single`. |
 | `solarforecast-blueprint.yaml` | Template blueprint for per-household PV hourly forecast (uses weather entity). |
 
 **Deleted YAMLs** (functionality moved into integration `lotse_forecast` v3.1+):
@@ -74,7 +75,7 @@ Custom MQTT 3.1.1 broker (select-based, QoS 0, max 8 clients) on raw LWIP socket
 Key files:
 - `main/main.c` — Init → NVS → WiFi → MQTT broker → HTTP server. Echo fix (parses own-node `payload` string → object). GPIO0=factory reset. `send_interval` minimum 60s. SNTP sync on boot.
 - `main/transform.c` — SMI script parser, Tasmota JSON→LOTSE transform, envelope/config-envelope builder.
-- `main/lotse_config.{c,h}` — 29-key enum (`LOTSE_KEY_GP`..`LOTSE_KEY_SZ`), 20 measurement + 5 grid quality (`gA1`/`gA2`/`gA3` current, `gF` frequency, `gPF` power factor) + 4 config keys.
+- `main/lotse_config.{c,h}` — 37-key enum (`LOTSE_KEY_GP`..`LOTSE_KEY_SZ`), 20 measurement + 9 grid quality (`gA1`/`gA2`/`gA3` current, `gF` frequency, `gPF` power factor, `gQ`/`gQ1`/`gQ2`/`gQ3` reactive power) + 4 config keys + 4 apparent power (`gS`/`gS1`/`gS2`/`gS3`). MAX_MAPPINGS=37.
 - `main/mqtt_broker.c` — Minimal MQTT 3.1.1 broker.
 - `main/tasmota_client.c` — HTTP client for Tasmota `/cm`.
 - `main/web_server.c` — HTTP server with embedded SPA (`webui/index.html` → `scripts/embed_webui.py` → `main/html.h`).
