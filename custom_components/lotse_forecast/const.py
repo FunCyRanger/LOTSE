@@ -57,6 +57,8 @@ COMBINED_KEY_META: dict[str, dict] = {
     "combined_mesh_bp":  {"unit": "kW",  "device_class": "power",     "state_class": "measurement",       "name": "Combined Mesh Battery Power"},
     "combined_mesh_bs":  {"unit": "%",   "device_class": "battery",   "state_class": "measurement",       "name": "Average Neighbor SOC"},
     "combined_mesh_battery_capacity": {"unit": "kWh", "device_class": "energy", "state_class": "total", "name": "Combined Mesh Battery Capacity"},
+    "combined_mesh_bei": {"unit": "kWh", "device_class": "energy", "state_class": "total_increasing", "name": "Combined Mesh Battery Energy In"},
+    "combined_mesh_beo": {"unit": "kWh", "device_class": "energy", "state_class": "total_increasing", "name": "Combined Mesh Battery Energy Out"},
     "combined_mesh_solar_capacity":   {"unit": "kW",  "device_class": "power",  "state_class": "measurement", "name": "Combined Mesh Solar Capacity"},
     "combined_mesh_participants":     {"unit": "nodes",                               "name": "Participating Neighbors"},
     "combined_mesh_config_ready":     {"unit": "nodes",                               "name": "Config-Ready Nodes"},

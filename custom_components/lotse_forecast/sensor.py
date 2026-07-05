@@ -58,6 +58,8 @@ COMBINED_FNS: dict[str, Callable[[MeshData], float]] = {
         if (sp := sum(m.get_all_values("sp"))) > 0.1 and (gep := sum(m.get_all_values("gep"))) is not None
         else 0.0
     ),
+    "combined_mesh_bei": lambda m: _sum(m, "bei"),
+    "combined_mesh_beo": lambda m: _sum(m, "beo"),
     "combined_mesh_soc_weighted": lambda m: _weighted_soc(m),
     "combined_mesh_gv1_max": lambda m: _max(m, "gv1"),
     "combined_mesh_export_ratio": lambda m: (
