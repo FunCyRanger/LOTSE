@@ -20,6 +20,7 @@ class LotseForecastConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_create_entry(
                 title="LOTSE Solar Forecast",
                 data={"weather_entity": user_input["weather_entity"]},
+                options={"weather_entity": user_input["weather_entity"], "panels": []},
             )
 
         return self.async_show_form(
@@ -39,44 +40,40 @@ class LotseForecastConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 class LotseForecastOptionsFlow(config_entries.OptionsFlow):
     def __init__(self, config_entry):
         self.config_entry = config_entry
+        self._flow_weather_entity = config_entry.options.get(
+            "weather_entity", config_entry.data.get("weather_entity", "")
+        )
+        self._flow_panels = list(config_entry.options.get("panels", []))
 
     async def async_step_init(self, user_input=None) -> FlowResult:
-        panels = self.config_entry.options.get("panels", [])
-
         if user_input is not None:
             removed = user_input.get("remove_panels", [])
             if removed:
                 indices = {int(i) for i in removed}
-                panels = [p for i, p in enumerate(panels) if i not in indices]
+                self._flow_panels = [
+                    p for i, p in enumerate(self._flow_panels) if i not in indices
+                ]
 
-            new_options = {"panels": panels}
-            new_data = {
-                **self.config_entry.data,
-                "weather_entity": user_input["weather_entity"],
-            }
+            self._flow_weather_entity = user_input["weather_entity"]
 
             if user_input.get("add_panel"):
-                self.hass.config_entries.async_update_entry(
-                    self.config_entry, data=new_data, options=new_options,
-                )
                 return await self.async_step_add_panel()
 
-            self.hass.config_entries.async_update_entry(
-                self.config_entry, data=new_data, options=new_options,
-            )
-            return self.async_create_entry(title="", data=new_options)
+            return self.async_create_entry(title="", data={
+                "weather_entity": self._flow_weather_entity,
+                "panels": self._flow_panels,
+            })
 
-        weather_entity = self.config_entry.data.get("weather_entity", "")
         schema = {
-            vol.Required("weather_entity", default=weather_entity): selector.EntitySelector(
+            vol.Required("weather_entity", default=self._flow_weather_entity): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="weather"),
             ),
         }
 
-        if panels:
+        if self._flow_panels:
             choices = {
                 str(i): f"{p['name']} ({p['kwp']} kWp, {p['angle']}°, {p['azimuth']}°)"
-                for i, p in enumerate(panels)
+                for i, p in enumerate(self._flow_panels)
             }
             schema[vol.Optional("remove_panels", default=[])] = selector.SelectSelector(
                 selector.SelectSelectorConfig(
@@ -95,14 +92,17 @@ class LotseForecastOptionsFlow(config_entries.OptionsFlow):
 
     async def async_step_add_panel(self, user_input=None) -> FlowResult:
         if user_input is not None:
-            panels = list(self.config_entry.options.get("panels", []))
+            panels = list(self._flow_panels)
             panels.append({
                 "name": user_input["name"],
                 "kwp": user_input["kwp"],
                 "angle": user_input["angle"],
                 "azimuth": user_input["azimuth"],
             })
-            return self.async_create_entry(title="", data={"panels": panels})
+            return self.async_create_entry(title="", data={
+                "weather_entity": self._flow_weather_entity,
+                "panels": panels,
+            })
 
         return self.async_show_form(
             step_id="add_panel",

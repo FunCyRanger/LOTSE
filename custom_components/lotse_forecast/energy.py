@@ -1,3 +1,4 @@
+import logging
 import math
 import re
 from datetime import datetime
@@ -7,24 +8,30 @@ from homeassistant.core import HomeAssistant
 
 DOMAIN = "lotse_forecast"
 
+_LOGGER = logging.getLogger(__name__)
+
 
 async def async_get_solar_forecast(
     hass: HomeAssistant, config_entry_id: str
 ) -> dict[str, dict[str, float | int]] | None:
     entry = hass.config_entries.async_get_entry(config_entry_id)
     if entry is None or entry.domain != DOMAIN:
+        _LOGGER.debug("Forecast: entry %s not found or wrong domain", config_entry_id)
         return None
 
-    weather_entity = entry.data.get("weather_entity")
+    weather_entity = entry.options.get("weather_entity") or entry.data.get("weather_entity")
     if not weather_entity:
+        _LOGGER.debug("Forecast: no weather_entity configured for entry %s", config_entry_id)
         return None
 
     forecast = await _get_weather_forecast(hass, weather_entity)
     if not forecast:
+        _LOGGER.debug("Forecast: no forecast data from %s", weather_entity)
         return None
 
     panels = _get_panels(hass, entry)
     if not panels:
+        _LOGGER.debug("Forecast: no panels available for entry %s", config_entry_id)
         return None
 
     lat = hass.config.latitude

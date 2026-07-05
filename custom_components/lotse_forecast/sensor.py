@@ -84,10 +84,14 @@ def _weighted_soc(mesh: MeshData) -> float:
     for node_id in mesh.known_nodes():
         bs = mesh.get_value(node_id, "bs")
         bc = mesh.get_value(node_id, "bc")
-        if bs is not None and bc is not None and bc > 0:
+        if bs is not None and bc is not None and bc > 0 and 0 <= bs <= 100:
             weighted_sum += bs * bc
             total_weight += bc
-    return round(weighted_sum / total_weight, 1) if total_weight > 0 else 0.0
+    if total_weight > 0:
+        return round(weighted_sum / total_weight, 1)
+    vals = mesh.get_all_values("bs")
+    valid = [v for v in vals if 0 <= v <= 100]
+    return round(sum(valid) / len(valid), 1) if valid else 0.0
 
 
 _SE_CLEAN_CACHE: dict[str, float] = {}

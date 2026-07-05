@@ -785,6 +785,64 @@ def test_combined_weighted_soc_empty():
     assert _weighted_soc(_MockMeshData()) == 0.0
 
 
+def test_combined_weighted_soc_bs_negative():
+    """_weighted_soc: negative bs skipped, valid bs still weighted correctly."""
+    from custom_components.lotse_forecast.sensor import _weighted_soc
+    m = _MockMeshData()
+    m.set_values("bs", [-10, 80])
+    m.set_values("bc", [10, 10])
+    assert abs(_weighted_soc(m) - 80.0) < 0.1
+
+
+def test_combined_weighted_soc_bs_over_100():
+    """_weighted_soc: bs > 100 skipped."""
+    from custom_components.lotse_forecast.sensor import _weighted_soc
+    m = _MockMeshData()
+    m.set_values("bs", [150, 80])
+    m.set_values("bc", [10, 10])
+    assert abs(_weighted_soc(m) - 80.0) < 0.1
+
+
+def test_combined_weighted_soc_partial():
+    """_weighted_soc: nodes with bs but no bc skipped; valid ones weighted."""
+    from custom_components.lotse_forecast.sensor import _weighted_soc
+    m = _MockMeshData()
+    m._node_data = {
+        "a": {"bs": 80, "bc": 10},
+        "b": {"bs": 70},
+        "c": {"bs": 90, "bc": 5},
+    }
+    assert abs(_weighted_soc(m) - 83.3) < 0.1
+
+
+def test_combined_weighted_soc_bc_zero():
+    """_weighted_soc: bc=0 excluded from weighting, other nodes still work."""
+    from custom_components.lotse_forecast.sensor import _weighted_soc
+    m = _MockMeshData()
+    m._node_data = {
+        "a": {"bs": 80, "bc": 10},
+        "b": {"bs": 90, "bc": 0},
+    }
+    assert abs(_weighted_soc(m) - 80.0) < 0.1
+
+
+def test_combined_weighted_soc_all_bc_zero_fallback():
+    """_weighted_soc: all bc=0 falls back to simple bs average."""
+    from custom_components.lotse_forecast.sensor import _weighted_soc
+    m = _MockMeshData()
+    m.set_values("bs", [80, 90])
+    m.set_values("bc", [0, 0])
+    assert abs(_weighted_soc(m) - 85.0) < 0.1
+
+
+def test_combined_weighted_soc_bs_only_fallback():
+    """_weighted_soc: no bc at all falls back to simple bs average."""
+    from custom_components.lotse_forecast.sensor import _weighted_soc
+    m = _MockMeshData()
+    m.set_values("bs", [80, 90])
+    assert abs(_weighted_soc(m) - 85.0) < 0.1
+
+
 def test_combined_min():
     """_min helper: 3 values → correct min."""
     from custom_components.lotse_forecast.sensor import _min
