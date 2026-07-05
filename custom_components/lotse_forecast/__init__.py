@@ -195,6 +195,14 @@ def _safe_float(v: Any) -> float | None:
     return f
 
 
+def _register_energy_platform(hass: HomeAssistant) -> None:
+    energy_platforms = hass.data.get("energy_platforms")
+    if energy_platforms is not None and DOMAIN not in energy_platforms:
+        from .energy import async_get_solar_forecast
+        energy_platforms[DOMAIN] = async_get_solar_forecast
+        _LOGGER.info("Registered lotse_forecast solar forecast with Energy Dashboard")
+
+
 async def async_setup_entry(hass: HomeAssistant, config_entry) -> bool:
     hass.config.top_level_components.add(DOMAIN)
     hass.data.setdefault(DOMAIN, {})
@@ -205,6 +213,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry) -> bool:
         await mesh.start()
         await hass.config_entries.async_forward_entry_setups(config_entry, PLATFORMS)
         await async_create_lovelace_dashboard(hass)
+        _register_energy_platform(hass)
 
     if hass.is_running:
         await _start_later()
