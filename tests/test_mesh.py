@@ -710,15 +710,22 @@ def test_roundtrip():
 # ═══════════════════════════════════════════════════════════════════════════
 
 class _MockMeshData:
-    """Minimal mock for MeshData.get_all_values used by combined sensors."""
+    """Minimal mock for MeshData used by combined sensors."""
     def __init__(self):
-        self._data: dict[str, list[float]] = {}
+        self._node_data: dict[str, dict[str, float]] = {}
 
     def set_values(self, key: str, vals: list[float]) -> None:
-        self._data[key] = vals
+        for i, v in enumerate(vals):
+            self._node_data.setdefault(str(i), {})[key] = v
 
     def get_all_values(self, key: str) -> list[float]:
-        return list(self._data.get(key, []))
+        return [nd[key] for nd in self._node_data.values() if key in nd]
+
+    def known_nodes(self) -> list[str]:
+        return list(self._node_data.keys())
+
+    def get_value(self, node_id: str, key: str) -> float | None:
+        return self._node_data.get(node_id, {}).get(key)
 
 
 def test_combined_sum():

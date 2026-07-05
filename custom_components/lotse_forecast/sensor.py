@@ -79,13 +79,15 @@ COMBINED_FNS: dict[str, Callable[[MeshData], float]] = {
 
 
 def _weighted_soc(mesh: MeshData) -> float:
-    bs_vals = mesh.get_all_values("bs")
-    bc_vals = mesh.get_all_values("bc")
-    if not bs_vals or not bc_vals:
-        return 0.0
-    n = min(len(bs_vals), len(bc_vals))
-    total_weight = sum(bc_vals[:n])
-    return round(sum(bs_vals[i] * bc_vals[i] for i in range(n)) / total_weight, 1) if total_weight > 0 else 0.0
+    total_weight = 0.0
+    weighted_sum = 0.0
+    for node_id in mesh.known_nodes():
+        bs = mesh.get_value(node_id, "bs")
+        bc = mesh.get_value(node_id, "bc")
+        if bs is not None and bc is not None and bc > 0:
+            weighted_sum += bs * bc
+            total_weight += bc
+    return round(weighted_sum / total_weight, 1) if total_weight > 0 else 0.0
 
 
 _SE_CLEAN_CACHE: dict[str, float] = {}
