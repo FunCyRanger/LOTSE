@@ -39,7 +39,7 @@ class LotseForecastConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 class LotseForecastOptionsFlow(config_entries.OptionsFlow):
     def __init__(self, config_entry):
-        self.config_entry = config_entry
+        self._config_entry = config_entry
         self._flow_weather_entity = config_entry.options.get(
             "weather_entity", config_entry.data.get("weather_entity", "")
         )
