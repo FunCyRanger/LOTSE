@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import asyncio
 import logging
 from collections.abc import Callable
 from typing import Any
@@ -14,7 +13,6 @@ from homeassistant.helpers import entity_registry as er
 
 from .const import BAD_STATES, DOMAIN, MSH_TOPIC, NODE_KEY_META, PLATFORMS
 from .dashboard import async_create_lovelace_dashboard
-from .energy import async_get_solar_forecast
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -196,35 +194,6 @@ def _safe_float(v: Any) -> float | None:
     return f
 
 
-async def _register_energy_platform(hass: HomeAssistant) -> None:
-    _LOGGER.warning("Energy platform retry task started")
-    for attempt in range(20):
-        energy_platforms = hass.data.get("energy_platforms")
-        _LOGGER.warning(
-            "Energy registration retry: attempt %d/20, dict=%s",
-            attempt + 1, energy_platforms is not None,
-        )
-        if energy_platforms is not None:
-            if DOMAIN in energy_platforms:
-                _LOGGER.warning(
-                    "Energy registration: domain already registered (domains: %s)",
-                    list(energy_platforms),
-                )
-                return
-            _LOGGER.warning(
-                "Energy registration: dict exists, domain not found — injecting (attempt %d, domains: %s)",
-                attempt + 1, list(energy_platforms),
-            )
-            energy_platforms[DOMAIN] = async_get_solar_forecast
-            _LOGGER.warning(
-                "Registered lotse_forecast after startup (attempt %d, domains: %s)",
-                attempt + 1, list(energy_platforms),
-            )
-            return
-        await asyncio.sleep(5)
-    _LOGGER.warning("Failed to register energy platform after 20 attempts")
-
-
 async def async_setup_entry(hass: HomeAssistant, config_entry) -> bool:
     hass.config.top_level_components.add(DOMAIN)
     hass.data.setdefault(DOMAIN, {})
@@ -235,7 +204,6 @@ async def async_setup_entry(hass: HomeAssistant, config_entry) -> bool:
         await mesh.start()
         await hass.config_entries.async_forward_entry_setups(config_entry, PLATFORMS)
         await async_create_lovelace_dashboard(hass)
-        hass.async_create_task(_register_energy_platform(hass))
 
     if hass.is_running:
         await _start_later()

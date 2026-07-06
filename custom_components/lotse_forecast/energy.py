@@ -10,6 +10,8 @@ DOMAIN = "lotse_forecast"
 
 _LOGGER = logging.getLogger(__name__)
 
+_LOGGER.warning("lotse_forecast energy module loaded — ready for auto-discovery")
+
 
 async def async_get_solar_forecast(
     hass: HomeAssistant, config_entry_id: str
