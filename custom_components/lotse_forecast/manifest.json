@@ -1,7 +1,7 @@
 {
   "domain": "lotse_forecast",
   "name": "LOTSE Mesh Coordinator",
-  "version": "3.4.3",
+  "version": "3.5.0",
   "requirements": [],
   "codeowners": [],
   "integration_type": "hub",

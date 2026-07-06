@@ -194,6 +194,27 @@ def _safe_float(v: Any) -> float | None:
     return f
 
 
+async def _ensure_energy_platform(hass: HomeAssistant) -> None:
+    """Pre-warm the energy platform singleton so auto-discovery happens now."""
+    try:
+        from homeassistant.components.energy.websocket_api import (  # type: ignore[import-untyped]
+            async_get_energy_platforms,
+        )
+        platforms = await async_get_energy_platforms(hass)
+        if DOMAIN in platforms:
+            _LOGGER.warning(
+                "Energy platform pre-warm: lotse_forecast registered (domains: %s)",
+                list(platforms),
+            )
+        else:
+            _LOGGER.warning(
+                "Energy platform pre-warm: lotse_forecast NOT found in %s",
+                list(platforms),
+            )
+    except Exception:
+        _LOGGER.warning("Energy platform pre-warm: energy component not available yet")
+
+
 async def async_setup_entry(hass: HomeAssistant, config_entry) -> bool:
     hass.config.top_level_components.add(DOMAIN)
     hass.data.setdefault(DOMAIN, {})
@@ -204,6 +225,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry) -> bool:
         await mesh.start()
         await hass.config_entries.async_forward_entry_setups(config_entry, PLATFORMS)
         await async_create_lovelace_dashboard(hass)
+        hass.async_create_task(_ensure_energy_platform(hass))
 
     if hass.is_running:
         await _start_later()
