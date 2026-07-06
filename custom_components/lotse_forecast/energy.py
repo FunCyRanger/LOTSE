@@ -14,7 +14,7 @@ _LOGGER = logging.getLogger(__name__)
 async def async_get_solar_forecast(
     hass: HomeAssistant, config_entry_id: str
 ) -> dict[str, dict[str, float | int]] | None:
-    _LOGGER.debug("Forecast: called for entry %s", config_entry_id)
+    _LOGGER.warning("Forecast: called for entry %s (debug for discovery verification)", config_entry_id)
 
     entry = hass.config_entries.async_get_entry(config_entry_id)
     if entry is None:

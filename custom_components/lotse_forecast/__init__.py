@@ -197,10 +197,15 @@ def _safe_float(v: Any) -> float | None:
 
 def _register_energy_platform(hass: HomeAssistant) -> None:
     energy_platforms = hass.data.get("energy_platforms")
-    if energy_platforms is not None and DOMAIN not in energy_platforms:
-        from .energy import async_get_solar_forecast
-        energy_platforms[DOMAIN] = async_get_solar_forecast
-        _LOGGER.info("Registered lotse_forecast solar forecast with Energy Dashboard")
+    if energy_platforms is None:
+        _LOGGER.warning("Energy platforms dict not yet available — discovery will rely on auto mechanism")
+        return
+    if DOMAIN in energy_platforms:
+        _LOGGER.info("lotse_forecast already registered in Energy Dashboard (domain=%s)", DOMAIN in energy_platforms)
+        return
+    from .energy import async_get_solar_forecast
+    energy_platforms[DOMAIN] = async_get_solar_forecast
+    _LOGGER.warning("Manually registered lotse_forecast solar forecast with Energy Dashboard (domains: %s)", list(energy_platforms))
 
 
 async def async_setup_entry(hass: HomeAssistant, config_entry) -> bool:
