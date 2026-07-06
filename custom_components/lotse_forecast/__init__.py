@@ -197,11 +197,24 @@ def _safe_float(v: Any) -> float | None:
 
 
 async def _register_energy_platform(hass: HomeAssistant) -> None:
+    _LOGGER.warning("Energy platform retry task started")
     for attempt in range(20):
         energy_platforms = hass.data.get("energy_platforms")
+        _LOGGER.warning(
+            "Energy registration retry: attempt %d/20, dict=%s",
+            attempt + 1, energy_platforms is not None,
+        )
         if energy_platforms is not None:
             if DOMAIN in energy_platforms:
+                _LOGGER.warning(
+                    "Energy registration: domain already registered (domains: %s)",
+                    list(energy_platforms),
+                )
                 return
+            _LOGGER.warning(
+                "Energy registration: dict exists, domain not found — injecting (attempt %d, domains: %s)",
+                attempt + 1, list(energy_platforms),
+            )
             energy_platforms[DOMAIN] = async_get_solar_forecast
             _LOGGER.warning(
                 "Registered lotse_forecast after startup (attempt %d, domains: %s)",
