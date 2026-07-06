@@ -8,7 +8,8 @@ from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-
+from homeassistant.helpers import entity_registry as er
+ 
 from . import MeshData
 from .const import COMBINED_KEY_META, DOMAIN, NODE_KEY_META
 
@@ -199,6 +200,11 @@ async def async_setup_entry(
     hass: HomeAssistant, config_entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     mesh: MeshData = hass.data[DOMAIN][config_entry.entry_id]
+
+    reg = er.async_get(hass)
+    for uid in COMBINED_KEY_META:
+        if uid in COMBINED_FNS:
+            reg.async_get_or_create("sensor", DOMAIN, uid, suggested_object_id=uid)
 
     combined = [
         LOTSECombinedSensor(uid, meta, COMBINED_FNS[uid], mesh)
