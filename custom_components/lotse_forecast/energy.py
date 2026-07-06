@@ -93,7 +93,10 @@ def _get_panels(hass, entry):
         raw = sensor.state
         if raw in ("unknown", "unavailable", "none"):
             return default
-        val = float(raw)
+        try:
+            val = float(raw.replace(",", "."))
+        except (ValueError, TypeError):
+            return default
         return val if val > 0 else default
 
     # Auto-discover mesh node panels — prefer sensor entities, fallback to MeshData
@@ -138,7 +141,10 @@ def _get_panels(hass, entry):
     # Manual panels from config options
     manual = entry.options.get("panels", [])
     for p in manual:
-        kwp = float(p.get("kwp", 0))
+        try:
+            kwp = float(str(p.get("kwp", 0)).replace(",", "."))
+        except (ValueError, TypeError):
+            continue
         if kwp <= 0:
             continue
         panels.append({
