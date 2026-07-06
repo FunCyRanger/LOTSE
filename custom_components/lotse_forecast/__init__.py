@@ -194,9 +194,10 @@ def _safe_float(v: Any) -> float | None:
     return f
 
 
-async def _ensure_energy_platform(hass: HomeAssistant) -> None:
+async def _ensure_energy_platform(hass: HomeAssistant, entry_id: str) -> None:
     """Pre-warm the energy platform singleton so auto-discovery happens now."""
     try:
+        from homeassistant.components.energy import async_get_manager  # type: ignore[import-untyped]
         from homeassistant.components.energy.websocket_api import (  # type: ignore[import-untyped]
             async_get_energy_platforms,
         )
@@ -206,13 +207,35 @@ async def _ensure_energy_platform(hass: HomeAssistant) -> None:
                 "Energy platform pre-warm: lotse_forecast registered (domains: %s)",
                 list(platforms),
             )
+            manager = await async_get_manager(hass)
+            if manager.data:
+                sources = list(manager.data.get("energy_sources", []))
+                changed = False
+                reg = er.async_get(hass)
+                for source in sources:
+                    if source["type"] != "solar":
+                        continue
+                    if source.get("config_entry_solar_forecast"):
+                        continue
+                    stat_energy = source.get("stat_energy_from")
+                    if stat_energy:
+                        entry = reg.async_get(stat_energy)
+                        if entry and entry.platform == DOMAIN:
+                            source["config_entry_solar_forecast"] = [entry_id]
+                            changed = True
+                            _LOGGER.warning(
+                                "Auto-linked solar source %s to config_entry %s",
+                                stat_energy, entry_id,
+                            )
+                if changed:
+                    await manager.async_update({"energy_sources": sources})
         else:
             _LOGGER.warning(
                 "Energy platform pre-warm: lotse_forecast NOT found in %s",
                 list(platforms),
             )
-    except Exception:
-        _LOGGER.warning("Energy platform pre-warm: energy component not available yet")
+    except Exception as exc:
+        _LOGGER.warning("Energy platform pre-warm: %s", exc)
 
 
 async def async_setup_entry(hass: HomeAssistant, config_entry) -> bool:
@@ -225,7 +248,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry) -> bool:
         await mesh.start()
         await hass.config_entries.async_forward_entry_setups(config_entry, PLATFORMS)
         await async_create_lovelace_dashboard(hass)
-        hass.async_create_task(_ensure_energy_platform(hass))
+        hass.async_create_task(_ensure_energy_platform(hass, config_entry.entry_id))
 
     if hass.is_running:
         await _start_later()
