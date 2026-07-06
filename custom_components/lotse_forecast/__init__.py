@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import asyncio
 import logging
 from collections.abc import Callable
 from typing import Any
@@ -195,17 +196,20 @@ def _safe_float(v: Any) -> float | None:
     return f
 
 
-def _register_energy_platform(hass: HomeAssistant) -> None:
-    energy_platforms = hass.data.get("energy_platforms")
-    if energy_platforms is None:
-        _LOGGER.warning("Energy platforms dict not yet available — discovery will rely on auto mechanism")
-        return
-    if DOMAIN in energy_platforms:
-        _LOGGER.info("lotse_forecast already registered in Energy Dashboard (domain=%s)", DOMAIN in energy_platforms)
-        return
-    from .energy import async_get_solar_forecast
-    energy_platforms[DOMAIN] = async_get_solar_forecast
-    _LOGGER.warning("Manually registered lotse_forecast solar forecast with Energy Dashboard (domains: %s)", list(energy_platforms))
+async def _register_energy_platform(hass: HomeAssistant) -> None:
+    for attempt in range(20):
+        energy_platforms = hass.data.get("energy_platforms")
+        if energy_platforms is not None:
+            if DOMAIN in energy_platforms:
+                return
+            energy_platforms[DOMAIN] = async_get_solar_forecast
+            _LOGGER.warning(
+                "Registered lotse_forecast after startup (attempt %d, domains: %s)",
+                attempt + 1, list(energy_platforms),
+            )
+            return
+        await asyncio.sleep(5)
+    _LOGGER.warning("Failed to register energy platform after 20 attempts")
 
 
 async def async_setup_entry(hass: HomeAssistant, config_entry) -> bool:
@@ -218,7 +222,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry) -> bool:
         await mesh.start()
         await hass.config_entries.async_forward_entry_setups(config_entry, PLATFORMS)
         await async_create_lovelace_dashboard(hass)
-        _register_energy_platform(hass)
+        hass.async_create_task(_register_energy_platform(hass))
 
     if hass.is_running:
         await _start_later()
