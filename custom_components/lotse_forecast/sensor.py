@@ -8,8 +8,8 @@ from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-
 from . import MeshData
+from .calibration import CalibrationModel
 from .const import COMBINED_KEY_META, DOMAIN, NODE_KEY_META
 
 _LOGGER = logging.getLogger(__name__)
@@ -195,10 +195,108 @@ class LOTSECombinedSensor(SensorEntity):
         return self._compute_fn(self._mesh)
 
 
+class LOTSEForecastScaleFactorSensor(SensorEntity):
+    """Diagnostic sensor showing the model's global scale factor.
+
+    The full model state (coefficients, MAPE, today_predicted) is
+    exposed in extra_state_attributes for persistence and debugging.
+    """
+
+    _attr_entity_category = "diagnostic"
+    _attr_should_poll = False
+
+    def __init__(self, model: CalibrationModel) -> None:
+        self._model = model
+        self._attr_unique_id = "lotse_forecast_scale_factor"
+        self._attr_name = "LOTSE Forecast Scale Factor"
+
+    @property
+    def native_value(self) -> str:
+        return f"{self._model.global_scale:.4f}"
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return self._model.to_dict()
+
+    @property
+    def device_info(self) -> dict:
+        return {
+            "identifiers": {(DOMAIN, "forecast")},
+            "name": "LOTSE Solar Forecast",
+            "manufacturer": "LOTSE",
+            "model": "Solar Forecast",
+            "via_device": (DOMAIN, "coordinator"),
+        }
+
+
+class LOTSEForecastAccuracySensor(SensorEntity):
+    _attr_entity_category = "diagnostic"
+    _attr_should_poll = False
+    _attr_native_unit_of_measurement = "%"
+
+    def __init__(self, model: CalibrationModel) -> None:
+        self._model = model
+        self._attr_unique_id = "lotse_forecast_accuracy"
+        self._attr_name = "LOTSE Forecast Accuracy (MAPE)"
+
+    @property
+    def native_value(self) -> str | None:
+        return f"{self._model.mape:.1f}" if self._model.mape is not None else None
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {"sample_count": self._model.sample_count}
+
+    @property
+    def device_info(self) -> dict:
+        return {
+            "identifiers": {(DOMAIN, "forecast")},
+            "name": "LOTSE Solar Forecast",
+            "manufacturer": "LOTSE",
+            "model": "Solar Forecast",
+            "via_device": (DOMAIN, "coordinator"),
+        }
+
+
+class LOTSEForecastSamplesSensor(SensorEntity):
+    _attr_entity_category = "diagnostic"
+    _attr_should_poll = False
+
+    def __init__(self, model: CalibrationModel) -> None:
+        self._model = model
+        self._attr_unique_id = "lotse_forecast_samples"
+        self._attr_name = "LOTSE Forecast Samples"
+
+    @property
+    def native_value(self) -> int:
+        return self._model.sample_count
+
+    @property
+    def device_info(self) -> dict:
+        return {
+            "identifiers": {(DOMAIN, "forecast")},
+            "name": "LOTSE Solar Forecast",
+            "manufacturer": "LOTSE",
+            "model": "Solar Forecast",
+            "via_device": (DOMAIN, "coordinator"),
+        }
+
+    @property
+    def device_info(self) -> dict:
+        return {
+            "identifiers": {(DOMAIN, "forecast")},
+            "name": "LOTSE Solar Forecast",
+            "manufacturer": "LOTSE",
+            "model": "Solar Forecast",
+            "via_device": (DOMAIN, "coordinator"),
+        }
+
+
 async def async_setup_entry(
     hass: HomeAssistant, config_entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     mesh: MeshData = hass.data[DOMAIN][config_entry.entry_id]
+    model: CalibrationModel | None = hass.data[DOMAIN].get("calibration")
 
     combined = [
         LOTSECombinedSensor(uid, meta, COMBINED_FNS[uid], mesh)
@@ -206,6 +304,14 @@ async def async_setup_entry(
         if uid in COMBINED_FNS
     ]
     async_add_entities(combined)
+
+    # Calibration sensors (independent of mesh data)
+    cal_sensors = []
+    if model:
+        cal_sensors.append(LOTSEForecastScaleFactorSensor(model))
+        cal_sensors.append(LOTSEForecastAccuracySensor(model))
+        cal_sensors.append(LOTSEForecastSamplesSensor(model))
+    async_add_entities(cal_sensors)
 
     def _create_node_sensors(node_id: str, keys: list[str]) -> None:
         entities = [

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Callable
+from datetime import timedelta
 from typing import Any
 
 from homeassistant.components.mqtt import DOMAIN as MQTT_DOMAIN
@@ -11,6 +12,7 @@ from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 
+from .calibration import CalibrationModel
 from .const import BAD_STATES, DOMAIN, MSH_TOPIC, NODE_KEY_META, PLATFORMS
 from .dashboard import async_create_lovelace_dashboard
 
@@ -244,10 +246,72 @@ async def async_setup_entry(hass: HomeAssistant, config_entry) -> bool:
     mesh = MeshData(hass)
     hass.data[DOMAIN][config_entry.entry_id] = mesh
 
+    # Create calibration model (seeded from entity state below)
+    model = CalibrationModel()
+    hass.data[DOMAIN]["calibration"] = model
+
+    # Track last SE snapshot for hourly actual computation
+    model._last_se_snapshot: float | None = None
+
+    async def _hourly_tick(now) -> None:
+        """Capture actual production for the completed hour, train model."""
+        state = hass.states.get(
+            "sensor.lotse_mesh_coordinator_combined_mesh_solar_energy"
+        )
+        if state is None:
+            return
+        try:
+            current_kwh = float(state.state)
+        except (ValueError, TypeError):
+            return
+        last_kwh = model._last_se_snapshot
+        model._last_se_snapshot = current_kwh
+        if last_kwh is None or current_kwh < last_kwh:
+            return  # first tick or reset
+
+        actual_wh = (current_kwh - last_kwh) * 1000
+        if actual_wh <= 0:
+            return
+
+        # Get the ISO timestamp for the hour that just completed
+        from datetime import timezone as tz_utc
+        hour_end = now - timedelta(hours=1)
+        hour_iso = hour_end.replace(minute=0, second=0, microsecond=0).isoformat()
+
+        model.train_from_actual(hour_iso, actual_wh)
+
+    async def _restore_model() -> None:
+        """Restore model state from the scale factor sensor's last attributes."""
+        reg = er.async_get(hass)
+        entity_id = reg.async_get_entity_id(
+            "sensor", DOMAIN, "lotse_forecast_scale_factor"
+        )
+        if not entity_id:
+            return
+        state = hass.states.get(entity_id)
+        if state and state.attributes and state.attributes.get("global_scale"):
+            restored = CalibrationModel.from_dict(dict(state.attributes))
+            model.global_scale = restored.global_scale
+            model.cloud_factors = restored.cloud_factors
+            model.sample_count = restored.sample_count
+            model.mape = restored.mape
+            model.today_predicted = restored.today_predicted
+            _LOGGER.warning(
+                "Restored calibration model: scale=%.4f, samples=%d, MAPE=%s",
+                model.global_scale, model.sample_count,
+                f"{model.mape:.1f}%" if model.mape is not None else "N/A",
+            )
+
     async def _start_later(_event=None) -> None:
         await mesh.start()
         await hass.config_entries.async_forward_entry_setups(config_entry, PLATFORMS)
         await async_create_lovelace_dashboard(hass)
+        await _restore_model()
+        # Schedule hourly training
+        from homeassistant.helpers.event import async_track_time_interval
+        hass.data[DOMAIN]["_unsub_hourly"] = async_track_time_interval(
+            hass, _hourly_tick, timedelta(hours=1)
+        )
         hass.async_create_task(_ensure_energy_platform(hass, config_entry.entry_id))
 
     if hass.is_running:
@@ -262,6 +326,10 @@ async def async_unload_entry(hass: HomeAssistant, config_entry) -> bool:
     mesh: MeshData | None = hass.data.get(DOMAIN, {}).pop(config_entry.entry_id, None)
     if mesh:
         await mesh.stop()
+    unsub = hass.data.get(DOMAIN, {}).pop("_unsub_hourly", None)
+    if unsub:
+        unsub()
+    hass.data.get(DOMAIN, {}).pop("calibration", None)
     unloaded = await hass.config_entries.async_unload_platforms(config_entry, PLATFORMS)
     return unloaded
 

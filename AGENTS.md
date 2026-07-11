@@ -5,6 +5,18 @@ Three codebases:
 - **`config-hub/`**: ESP-IDF project (C) — Tasmota SML → MQTT → transform → Meshtastic envelope
 - **`custom_components/lotse_forecast/`**: HA integration (`integration_type: hub`) providing everything: per-node sensor creation from MQTT mesh messages, combined aggregation sensors, `async_get_solar_forecast` for the Energy Dashboard, and auto-created LOTSE dashboard. Replaces `auto-discovery-automation.yaml`, `mesh-combined-template.yaml`, `mesh-combined-sensors.yaml`, and `lotse-dashboard.yaml` — no YAML files needed (v3.1+).
 
+## Versioning
+
+This project follows [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`):
+
+| Component | Meaning |
+|-----------|---------|
+| MAJOR | Breaking changes (integration replaces blueprints, removed YAML files) |
+| MINOR | New features (dynamic dashboard, energy auto-link) |
+| PATCH | Bug fixes (comma locale crash, registry revert) |
+
+Tags follow the pattern `v3.5.2` and are pushed to GitHub on release.
+
 ## Critical gotchas
 
 | Gotcha | Detail |

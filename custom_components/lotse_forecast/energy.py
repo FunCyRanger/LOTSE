@@ -6,6 +6,8 @@ from zoneinfo import ZoneInfo
 
 from homeassistant.core import HomeAssistant
 
+from .calibration import merge_past_hours
+
 DOMAIN = "lotse_forecast"
 
 _LOGGER = logging.getLogger(__name__)
@@ -52,7 +54,23 @@ async def async_get_solar_forecast(
     lat = hass.config.latitude
     tz = ZoneInfo(hass.config.time_zone)
 
-    wh_hours = _compute_forecast(forecast, panels, lat, tz)
+    raw_wh, cloud_map = _compute_forecast(forecast, panels, lat, tz)
+    if not raw_wh:
+        _LOGGER.debug("Forecast: no raw forecast values for entry %s", config_entry_id)
+        return None
+
+    # Apply calibration model if available
+    model = hass.data.get(DOMAIN, {}).get("calibration")
+    if model is not None:
+        calibrated = {}
+        for ts, raw_val in raw_wh.items():
+            cloud = cloud_map.get(ts)
+            calibrated[ts] = model.apply(raw_val, cloud_cover=cloud)
+        model.store_forecast(calibrated, raw=raw_wh)
+        wh_hours = merge_past_hours(model.today_predicted, calibrated)
+    else:
+        wh_hours = dict(raw_wh)
+
     _LOGGER.debug(
         "Forecast: returning %d wh_hours for entry %s (%d panels, weather=%s)",
         len(wh_hours), config_entry_id, len(panels), weather_entity,
@@ -161,6 +179,7 @@ def _get_panels(hass, entry):
 
 def _compute_forecast(forecast, panels, lat, tz):
     wh_hours = {}
+    cloud_map = {}
 
     for entry in forecast:
         dt_raw = entry.get("datetime") or entry.get("DateTime")
@@ -195,10 +214,12 @@ def _compute_forecast(forecast, panels, lat, tz):
             )
             total_wh += kw * 1000
 
+        ts = dt.isoformat()
+        cloud_map[ts] = cloud
         if total_wh > 0:
-            wh_hours[dt.isoformat()] = int(round(total_wh))
+            wh_hours[ts] = int(round(total_wh))
 
-    return wh_hours
+    return wh_hours, cloud_map
 
 
 def _solar_altitude(lat, dayofyear, hour):

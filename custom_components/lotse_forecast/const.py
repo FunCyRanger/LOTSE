@@ -2,7 +2,7 @@ from __future__ import annotations
 
 DOMAIN = "lotse_forecast"
 
-PLATFORMS = ["sensor"]
+PLATFORMS = ["sensor", "button"]
 
 MSH_TOPIC = "msh/+/2/json/mqtt/+"
 
@@ -91,4 +91,8 @@ COMBINED_KEY_META: dict[str, dict] = {
     "combined_mesh_gs_sum": {"unit": "VA",   "device_class": "apparent_power", "state_class": "measurement", "name": "Combined Mesh Apparent Power"},
     # Forecast
     "solar_production_forecast": {"unit": "kWh", "device_class": "energy", "state_class": "total", "name": "Solar Production with Forecast"},
+    # Calibration / diagnostics
+    "lotse_forecast_scale_factor": {"unit": None, "device_class": None, "state_class": "measurement", "name": "LOTSE Forecast Scale Factor"},
+    "lotse_forecast_accuracy":      {"unit": "%",   "device_class": None, "state_class": "measurement", "name": "LOTSE Forecast Accuracy (MAPE)"},
+    "lotse_forecast_samples":       {"unit": None,  "device_class": None, "state_class": "measurement", "name": "LOTSE Forecast Samples"},
 }
