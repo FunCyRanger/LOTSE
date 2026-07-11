@@ -83,12 +83,12 @@ class CalibrationModel:
         today = now.date()
         self.today_predicted = {
             ts: wh for ts, wh in calibrated.items()
-            if _parse_dt(ts) is not None and _parse_dt(ts).date() == today
+            if (dt := _parse_dt(ts)) is not None and dt.date() == today
         }
         if raw is not None:
             self._raw_predicted = {
                 ts: wh for ts, wh in raw.items()
-                if _parse_dt(ts) is not None and _parse_dt(ts).date() == today
+                if (dt := _parse_dt(ts)) is not None and dt.date() == today
             }
 
     def train_from_actual(self, hour_iso: str, actual_wh: float,
@@ -121,6 +121,7 @@ class CalibrationModel:
             "alpha": self.alpha,
             "cloud_buckets": self.cloud_buckets,
             "today_predicted": dict(self.today_predicted),
+            "_raw_predicted": dict(self._raw_predicted),
         }
 
     @classmethod
@@ -136,6 +137,7 @@ class CalibrationModel:
         model.sample_count = data.get("sample_count", 0)
         model.mape = data.get("mape")
         model.today_predicted = data.get("today_predicted", {})
+        model._raw_predicted = data.get("_raw_predicted", {})
         return model
 
     def _cloud_bucket(self, cloud_cover: float) -> int:

@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 
 from homeassistant.core import HomeAssistant
 
-from .calibration import merge_past_hours
+from .calibration import CalibrationModel, merge_past_hours
 
 DOMAIN = "lotse_forecast"
 
@@ -60,13 +60,15 @@ async def async_get_solar_forecast(
         return None
 
     # Apply calibration model if available
-    model = hass.data.get(DOMAIN, {}).get("calibration")
+    model: CalibrationModel | None = hass.data.get(DOMAIN, {}).get("calibration")
     if model is not None:
         calibrated = {}
         for ts, raw_val in raw_wh.items():
             cloud = cloud_map.get(ts)
             calibrated[ts] = model.apply(raw_val, cloud_cover=cloud)
-        model.store_forecast(calibrated, raw=raw_wh)
+        # Pass local-timezone now so date filtering in store_forecast matches
+        local_now = datetime.now(tz)
+        model.store_forecast(calibrated, raw=raw_wh, now=local_now)
         wh_hours = merge_past_hours(model.today_predicted, calibrated)
     else:
         wh_hours = dict(raw_wh)

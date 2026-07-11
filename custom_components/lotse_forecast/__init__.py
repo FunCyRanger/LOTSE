@@ -3,8 +3,9 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Callable
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from homeassistant.components.mqtt import DOMAIN as MQTT_DOMAIN
 from homeassistant.components.mqtt import async_subscribe as mqtt_async_subscribe
@@ -255,9 +256,12 @@ async def async_setup_entry(hass: HomeAssistant, config_entry) -> bool:
 
     async def _hourly_tick(now) -> None:
         """Capture actual production for the completed hour, train model."""
-        state = hass.states.get(
-            "sensor.lotse_mesh_coordinator_combined_mesh_solar_energy"
-        )
+        # Look up the combined solar energy entity by unique_id (not hardcoded name)
+        reg = er.async_get(hass)
+        se_entity_id = reg.async_get_entity_id("sensor", DOMAIN, "combined_mesh_se")
+        if not se_entity_id:
+            return
+        state = hass.states.get(se_entity_id)
         if state is None:
             return
         try:
@@ -273,10 +277,11 @@ async def async_setup_entry(hass: HomeAssistant, config_entry) -> bool:
         if actual_wh <= 0:
             return
 
-        # Get the ISO timestamp for the hour that just completed
-        from datetime import timezone as tz_utc
-        hour_end = now - timedelta(hours=1)
-        hour_iso = hour_end.replace(minute=0, second=0, microsecond=0).isoformat()
+        # Convert UTC tick to local timezone to match forecast dict keys
+        local_tz = ZoneInfo(hass.config.time_zone)
+        hour_end_utc = now - timedelta(hours=1)
+        hour_end_local = hour_end_utc.astimezone(local_tz)
+        hour_iso = hour_end_local.replace(minute=0, second=0, microsecond=0).isoformat()
 
         model.train_from_actual(hour_iso, actual_wh)
 
