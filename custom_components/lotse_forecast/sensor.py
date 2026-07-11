@@ -5,6 +5,15 @@ from collections.abc import Callable
 from typing import Any
 
 from homeassistant.components.sensor import SensorEntity
+
+_EntityBases = [SensorEntity]
+_HAS_RESTORE = False
+try:
+    from homeassistant.helpers.restore_state import RestoreEntity
+    _EntityBases.append(RestoreEntity)
+    _HAS_RESTORE = True
+except ImportError:
+    pass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 try:
@@ -112,8 +121,9 @@ def _se_clean(mesh: MeshData) -> float:
     return clean
 
 
-class LOTSEPerNodeSensor(SensorEntity):
+class LOTSEPerNodeSensor(*_EntityBases):
     _attr_should_poll = False
+    _restored_value: float | None = None
 
     def __init__(self, node_id: str, key: str, meta: dict, mesh: MeshData) -> None:
         self._node_id = node_id
@@ -138,6 +148,12 @@ class LOTSEPerNodeSensor(SensorEntity):
         }
 
     async def async_added_to_hass(self) -> None:
+        if _HAS_RESTORE:
+            if last := await self.async_get_last_state():
+                try:
+                    self._restored_value = float(last.state)
+                except (ValueError, TypeError):
+                    pass
         self._mesh.register_per_node_sensor(self._node_id, self._on_data)
         self.async_on_remove(lambda: self._mesh.unregister_per_node_sensor(self._node_id, self._on_data))
 
@@ -146,15 +162,17 @@ class LOTSEPerNodeSensor(SensorEntity):
 
     @property
     def native_value(self) -> float | None:
-        return self._mesh.get_value(self._node_id, self._key)
+        v = self._mesh.get_value(self._node_id, self._key)
+        return v if v is not None else self._restored_value
 
     @property
     def available(self) -> bool:
-        return self._mesh.get_value(self._node_id, self._key) is not None
+        return self._mesh.get_value(self._node_id, self._key) is not None or self._restored_value is not None
 
 
-class LOTSECombinedSensor(SensorEntity):
+class LOTSECombinedSensor(*_EntityBases):
     _attr_should_poll = False
+    _restored_value: float | None = None
 
     def __init__(self, uid: str, meta: dict, compute_fn: Callable[[MeshData], float], mesh: MeshData) -> None:
         self._uid = uid
@@ -187,6 +205,14 @@ class LOTSECombinedSensor(SensorEntity):
         }
 
     async def async_added_to_hass(self) -> None:
+        if _HAS_RESTORE:
+            if last := await self.async_get_last_state():
+                try:
+                    self._restored_value = float(last.state)
+                    if self._uid == "combined_mesh_se_clean" and self._restored_value is not None:
+                        _SE_CLEAN_CACHE["val"] = self._restored_value
+                except (ValueError, TypeError):
+                    pass
         self._mesh.register_combined_sensor(self._on_data)
         self.async_on_remove(lambda: self._mesh.unregister_combined_sensor(self._on_data))
 
@@ -195,18 +221,24 @@ class LOTSECombinedSensor(SensorEntity):
 
     @property
     def available(self) -> bool:
-        return bool(self._mesh.known_nodes())
+        return bool(self._mesh.known_nodes()) or self._restored_value is not None
 
     @property
     def native_value(self) -> float:
-        return self._compute_fn(self._mesh)
+        if self._mesh.known_nodes():
+            return self._compute_fn(self._mesh)
+        if self._restored_value is not None:
+            return self._restored_value
+        return 0.0
 
 
-class LOTSEForecastScaleFactorSensor(SensorEntity):
+class LOTSEForecastScaleFactorSensor(*_EntityBases):
     """Diagnostic sensor showing the model's global scale factor.
 
     The full model state (coefficients, MAPE, today_predicted) is
     exposed in extra_state_attributes for persistence and debugging.
+
+    Self-restores from RestoreEntity state on HA restart.
     """
 
     _attr_entity_category = EntityCategory.DIAGNOSTIC
@@ -216,6 +248,17 @@ class LOTSEForecastScaleFactorSensor(SensorEntity):
         self._model = model
         self._attr_unique_id = "lotse_forecast_scale_factor"
         self._attr_name = "LOTSE Forecast Scale Factor"
+
+    async def async_added_to_hass(self) -> None:
+        if _HAS_RESTORE:
+            if last := await self.async_get_last_state():
+                if last.attributes and last.attributes.get("global_scale"):
+                    self._model = CalibrationModel.from_dict(dict(last.attributes))
+                    _LOGGER.warning(
+                        "Restored calibration model: scale=%.4f, samples=%d, MAPE=%s",
+                        self._model.global_scale, self._model.sample_count,
+                        f"{self._model.mape:.1f}%" if self._model.mape is not None else "N/A",
+                    )
 
     @property
     def native_value(self) -> str:
@@ -236,7 +279,7 @@ class LOTSEForecastScaleFactorSensor(SensorEntity):
         }
 
 
-class LOTSEForecastAccuracySensor(SensorEntity):
+class LOTSEForecastAccuracySensor(*_EntityBases):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_should_poll = False
     _attr_native_unit_of_measurement = "%"
@@ -245,6 +288,12 @@ class LOTSEForecastAccuracySensor(SensorEntity):
         self._model = model
         self._attr_unique_id = "lotse_forecast_accuracy"
         self._attr_name = "LOTSE Forecast Accuracy (MAPE)"
+
+    async def async_added_to_hass(self) -> None:
+        if _HAS_RESTORE:
+            if last := await self.async_get_last_state():
+                if last.attributes and "sample_count" in last.attributes:
+                    self._model.sample_count = last.attributes["sample_count"]
 
     @property
     def native_value(self) -> str | None:
@@ -265,7 +314,7 @@ class LOTSEForecastAccuracySensor(SensorEntity):
         }
 
 
-class LOTSEForecastSamplesSensor(SensorEntity):
+class LOTSEForecastSamplesSensor(*_EntityBases):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_should_poll = False
 
@@ -274,19 +323,17 @@ class LOTSEForecastSamplesSensor(SensorEntity):
         self._attr_unique_id = "lotse_forecast_samples"
         self._attr_name = "LOTSE Forecast Samples"
 
+    async def async_added_to_hass(self) -> None:
+        if _HAS_RESTORE:
+            if last := await self.async_get_last_state():
+                try:
+                    self._model.sample_count = int(float(last.state))
+                except (ValueError, TypeError):
+                    pass
+
     @property
     def native_value(self) -> int:
         return self._model.sample_count
-
-    @property
-    def device_info(self) -> dict:
-        return {
-            "identifiers": {(DOMAIN, "forecast")},
-            "name": "LOTSE Solar Forecast",
-            "manufacturer": "LOTSE",
-            "model": "Solar Forecast",
-            "via_device": (DOMAIN, "coordinator"),
-        }
 
     @property
     def device_info(self) -> dict:

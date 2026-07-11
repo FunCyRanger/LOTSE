@@ -251,9 +251,6 @@ async def async_setup_entry(hass: HomeAssistant, config_entry) -> bool:
     model = CalibrationModel()
     hass.data[DOMAIN]["calibration"] = model
 
-    # Track last SE snapshot for hourly actual computation
-    model._last_se_snapshot: float | None = None
-
     async def _hourly_tick(now) -> None:
         """Capture actual production for the completed hour, train model."""
         # Look up the combined solar energy entity by unique_id (not hardcoded name)
@@ -268,8 +265,8 @@ async def async_setup_entry(hass: HomeAssistant, config_entry) -> bool:
             current_kwh = float(state.state)
         except (ValueError, TypeError):
             return
-        last_kwh = model._last_se_snapshot
-        model._last_se_snapshot = current_kwh
+        last_kwh = model.last_se_snapshot
+        model.last_se_snapshot = current_kwh
         if last_kwh is None or current_kwh < last_kwh:
             return  # first tick or reset
 
@@ -285,33 +282,10 @@ async def async_setup_entry(hass: HomeAssistant, config_entry) -> bool:
 
         model.train_from_actual(hour_iso, actual_wh)
 
-    async def _restore_model() -> None:
-        """Restore model state from the scale factor sensor's last attributes."""
-        reg = er.async_get(hass)
-        entity_id = reg.async_get_entity_id(
-            "sensor", DOMAIN, "lotse_forecast_scale_factor"
-        )
-        if not entity_id:
-            return
-        state = hass.states.get(entity_id)
-        if state and state.attributes and state.attributes.get("global_scale"):
-            restored = CalibrationModel.from_dict(dict(state.attributes))
-            model.global_scale = restored.global_scale
-            model.cloud_factors = restored.cloud_factors
-            model.sample_count = restored.sample_count
-            model.mape = restored.mape
-            model.today_predicted = restored.today_predicted
-            _LOGGER.warning(
-                "Restored calibration model: scale=%.4f, samples=%d, MAPE=%s",
-                model.global_scale, model.sample_count,
-                f"{model.mape:.1f}%" if model.mape is not None else "N/A",
-            )
-
     async def _start_later(_event=None) -> None:
         await mesh.start()
         await hass.config_entries.async_forward_entry_setups(config_entry, PLATFORMS)
         await async_create_lovelace_dashboard(hass)
-        await _restore_model()
         # Schedule hourly training
         from homeassistant.helpers.event import async_track_time_interval
         hass.data[DOMAIN]["_unsub_hourly"] = async_track_time_interval(

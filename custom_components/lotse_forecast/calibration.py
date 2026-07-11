@@ -28,6 +28,7 @@ class CalibrationModel:
         self.today_predicted: dict[str, float] = {}
         self._raw_predicted: dict[str, float] = {}
         self._ape_sum = 0.0
+        self.last_se_snapshot: float | None = None
 
     def update(
         self,
@@ -111,6 +112,7 @@ class CalibrationModel:
         self.today_predicted = {}
         self._raw_predicted = {}
         self._ape_sum = 0.0
+        self.last_se_snapshot = None
 
     def to_dict(self) -> dict:
         return {
@@ -122,6 +124,8 @@ class CalibrationModel:
             "cloud_buckets": self.cloud_buckets,
             "today_predicted": dict(self.today_predicted),
             "_raw_predicted": dict(self._raw_predicted),
+            "_ape_sum": self._ape_sum,
+            "last_se_snapshot": self.last_se_snapshot,
         }
 
     @classmethod
@@ -138,6 +142,8 @@ class CalibrationModel:
         model.mape = data.get("mape")
         model.today_predicted = data.get("today_predicted", {})
         model._raw_predicted = data.get("_raw_predicted", {})
+        model._ape_sum = data.get("_ape_sum", 0.0)
+        model.last_se_snapshot = data.get("last_se_snapshot")
         return model
 
     def _cloud_bucket(self, cloud_cover: float) -> int:
