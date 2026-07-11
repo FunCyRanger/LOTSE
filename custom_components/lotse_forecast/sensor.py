@@ -124,6 +124,7 @@ def _se_clean(mesh: MeshData) -> float:
 class LOTSEPerNodeSensor(*_EntityBases):
     _attr_should_poll = False
     _restored_value: float | None = None
+    _known_value: float | None = None
 
     def __init__(self, node_id: str, key: str, meta: dict, mesh: MeshData) -> None:
         self._node_id = node_id
@@ -153,17 +154,29 @@ class LOTSEPerNodeSensor(*_EntityBases):
                 try:
                     self._restored_value = float(last.state)
                 except (ValueError, TypeError):
-                    pass
+                    if last.attributes and "restore_value" in last.attributes:
+                        self._restored_value = last.attributes["restore_value"]
         self._mesh.register_per_node_sensor(self._node_id, self._on_data)
         self.async_on_remove(lambda: self._mesh.unregister_per_node_sensor(self._node_id, self._on_data))
 
     def _on_data(self) -> None:
+        v = self._mesh.get_value(self._node_id, self._key)
+        if v is not None:
+            self._known_value = v
         self.async_write_ha_state()
 
     @property
     def native_value(self) -> float | None:
         v = self._mesh.get_value(self._node_id, self._key)
         return v if v is not None else self._restored_value
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        if self._known_value is not None:
+            return {"restore_value": self._known_value}
+        if self._restored_value is not None:
+            return {"restore_value": self._restored_value}
+        return {}
 
     @property
     def available(self) -> bool:
@@ -209,15 +222,24 @@ class LOTSECombinedSensor(*_EntityBases):
             if last := await self.async_get_last_state():
                 try:
                     self._restored_value = float(last.state)
-                    if self._uid == "combined_mesh_se_clean" and self._restored_value is not None:
-                        _SE_CLEAN_CACHE["val"] = self._restored_value
                 except (ValueError, TypeError):
-                    pass
+                    if last.attributes and "restore_value" in last.attributes:
+                        self._restored_value = last.attributes["restore_value"]
+                if self._uid == "combined_mesh_se_clean" and self._restored_value is not None:
+                    _SE_CLEAN_CACHE["val"] = self._restored_value
         self._mesh.register_combined_sensor(self._on_data)
         self.async_on_remove(lambda: self._mesh.unregister_combined_sensor(self._on_data))
 
     def _on_data(self) -> None:
         self.async_write_ha_state()
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        if self._mesh.known_nodes():
+            return {"restore_value": self._compute_fn(self._mesh)}
+        if self._restored_value is not None:
+            return {"restore_value": self._restored_value}
+        return {}
 
     @property
     def available(self) -> bool:
