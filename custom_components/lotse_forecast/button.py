@@ -5,9 +5,15 @@ import logging
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+try:
+    from homeassistant.helpers.entity import EntityCategory
+except ImportError:
+    from enum import Enum
+    class EntityCategory(str, Enum):
+        DIAGNOSTIC = "diagnostic"
+        CONFIG = "config"
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from . import MeshData
 from .calibration import CalibrationModel
 from .const import DOMAIN
 
@@ -15,7 +21,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class LOTSEForecastResetButton(ButtonEntity):
-    _attr_entity_category = "config"
+    _attr_entity_category = EntityCategory.CONFIG
     _attr_name = "Reset Forecast Model"
     _attr_unique_id = "lotse_forecast_reset_model"
     _attr_icon = "mdi:restore"

@@ -7,6 +7,13 @@ from typing import Any
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+try:
+    from homeassistant.helpers.entity import EntityCategory
+except ImportError:
+    from enum import Enum
+    class EntityCategory(str, Enum):
+        DIAGNOSTIC = "diagnostic"
+        CONFIG = "config"
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from . import MeshData
 from .calibration import CalibrationModel
@@ -202,7 +209,7 @@ class LOTSEForecastScaleFactorSensor(SensorEntity):
     exposed in extra_state_attributes for persistence and debugging.
     """
 
-    _attr_entity_category = "diagnostic"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_should_poll = False
 
     def __init__(self, model: CalibrationModel) -> None:
@@ -230,7 +237,7 @@ class LOTSEForecastScaleFactorSensor(SensorEntity):
 
 
 class LOTSEForecastAccuracySensor(SensorEntity):
-    _attr_entity_category = "diagnostic"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_should_poll = False
     _attr_native_unit_of_measurement = "%"
 
@@ -259,7 +266,7 @@ class LOTSEForecastAccuracySensor(SensorEntity):
 
 
 class LOTSEForecastSamplesSensor(SensorEntity):
-    _attr_entity_category = "diagnostic"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_should_poll = False
 
     def __init__(self, model: CalibrationModel) -> None:
