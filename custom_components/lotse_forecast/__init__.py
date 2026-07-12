@@ -252,8 +252,13 @@ async def async_setup_entry(hass: HomeAssistant, config_entry) -> bool:
     hass.data[DOMAIN]["calibration"] = model
 
     async def _hourly_tick(now) -> None:
-        """Capture actual production for the completed hour, train model."""
-        # Look up the combined solar energy entity by unique_id (not hardcoded name)
+        """Capture actual production for the completed hour, train model, log weather."""
+        # Update weather snapshot sensor (for forecast validation history)
+        ws = hass.data.get(DOMAIN, {}).get(config_entry.entry_id, {}).get("weather_snapshot")
+        if ws is not None:
+            await ws.async_update_forecast(hass)
+
+        # Capture actual production for calibration
         reg = er.async_get(hass)
         se_entity_id = reg.async_get_entity_id("sensor", DOMAIN, "combined_mesh_se")
         if not se_entity_id:

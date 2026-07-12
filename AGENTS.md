@@ -3,19 +3,11 @@
 Three codebases:
 - **Root**: HA Jinja templates, YAML blueprints, Python tests
 - **`config-hub/`**: ESP-IDF project (C) — Tasmota SML → MQTT → transform → Meshtastic envelope
-- **`custom_components/lotse_forecast/`**: HA integration (`integration_type: hub`) providing everything: per-node sensor creation from MQTT mesh messages, combined aggregation sensors, `async_get_solar_forecast` for the Energy Dashboard, and auto-created LOTSE dashboard. Replaces `auto-discovery-automation.yaml`, `mesh-combined-template.yaml`, `mesh-combined-sensors.yaml`, and `lotse-dashboard.yaml` — no YAML files needed (v3.1+).
+- **`custom_components/lotse_forecast/`**: HA integration (`integration_type: hub`, `config_flow: true`, depends on `mqtt`). Per-node sensor creation from MQTT mesh messages, combined aggregation sensors, `async_get_solar_forecast` for Energy Dashboard, auto-created LOTSE dashboard, self-calibrating forecast model. Replaces all YAML files (v3.1+).
 
 ## Versioning
 
-This project follows [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`):
-
-| Component | Meaning |
-|-----------|---------|
-| MAJOR | Breaking changes (integration replaces blueprints, removed YAML files) |
-| MINOR | New features (dynamic dashboard, energy auto-link) |
-| PATCH | Bug fixes (comma locale crash, registry revert) |
-
-Tags follow the pattern `v3.5.2` and are pushed to GitHub on release.
+Tags follow `vMAJOR.MINOR.PATCH` (latest: `v3.6.4`). Pushed to GitHub on release.
 
 ## Critical gotchas
 
@@ -38,10 +30,11 @@ Tags follow the pattern `v3.5.2` and are pushed to GitHub on release.
 ```bash
 pip install -r tests/requirements.txt    # pyyaml, jinja2, paho-mqtt
 
-python3 tests/test_mesh.py               # 57 template + roundtrip tests (incl. grid quality + config)
-python3 tests/test_forecast_validation.py # 7 validation tests (formula + historical CSV)
+python3 tests/test_mesh.py               # 63 template + roundtrip tests (incl. grid quality + config + combined sensors)
+python3 tests/test_forecast_validation.py # 4 validation tests (formula + historical CSV + parameter sweep)
 python3 tests/test_schema.py             # 18 schema tests (incl. config blueprint + payload size + grid)
-python3 tests/test_e2e_mqtt.py           # requires Docker, auto-skipped
+python3 tests/test_e2e_mqtt.py           # requires Docker Mosquitto, auto-skipped
+python3 -m pytest tests/test_calibration.py -v -k "not slow"  # 51 calibration tests (pytest, slow marker excluded by default)
 python3 tests/check_installation.py --ha-url <url> --token <token>
 
 make -C config-hub/tests run             # 57 transform/parse/GPIO/envelope C tests
@@ -49,12 +42,15 @@ make -C config-hub/tests run             # 57 transform/parse/GPIO/envelope C te
 
 Test infra: `ha_environment()` — standard Jinja `Environment`, custom `to_json`/`from_json`/`float`/`int` filters, mock `states`/`state_attr`/`expand` globals. Both `test_mesh.py` and `test_schema.py` share the same mocks. C tests use vendored Unity (no cmock, just core assertions) and vendored cJSON.
 
+**Runner distinction:** `test_mesh.py`, `test_schema.py`, `test_forecast_validation.py` use a custom `run_all()` runner (no pytest). `test_calibration.py` uses `pytest` — run with `python3 -m pytest tests/test_calibration.py -v -k "not slow"` to exclude the `@pytest.mark.slow` CSV-based roundtrip tests.
+
 ## YAML validation
 
 ```bash
 python3 -c "
 import yaml, pathlib
 yaml.FullLoader.add_constructor('!input', lambda loader, node: node.value)
+yaml.FullLoader.add_constructor('!include', lambda loader, node: node.value)
 for f in sorted(pathlib.Path().rglob('*.yaml')):
     yaml.load(f.read_text(), Loader=yaml.FullLoader)
 "
@@ -72,7 +68,7 @@ Two jobs:
 |------|-------------|
 | `sender-blueprint.yaml` | **Only remaining measurement YAML** (cannot be integrated — user-configurable automation). 33 inputs (20 measurement + 13 grid quality). Unit conversion: W→kW, MW→kW, mV→V, kV→V, Wh→kWh, MWh→kWh. Clamping: power ±500, energy ≥0, bS/wS 0-100 int, grid quality raw pass-through. Skips `unavailable`/`unknown`/`none`/`NaN`/`inf`/`-inf`. gEI mandatory. Boot notification. Measurement topic: `msh/{region}/2/json/mqtt/{node}`. `mode: single`. |
 | `sender-config-blueprint.yaml` | Config-only blueprint publishes bC/sK/sA/sZ on boot + daily + trigger. Direct topics `lotse/config/{node}/<key>` (`retain: true`). Boot notification. `mode: single`. |
-| `solarforecast-blueprint.yaml` | Template blueprint for per-household PV hourly forecast (uses weather entity). |
+| `solarforecast-blueprint.yaml` | Template blueprint for per-household PV hourly forecast (uses weather entity). `domain: template`. |
 
 **Deleted YAMLs** (functionality moved into integration `lotse_forecast` v3.1+):
 - `auto-discovery-automation.yaml` — MQTT subscription + per-node sensor creation now in `__init__.py`
@@ -116,19 +112,6 @@ Firmware version: `git describe --tags --always --dirty --match "v*"` → `LOTSE
 - `SetOption19=ON` (blocks telemetry, only responds to `/cm`)
 - GPIO parsing: `>D` section `GPIO<n>=<func>`, fallback `+<TX>,<RX>` format. Defaults: RX=3, TX=1.
 - Unit auto-mapping: W→gP, kWh→gEI, V→gV1, A→gA1/gA2/gA3 (phase-aware L1/L2/L3), Hz→gF, %→bS, empty-unit+label containing "Power factor"→gPF.
-
-## Known stale / non-code content
-
-- `sender-blueprint-python.md` — AI-generated Node-RED guide (not real code)
-- `archive/prototype-build.md` — references firmware never committed
-- `archive/20260517 AI review/` — AI firmware reviews (may contain errors)
-- `.opencode/plans/` — agent session scratch, not docs
-- `.opencode/node_modules/` — auto-generated, gitignored
-
-## Human-readable setup guides
-
-- `ha-setup.md` — Full HA integration guide (importing blueprints, auto-discovery, sensors, Energy Dashboard)
-- `mesh-setup.md` — Heltec V3 flashing, Meshtastic MQTT/channel config
 
 ## Security
 

@@ -136,7 +136,7 @@ def _get_panels(hass, entry):
         panels.append({
             "name": f"Node {nid}",
             "kwp": kwp,
-            "angle": _sensor_or_default(sa, 35),
+            "angle": _sensor_or_default(sa, 44),
             "azimuth": _sensor_or_default(sz, 180),
         })
 
@@ -149,7 +149,7 @@ def _get_panels(hass, entry):
             sk = mesh.get_value(node_id, "sk")
             if sk is None or sk <= 0:
                 continue
-            sa = mesh.get_value(node_id, "sa") or 35
+            sa = mesh.get_value(node_id, "sa") or 44
             sz = mesh.get_value(node_id, "sz") or 180
             panels.append({
                 "name": f"Node {node_id}",
@@ -170,7 +170,7 @@ def _get_panels(hass, entry):
         panels.append({
             "name": p.get("name", "Manual"),
             "kwp": kwp,
-            "angle": int(p.get("angle", 35)),
+            "angle": int(p.get("angle", 44)),
             "azimuth": int(p.get("azimuth", 180)),
         })
 
@@ -243,11 +243,9 @@ def _clear_sky_ghi(altitude):
     return max(0, 1000 * math.sin(math.radians(altitude)))
 
 
-def _panel_output(kwp, ghi, cloud_cover, azimuth, tilt, temp, wind):
-    efficiency = 0.90
-    temp_coeff = -0.005
-
-    cloud_factor = max(0.05, 1 - 0.50 * cloud_cover / 100)
+def _panel_output(kwp, ghi, cloud_cover, azimuth, tilt, temp, wind,
+                  efficiency=0.90, cloud_coeff=0.50, temp_coeff=-0.005):
+    cloud_factor = max(0.05, 1 - cloud_coeff * cloud_cover / 100)
     orientation = max(
         0.25,
         min(1.1, (math.cos(math.radians(azimuth - 180)) * 0.65 + 0.35)

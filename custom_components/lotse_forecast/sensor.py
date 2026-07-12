@@ -368,6 +368,80 @@ class LOTSEForecastSamplesSensor(*_EntityBases):
         }
 
 
+class LOTSEWeatherSnapshotSensor(*_EntityBases):
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_should_poll = False
+    _attr_native_unit_of_measurement = "%"
+    _attr_icon = "mdi:weather-partly-cloudy"
+
+    def __init__(self, weather_entity_id: str) -> None:
+        self._weather_entity_id = weather_entity_id
+        self._attr_unique_id = "lotse_weather_snapshot"
+        self._attr_name = "LOTSE Weather Snapshot"
+        self._weather_condition: str | None = None
+        self._weather_temperature: float | None = None
+        self._weather_wind_speed: float | None = None
+
+    async def async_update_forecast(self, hass: HomeAssistant) -> None:
+        state = hass.states.get(self._weather_entity_id)
+        if state is None:
+            return
+        self._weather_condition = state.state
+        attrs = state.attributes
+        self._weather_temperature = attrs.get("temperature")
+        self._weather_wind_speed = attrs.get("wind_speed")
+
+        forecast = attrs.get("forecast", [])
+        if forecast and isinstance(forecast, list):
+            cloud = forecast[0].get("cloud_cover") if isinstance(forecast[0], dict) else None
+            if cloud is not None:
+                self._attr_native_value = float(cloud)
+            else:
+                cond = forecast[0].get("condition", self._weather_condition) if isinstance(forecast[0], dict) else self._weather_condition
+                self._attr_native_value = _condition_to_cloud(cond)
+        else:
+            self._attr_native_value = _condition_to_cloud(self._weather_condition)
+        self.async_write_ha_state()
+
+    @property
+    def native_value(self) -> float | None:
+        return self._attr_native_value
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        attrs = {}
+        if self._weather_condition is not None:
+            attrs["condition"] = self._weather_condition
+        if self._weather_temperature is not None:
+            attrs["temperature"] = self._weather_temperature
+        if self._weather_wind_speed is not None:
+            attrs["wind_speed"] = self._weather_wind_speed
+        return attrs
+
+    @property
+    def device_info(self) -> dict:
+        return {
+            "identifiers": {(DOMAIN, "coordinator")},
+            "name": "LOTSE Mesh Coordinator",
+            "manufacturer": "LOTSE",
+            "model": "Neighborhood Hub",
+        }
+
+
+CLOUD_COVER_MAP = {
+    "clear-night": 5, "sunny": 5, "partlycloudy": 40,
+    "cloudy": 75, "rainy": 90, "fog": 85,
+    "pouring": 95, "snowy": 85, "snowy-rainy": 85,
+    "hail": 95, "lightning": 90, "lightning-rainy": 90,
+}
+
+
+def _condition_to_cloud(condition: str | None) -> float:
+    if condition is None:
+        return 50.0
+    return float(CLOUD_COVER_MAP.get(condition.lower().strip(), 50))
+
+
 async def async_setup_entry(
     hass: HomeAssistant, config_entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
@@ -388,6 +462,15 @@ async def async_setup_entry(
         cal_sensors.append(LOTSEForecastAccuracySensor(model))
         cal_sensors.append(LOTSEForecastSamplesSensor(model))
     async_add_entities(cal_sensors)
+
+    # Weather snapshot sensor (for forecast validation history)
+    weather_entity = (config_entry.options.get("weather_entity")
+                      or config_entry.data.get("weather_entity"))
+    if weather_entity:
+        ws = LOTSEWeatherSnapshotSensor(weather_entity)
+        hass.data.setdefault(DOMAIN, {}).setdefault(config_entry.entry_id, {})
+        hass.data[DOMAIN][config_entry.entry_id]["weather_snapshot"] = ws
+        async_add_entities([ws])
 
     def _create_node_sensors(node_id: str, keys: list[str]) -> None:
         entities = [

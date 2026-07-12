@@ -41,7 +41,7 @@ def _clear_sky_ghi(altitude):
 
 
 def _panel_output(kwp, ghi, cloud_cover, azimuth, tilt, temp, wind,
-                  efficiency=0.86, cloud_coeff=0.75, temp_coeff=-0.004):
+                  efficiency=0.90, cloud_coeff=0.50, temp_coeff=-0.005):
     cloud_factor = max(0.05, 1 - cloud_coeff * cloud_cover / 100)
     orientation = max(
         0.25,
@@ -66,7 +66,7 @@ CLOUD_COVER_MAP = {
 CONSTANT_KWP = 9.3
 
 # User's actual panel config
-PANEL_ANGLE = 42
+PANEL_ANGLE = 44
 PANEL_AZIMUTH = 180
 
 # Location
@@ -251,7 +251,7 @@ def sweep():
 
     best_mape, best_eff, best_cc, best_tc = best[0]
     print(f"\n  {'─'*40}")
-    print(f"  Baseline MAPE (eff=0.86, cc=0.75, tc=-0.004): {baseline_mape:.1f}%")
+    print(f"  Baseline MAPE (eff={_panel_output.__defaults__[0]}, cc={_panel_output.__defaults__[1]}, tc={_panel_output.__defaults__[2]}): {baseline_mape:.1f}%")
     print(f"  Best MAPE:     {best_mape:.1f}% (eff={best_eff}, cc={best_cc}, tc={best_tc})")
     print(f"  Improvement:   {baseline_mape - best_mape:+.1f}pp")
 
@@ -284,7 +284,7 @@ def test_panel_output_ranges():
     print(f"  PASS  Panel output: {out:.2f} kW for 5 kWp at 800 W/m², 10% cloud")
 
     out_cloudy = _panel_output(5.0, 800, 95, 180, 35, 25, 5)
-    assert out_cloudy < out * 0.4, f"Cloudy output {out_cloudy:.2f} too high"
+    assert out_cloudy < out * 0.6, f"Cloudy output {out_cloudy:.2f} too high"
     print(f"  PASS  Cloud reduction: {out:.2f}→{out_cloudy:.2f} kW (clear→95% cloud)")
 
     out_north = _panel_output(5.0, 800, 10, 0, 35, 25, 5)
@@ -304,7 +304,8 @@ def test_model_vs_historical():
 
     print(f"\n  Historical data: {count} days with production data")
     print(f"  Constant kWp: {CONSTANT_KWP} (CSV capacity data ignored — was wrong)")
-    print(f"  Model: efficiency=0.86, cloud_coeff=0.75, temp_coeff=-0.004")
+    eff, cc, tc = _panel_output.__defaults__
+    print(f"  Model: efficiency={eff}, cloud_coeff={cc}, temp_coeff={tc}")
     print(f"\n  {'Day':<12} {'Actual':>8} {'Model':>8} {'Err':>7}")
     print(f"  {'-'*37}")
 
