@@ -468,8 +468,7 @@ async def async_setup_entry(
                       or config_entry.data.get("weather_entity"))
     if weather_entity:
         ws = LOTSEWeatherSnapshotSensor(weather_entity)
-        hass.data.setdefault(DOMAIN, {}).setdefault(config_entry.entry_id, {})
-        hass.data[DOMAIN][config_entry.entry_id]["weather_snapshot"] = ws
+        hass.data[DOMAIN][f"weather_snapshot_{config_entry.entry_id}"] = ws
         async_add_entities([ws])
 
     def _create_node_sensors(node_id: str, keys: list[str]) -> None:

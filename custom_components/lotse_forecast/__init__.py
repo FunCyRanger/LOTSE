@@ -254,7 +254,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry) -> bool:
     async def _hourly_tick(now) -> None:
         """Capture actual production for the completed hour, train model, log weather."""
         # Update weather snapshot sensor (for forecast validation history)
-        ws = hass.data.get(DOMAIN, {}).get(config_entry.entry_id, {}).get("weather_snapshot")
+        ws = hass.data.get(DOMAIN, {}).get(f"weather_snapshot_{config_entry.entry_id}")
         if ws is not None:
             await ws.async_update_forecast(hass)
 
@@ -291,10 +291,10 @@ async def async_setup_entry(hass: HomeAssistant, config_entry) -> bool:
         await mesh.start()
         await hass.config_entries.async_forward_entry_setups(config_entry, PLATFORMS)
         await async_create_lovelace_dashboard(hass)
-        # Schedule hourly training
-        from homeassistant.helpers.event import async_track_time_interval
-        hass.data[DOMAIN]["_unsub_hourly"] = async_track_time_interval(
-            hass, _hourly_tick, timedelta(hours=1)
+        # Schedule hourly training at the top of each hour so hour_iso aligns with forecast keys
+        from homeassistant.helpers.event import async_track_utc_time_change
+        hass.data[DOMAIN]["_unsub_hourly"] = async_track_utc_time_change(
+            hass, _hourly_tick, minute=0, second=0
         )
         hass.async_create_task(_ensure_energy_platform(hass, config_entry.entry_id))
 
