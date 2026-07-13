@@ -5,13 +5,13 @@ import logging
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from typing import Any
-from zoneinfo import ZoneInfo
 
 from homeassistant.components.mqtt import DOMAIN as MQTT_DOMAIN
 from homeassistant.components.mqtt import async_subscribe as mqtt_async_subscribe
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
+from homeassistant.util import dt as dt_util
 
 from .calibration import CalibrationModel
 from .const import BAD_STATES, DOMAIN, MSH_TOPIC, NODE_KEY_META, PLATFORMS
@@ -280,9 +280,8 @@ async def async_setup_entry(hass: HomeAssistant, config_entry) -> bool:
             return
 
         # Convert UTC tick to local timezone to match forecast dict keys
-        local_tz = ZoneInfo(hass.config.time_zone)
         hour_end_utc = now - timedelta(hours=1)
-        hour_end_local = hour_end_utc.astimezone(local_tz)
+        hour_end_local = dt_util.as_local(hour_end_utc)
         hour_iso = hour_end_local.replace(minute=0, second=0, microsecond=0).isoformat()
 
         model.train_from_actual(hour_iso, actual_wh)
