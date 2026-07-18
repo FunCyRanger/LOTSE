@@ -9,8 +9,9 @@ from typing import Any
 
 from homeassistant.core import HomeAssistant
 from homeassistant.components.mqtt import DOMAIN as MQTT_DOMAIN
-from .const import BAD_STATES, DOMAIN, NODE_KEY_META
+from .const import BAD_STATES, DOMAIN, MSH_TOPIC, NODE_KEY_META, PLATFORMS
 from .calibration import CalibrationModel
+from .dashboard import async_create_lovelace_dashboard
 from homeassistant.components.mqtt import async_subscribe as mqtt_async_subscribe
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.helpers import entity_registry as er

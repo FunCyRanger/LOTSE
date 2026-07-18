@@ -643,12 +643,22 @@ class TestForecastPipelineIntegration:
 # 5. Integration import verification
 # ════════════════════════════════════════════════════════════
 
+_REQUIRED_CONST_SYMBOLS = ["BAD_STATES", "DOMAIN", "MSH_TOPIC", "NODE_KEY_META", "PLATFORMS"]
+
+
 class TestIntegrationImports:
     """Verify that __init__.py has all required imports.
 
     These tests check the source code of __init__.py directly to
     catch missing import regressions.
     """
+
+    def _const_import_line(self) -> str | None:
+        src = self._source().split("\n")
+        for line in src:
+            if line.startswith("from .const import "):
+                return line
+        return None
 
     def _source(self) -> str:
         init_path = Path(__file__).resolve().parent.parent / "custom_components" / "lotse_forecast" / "__init__.py"
@@ -666,28 +676,24 @@ class TestIntegrationImports:
         model = CalibrationModel()
         assert model.global_scale == 1.0
 
-    def test_domain_imported(self):
-        """__init__.py must import DOMAIN from .const."""
-        assert "from .const import " in self._source() and "DOMAIN" in self._source().split("\n")[11], (
-            "Missing DOMAIN import from .const in __init__.py"
+    def test_dashboard_imported(self):
+        """__init__.py must import async_create_lovelace_dashboard from .dashboard."""
+        assert "from .dashboard import async_create_lovelace_dashboard" in self._source(), (
+            "Missing 'from .dashboard import async_create_lovelace_dashboard' in __init__.py"
         )
 
-    def test_bad_states_imported(self):
-        """__init__.py must import BAD_STATES from .const."""
-        assert "BAD_STATES" in self._source().split("\n")[11], (
-            "Missing BAD_STATES import from .const in __init__.py"
-        )
+    def test_each_const_symbol_imported(self):
+        """Each const.py symbol used in __init__.py must be in from .const import."""
+        line = self._const_import_line()
+        assert line is not None, "Missing 'from .const import ...' in __init__.py"
+        for symbol in _REQUIRED_CONST_SYMBOLS:
+            assert symbol in line, (
+                f"Missing '{symbol}' in from .const import in __init__.py"
+            )
 
-    def test_node_key_meta_imported(self):
-        """__init__.py must import NODE_KEY_META from .const."""
-        assert "NODE_KEY_META" in self._source().split("\n")[11], (
-            "Missing NODE_KEY_META import from .const in __init__.py"
-        )
-
-    def test_all_const_symbols_imported(self):
-        """All const.py symbols used in __init__.py must be imported together."""
-        line = self._source().split("\n")[11]
-        assert "from .const import " in line
-        assert "DOMAIN" in line, "DOMAIN must be in from .const import"
-        assert "BAD_STATES" in line, "BAD_STATES must be in from .const import"
-        assert "NODE_KEY_META" in line, "NODE_KEY_META must be in from .const import"
+    def test_all_const_symbols_imported_together(self):
+        """All required const symbols imported in a single line."""
+        line = self._const_import_line()
+        assert line is not None, "Missing 'from .const import ...' in __init__.py"
+        for symbol in _REQUIRED_CONST_SYMBOLS:
+            assert symbol in line
