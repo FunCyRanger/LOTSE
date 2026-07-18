@@ -620,6 +620,41 @@ class TestForecastPipelineIntegration:
             else:
                 assert wh == raw_next[ts]  # raw (future)
 
+# ════════════════════════════════════════════════════════════
+# 5. Integration import verification
+# ════════════════════════════════════════════════════════════
+
+class TestIntegrationImports:
+    """Verify that __init__.py has all required imports.
+
+    These tests check the source code of __init__.py directly to
+    catch missing import regressions (like CalibrationModel).
+    """
+
+    def test_calibration_model_imported_in_init(self):
+        """__init__.py must import CalibrationModel from .calibration."""
+        init_path = Path(__file__).resolve().parent.parent / "custom_components" / "lotse_forecast" / "__init__.py"
+        source = init_path.read_text()
+        assert "from .calibration import CalibrationModel" in source, (
+            "Missing 'from .calibration import CalibrationModel' in __init__.py"
+        )
+
+    def test_calibration_model_accessible(self):
+        """CalibrationModel can be imported from calibration module."""
+        assert CalibrationModel is not None
+        model = CalibrationModel()
+        assert model.global_scale == 1.0
+        assert model.sample_count == 0
+
+    def test_domain_imported_in_init(self):
+        """__init__.py must import DOMAIN from .const."""
+        init_path = Path(__file__).resolve().parent.parent / "custom_components" / "lotse_forecast" / "__init__.py"
+        source = init_path.read_text()
+        assert "from .const import DOMAIN" in source, (
+            "Missing 'from .const import DOMAIN' in __init__.py"
+        )
+
+
     def test_model_improves_on_repeated_hours(self):
         """Quality gate: after training, model reduces forecast error."""
         model = CalibrationModel(alpha=0.2)
