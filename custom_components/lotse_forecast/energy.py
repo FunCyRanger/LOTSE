@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 
 from homeassistant.core import HomeAssistant
 
-from .calibration import CalibrationModel, merge_past_hours
+from .calibration import CalibrationModel
 
 DOMAIN = "lotse_forecast"
 
@@ -43,8 +43,8 @@ async def async_get_solar_forecast(
 
     forecast = await _get_weather_forecast(hass, weather_entity)
     if not forecast:
-        _LOGGER.debug("Forecast: no forecast data from weather_entity %s", weather_entity)
-        return None
+        _LOGGER.debug("Forecast: no weather data, using clear-sky only")
+        forecast = []
 
     panels = _get_panels(hass, entry)
     if not panels:
@@ -53,6 +53,38 @@ async def async_get_solar_forecast(
 
     lat = hass.config.latitude
     tz = ZoneInfo(hass.config.time_zone)
+    local_now = datetime.now(tz)
+
+    # Build set of timestamps the weather forecast already covers for today
+    weather_ts: set[str] = set()
+    for entry in forecast:
+        dt_raw = entry.get("datetime") or entry.get("DateTime")
+        if not dt_raw:
+            continue
+        try:
+            if isinstance(dt_raw, str):
+                dt = datetime.fromisoformat(dt_raw)
+            elif isinstance(dt_raw, datetime):
+                dt = dt_raw
+            else:
+                continue
+            if dt.date() == local_now.date():
+                weather_ts.add(dt.isoformat())
+        except (ValueError, TypeError):
+            continue
+
+    # Backfill missing hours of today with clear-sky defaults
+    today_start = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+    for hour in range(24):
+        dt = today_start.replace(hour=hour)
+        ts = dt.isoformat()
+        if ts not in weather_ts:
+            forecast.append({
+                "datetime": dt,
+                "cloud_cover": 0,
+                "temperature": 20,
+                "wind_speed": 5,
+            })
 
     raw_wh, cloud_map = _compute_forecast(forecast, panels, lat, tz)
     if not raw_wh:
@@ -64,12 +96,10 @@ async def async_get_solar_forecast(
     if model is not None:
         calibrated = {}
         for ts, raw_val in raw_wh.items():
-            cloud = cloud_map.get(ts)
+            cloud = cloud_map.get(ts) if ts in weather_ts else None
             calibrated[ts] = model.apply(raw_val, cloud_cover=cloud)
-        # Pass local-timezone now so date filtering in store_forecast matches
-        local_now = datetime.now(tz)
         model.store_forecast(calibrated, raw=raw_wh, now=local_now)
-        wh_hours = merge_past_hours(model.today_predicted, calibrated)
+        wh_hours = dict(calibrated)
     else:
         wh_hours = dict(raw_wh)
 

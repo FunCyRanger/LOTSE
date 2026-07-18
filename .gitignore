@@ -21,3 +21,4 @@ venv/
 
 # Data / analysis files (cross-validation, test data — not source code)
 *.csv
+*.db
