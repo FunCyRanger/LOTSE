@@ -697,3 +697,12 @@ class TestIntegrationImports:
         assert line is not None, "Missing 'from .const import ...' in __init__.py"
         for symbol in _REQUIRED_CONST_SYMBOLS:
             assert symbol in line
+
+    def test_manifest_integration_type_is_hub(self):
+        """manifest.json must have integration_type 'hub' (for integration tab visibility)."""
+        manifest_path = Path(__file__).resolve().parent.parent / "custom_components" / "lotse_forecast" / "manifest.json"
+        import json
+        manifest = json.loads(manifest_path.read_text())
+        assert manifest.get("integration_type") == "hub", (
+            f"integration_type is '{manifest.get('integration_type')}', expected 'hub'"
+        )
