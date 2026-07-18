@@ -10,6 +10,7 @@ from typing import Any
 from homeassistant.core import HomeAssistant
 from homeassistant.components.mqtt import DOMAIN as MQTT_DOMAIN
 from .const import DOMAIN
+from .calibration import CalibrationModel
 from homeassistant.components.mqtt import async_subscribe as mqtt_async_subscribe
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.helpers import entity_registry as er
