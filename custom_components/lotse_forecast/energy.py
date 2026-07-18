@@ -244,7 +244,7 @@ def _clear_sky_ghi(altitude):
 
 
 def _panel_output(kwp, ghi, cloud_cover, azimuth, tilt, temp, wind,
-                  efficiency=0.90, cloud_coeff=0.50, temp_coeff=-0.005):
+                  efficiency=0.94, cloud_coeff=0.45, temp_coeff=-0.010):
     cloud_factor = max(0.05, 1 - cloud_coeff * cloud_cover / 100)
     orientation = max(
         0.25,
