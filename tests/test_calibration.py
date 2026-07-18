@@ -620,41 +620,6 @@ class TestForecastPipelineIntegration:
             else:
                 assert wh == raw_next[ts]  # raw (future)
 
-# ════════════════════════════════════════════════════════════
-# 5. Integration import verification
-# ════════════════════════════════════════════════════════════
-
-class TestIntegrationImports:
-    """Verify that __init__.py has all required imports.
-
-    These tests check the source code of __init__.py directly to
-    catch missing import regressions (like CalibrationModel).
-    """
-
-    def test_calibration_model_imported_in_init(self):
-        """__init__.py must import CalibrationModel from .calibration."""
-        init_path = Path(__file__).resolve().parent.parent / "custom_components" / "lotse_forecast" / "__init__.py"
-        source = init_path.read_text()
-        assert "from .calibration import CalibrationModel" in source, (
-            "Missing 'from .calibration import CalibrationModel' in __init__.py"
-        )
-
-    def test_calibration_model_accessible(self):
-        """CalibrationModel can be imported from calibration module."""
-        assert CalibrationModel is not None
-        model = CalibrationModel()
-        assert model.global_scale == 1.0
-        assert model.sample_count == 0
-
-    def test_domain_imported_in_init(self):
-        """__init__.py must import DOMAIN from .const."""
-        init_path = Path(__file__).resolve().parent.parent / "custom_components" / "lotse_forecast" / "__init__.py"
-        source = init_path.read_text()
-        assert "from .const import DOMAIN" in source, (
-            "Missing 'from .const import DOMAIN' in __init__.py"
-        )
-
-
     def test_model_improves_on_repeated_hours(self):
         """Quality gate: after training, model reduces forecast error."""
         model = CalibrationModel(alpha=0.2)
@@ -674,4 +639,55 @@ class TestIntegrationImports:
         )
 
 
+# ════════════════════════════════════════════════════════════
+# 5. Integration import verification
+# ════════════════════════════════════════════════════════════
 
+class TestIntegrationImports:
+    """Verify that __init__.py has all required imports.
+
+    These tests check the source code of __init__.py directly to
+    catch missing import regressions.
+    """
+
+    def _source(self) -> str:
+        init_path = Path(__file__).resolve().parent.parent / "custom_components" / "lotse_forecast" / "__init__.py"
+        return init_path.read_text()
+
+    def test_calibration_model_imported(self):
+        """__init__.py must import CalibrationModel from .calibration."""
+        assert "from .calibration import CalibrationModel" in self._source(), (
+            "Missing 'from .calibration import CalibrationModel' in __init__.py"
+        )
+
+    def test_calibration_model_accessible(self):
+        """CalibrationModel can be imported from calibration module."""
+        assert CalibrationModel is not None
+        model = CalibrationModel()
+        assert model.global_scale == 1.0
+
+    def test_domain_imported(self):
+        """__init__.py must import DOMAIN from .const."""
+        assert "from .const import " in self._source() and "DOMAIN" in self._source().split("\n")[11], (
+            "Missing DOMAIN import from .const in __init__.py"
+        )
+
+    def test_bad_states_imported(self):
+        """__init__.py must import BAD_STATES from .const."""
+        assert "BAD_STATES" in self._source().split("\n")[11], (
+            "Missing BAD_STATES import from .const in __init__.py"
+        )
+
+    def test_node_key_meta_imported(self):
+        """__init__.py must import NODE_KEY_META from .const."""
+        assert "NODE_KEY_META" in self._source().split("\n")[11], (
+            "Missing NODE_KEY_META import from .const in __init__.py"
+        )
+
+    def test_all_const_symbols_imported(self):
+        """All const.py symbols used in __init__.py must be imported together."""
+        line = self._source().split("\n")[11]
+        assert "from .const import " in line
+        assert "DOMAIN" in line, "DOMAIN must be in from .const import"
+        assert "BAD_STATES" in line, "BAD_STATES must be in from .const import"
+        assert "NODE_KEY_META" in line, "NODE_KEY_META must be in from .const import"
