@@ -73,8 +73,14 @@ async def async_get_solar_forecast(
         except (ValueError, TypeError):
             continue
 
+    _LOGGER.debug(
+        "Forecast: weather_ts has %d entries from weather service for today",
+        len(weather_ts),
+    )
+
     # Backfill missing hours of today with clear-sky defaults
     today_start = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+    backfilled = 0
     for hour in range(24):
         dt = today_start.replace(hour=hour)
         ts = dt.isoformat()
@@ -85,6 +91,12 @@ async def async_get_solar_forecast(
                 "temperature": 20,
                 "wind_speed": 5,
             })
+            backfilled += 1
+
+    _LOGGER.debug(
+        "Forecast: backfilled %d hours with clear-sky defaults, total forecast size=%d",
+        backfilled, len(forecast),
+    )
 
     raw_wh, cloud_map = _compute_forecast(forecast, panels, lat, tz)
     if not raw_wh:
@@ -94,19 +106,42 @@ async def async_get_solar_forecast(
     # Apply calibration model if available
     model: CalibrationModel | None = hass.data.get(DOMAIN, {}).get("calibration")
     if model is not None:
+        _LOGGER.debug(
+            "Forecast: applying calibration model (global_scale=%.4f, cloud_factors=%s, samples=%d, mape=%s)",
+            model.global_scale, model.cloud_factors, model.sample_count, model.mape,
+        )
         calibrated = {}
         for ts, raw_val in raw_wh.items():
             cloud = cloud_map.get(ts) if ts in weather_ts else None
-            calibrated[ts] = model.apply(raw_val, cloud_cover=cloud)
+            cal_val = model.apply(raw_val, cloud_cover=cloud)
+            if raw_val != cal_val:
+                _LOGGER.debug(
+                    "Forecast: calibration %s raw=%.1f calibrated=%.1f (cloud=%s)",
+                    ts, raw_val, cal_val, cloud,
+                )
+            calibrated[ts] = cal_val
         model.store_forecast(calibrated, raw=raw_wh, now=local_now)
         wh_hours = dict(calibrated)
     else:
+        _LOGGER.debug("Forecast: no calibration model available, using raw values")
         wh_hours = dict(raw_wh)
 
-    _LOGGER.debug(
-        "Forecast: returning %d wh_hours for entry %s (%d panels, weather=%s)",
-        len(wh_hours), config_entry_id, len(panels), weather_entity,
-    )
+    # Log summary of returned wh_hours
+    non_zero = sum(1 for v in wh_hours.values() if v > 0)
+    if wh_hours:
+        sample_keys = sorted(wh_hours.keys())[:5]
+        sample_vals = {k: wh_hours[k] for k in sample_keys}
+        _LOGGER.debug(
+            "Forecast: returning %d wh_hours (non-zero=%d) for entry %s "
+            "(%d panels, weather=%s, lat=%.2f, sample=%s)",
+            len(wh_hours), non_zero, config_entry_id,
+            len(panels), weather_entity, lat, sample_vals,
+        )
+    else:
+        _LOGGER.debug(
+            "Forecast: returning EMPTY wh_hours for entry %s (%d panels, weather=%s)",
+            config_entry_id, len(panels), weather_entity,
+        )
     return {"wh_hours": wh_hours}
 
 
@@ -127,11 +162,20 @@ async def _get_weather_forecast(hass, weather_entity):
         return None
 
     raw = result[weather_entity]
+    forecast = None
     if isinstance(raw, dict):
-        return raw.get("forecast") or raw.get("Forecast")
-    if hasattr(raw, "forecast"):
-        return raw.forecast
-    return None
+        forecast = raw.get("forecast") or raw.get("Forecast")
+    elif hasattr(raw, "forecast"):
+        forecast = raw.forecast
+    if forecast is not None:
+        _LOGGER.debug(
+            "Forecast: _get_weather_forecast(%s) got %d entries; sample: %s",
+            weather_entity, len(forecast),
+            forecast[0] if forecast else "empty",
+        )
+    else:
+        _LOGGER.debug("Forecast: _get_weather_forecast(%s) returned None", weather_entity)
+    return forecast
 
 
 def _get_panels(hass, entry):
@@ -206,6 +250,11 @@ def _get_panels(hass, entry):
 
     _LOGGER.debug("Forecast: _get_panels found %d panels (%d auto, %d manual)",
                    len(panels), len(seen_nodes), len(manual))
+    for i, p in enumerate(panels):
+        _LOGGER.debug(
+            "Forecast: panel[%d] name=%s kwp=%.3f angle=%d azimuth=%d",
+            i, p["name"], p["kwp"], p["angle"], p["azimuth"],
+        )
     return panels
 
 
@@ -238,16 +287,30 @@ def _compute_forecast(forecast, panels, lat, tz):
         ghi = _clear_sky_ghi(altitude)
 
         total_wh = 0
+        panel_details = []
         for panel in panels:
             kw = _panel_output(
                 panel["kwp"], ghi, cloud,
                 panel["azimuth"], panel["angle"],
                 temp, wind,
             )
-            total_wh += kw * 1000
+            wh = kw * 1000
+            total_wh += wh
+            panel_details.append(f"{panel.get('name', 'panel')}={wh:.1f}Wh")
 
         ts = dt.isoformat()
         cloud_map[ts] = cloud
+
+        _LOGGER.debug(
+            "Forecast: hour %s doy=%d h=%d lat=%.2f alt=%.1f ghi=%.1f "
+            "cloud=%.0f%% temp=%.1f wind=%.1f panels=[%s] total=%.1fWh(%s)",
+            ts, dayofyear, hour, lat, altitude, ghi,
+            cloud, temp, wind,
+            ", ".join(panel_details),
+            total_wh,
+            "%din" % int(round(total_wh)) if total_wh > 0 else "0",
+        )
+
         if total_wh > 0:
             wh_hours[ts] = int(round(total_wh))
 
@@ -284,7 +347,18 @@ def _panel_output(kwp, ghi, cloud_cover, azimuth, tilt, temp, wind,
     wind_factor = 1.0 if wind < 10 else 0.95
     temp_factor = max(0.7, 1 + temp_coeff * (temp - 25))
 
-    return kwp * ghi / 1000 * cloud_factor * orientation * wind_factor * efficiency * temp_factor
+    raw_power = kwp * ghi / 1000
+    result = raw_power * cloud_factor * orientation * wind_factor * efficiency * temp_factor
+
+    _LOGGER.debug(
+        "Forecast: _panel_output(kwp=%.3f ghi=%.1f cloud=%d azimuth=%d tilt=%d "
+        "temp=%.1f wind=%.1f) → raw=%.4f cloud=%.4f orient=%.4f wind=%.4f "
+        "effic=%.4f temp=%.4f = %.4f kW",
+        kwp, ghi, cloud_cover, azimuth, tilt, temp, wind,
+        raw_power, cloud_factor, orientation, wind_factor,
+        efficiency, temp_factor, result,
+    )
+    return result
 
 
 def _float_or(val, default):
